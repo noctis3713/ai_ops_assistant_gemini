@@ -45,7 +45,6 @@ export interface AppState {
   // 非同步任務狀態
   currentTask: TaskResponse | null;
   isAsyncMode: boolean;
-  taskPollingActive: boolean;
 }
 
 // 狀態動作
@@ -91,7 +90,6 @@ export interface AppActions {
   // 非同步任務動作
   setCurrentTask: (task: TaskResponse | null) => void;
   setIsAsyncMode: (isAsync: boolean) => void;
-  setTaskPollingActive: (active: boolean) => void;
   updateTaskProgress: (taskId: string, progress: number, stage: string) => void;
 }
 
@@ -127,5 +125,4 @@ export const initialAppState: AppState = {
   executionStartTime: null,
   currentTask: null,
   isAsyncMode: false,
-  taskPollingActive: false,
 };

@@ -26,7 +26,6 @@ function App() {
     batchResults,
     isAsyncMode,
     currentTask,
-    taskPollingActive,
     setMode,
     setSelectedDevices,
     setInputValue,
@@ -181,7 +180,7 @@ function App() {
                           任務：{currentTask.task_id.substring(0, 8)}...
                         </div>
                       )}
-                      {taskPollingActive && (
+                      {isPolling && (
                         <div className="flex items-center space-x-1">
                           <div className="w-2 h-2 bg-terminal-primary rounded-full animate-pulse"></div>
                           <span className="text-xs text-terminal-text-secondary">輪詢中</span>
