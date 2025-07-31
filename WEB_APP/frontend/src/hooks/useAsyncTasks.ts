@@ -88,6 +88,11 @@ export interface UseAsyncTasksReturn {
   isPolling: boolean;
   
   /**
+   * 當前取消狀態（正在嘗試取消任務）
+   */
+  isCancelling: boolean;
+  
+  /**
    * 錯誤狀態（從 TanStack Query 衍生）
    */
   error: string | null;
@@ -104,6 +109,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   // 使用 useRef 儲存非渲染數據
   const currentTaskIdRef = useRef<string | null>(null);
   const pollingStartTimeRef = useRef<number>(0);
+  const isCancellingRef = useRef<boolean>(false);
 
   // Store 狀態
   const {
@@ -213,6 +219,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   const cleanup = useCallback(() => {
     currentTaskIdRef.current = null;
     pollingStartTimeRef.current = 0;
+    isCancellingRef.current = false;
     setStoreExecuting(false);
   }, [setStoreExecuting]);
 
@@ -288,19 +295,38 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
    * 取消當前任務
    */
   const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
-    if (!currentTaskIdRef.current) {
+    if (!currentTaskIdRef.current || isCancellingRef.current) {
       return false;
     }
 
+    const taskId = currentTaskIdRef.current;
+    
+    // 設置取消狀態
+    isCancellingRef.current = true;
+    
     try {
-      await cancelTask(currentTaskIdRef.current);
-      setStatus('任務已取消', 'warning');
+      // 先更新狀態為「取消中」
+      setStatus('正在取消任務...', 'loading');
+      
+      await cancelTask(taskId);
+      
+      // 取消成功：顯示成功訊息並清理狀態
+      setStatus('任務已成功取消', 'success');
       cleanup();
       return true;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '取消任務失敗';
-      setStatus(`取消任務失敗: ${errorMessage}`, 'error');
+      // 取消失敗：顯示警告訊息但保留任務狀態，允許繼續監控
+      const errorMessage = error instanceof Error ? error.message : '未知錯誤';
+      setStatus(
+        `向伺服器發送取消請求失敗：${errorMessage}。任務可能仍在執行中，建議繼續監控任務狀態。`, 
+        'warning'
+      );
+      
+      // 重要：不調用 cleanup()，保留任務 ID 以供繼續輪詢
       return false;
+    } finally {
+      // 無論成功或失敗，都重置取消狀態
+      isCancellingRef.current = false;
     }
   }, [setStatus, cleanup]);
 
@@ -326,9 +352,10 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     stopPolling,
     cancelCurrentTask,
     queryTaskStatus,
-    isExecuting, // 衍生自 TanStack Query 狀態
-    isPolling,   // 衍生自 TanStack Query 狀態
-    error,       // 衍生自 TanStack Query 狀態
+    isExecuting,  // 衍生自 TanStack Query 狀態
+    isPolling,    // 衍生自 TanStack Query 狀態
+    isCancelling: isCancellingRef.current, // 當前取消狀態
+    error,        // 衍生自 TanStack Query 狀態
     cleanup,
   };
 };

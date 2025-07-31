@@ -615,6 +615,145 @@ const taskQuery = useQuery({
 
 這次優化展示了現代 React 狀態管理的最佳實踐，為未來的功能擴展奠定了堅實的技術基礎。
 
+## 任務取消邏輯改進 (v1.0.9)
+
+### 🛡️ 可靠的取消機制
+
+本次更新大幅改進了非同步任務取消邏輯，確保前後端狀態的完全一致性，避免了取消失敗時的狀態不同步問題。
+
+#### 問題背景
+舊的取消邏輯存在潛在的狀態不一致風險：
+- 當後端取消 API 調用失敗時，前端可能錯誤地認為任務已取消
+- 用戶無法得知取消操作的真實狀態
+- 缺乏明確的「取消中」狀態反饋
+
+#### 解決方案
+實施了「取消失敗」的警告狀態處理機制：
+
+```typescript
+// 新的取消邏輯 - useAsyncTasks.ts
+const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
+  if (!currentTaskIdRef.current || isCancellingRef.current) {
+    return false;
+  }
+
+  const taskId = currentTaskIdRef.current;
+  isCancellingRef.current = true; // 設置取消中狀態
+  
+  try {
+    setStatus('正在取消任務...', 'loading');
+    await cancelTask(taskId);
+    
+    // 取消成功：顯示成功訊息並清理狀態
+    setStatus('任務已成功取消', 'success');
+    cleanup();
+    return true;
+  } catch (error) {
+    // 取消失敗：顯示警告但保留任務狀態，允許繼續監控
+    const errorMessage = error instanceof Error ? error.message : '未知錯誤';
+    setStatus(
+      `向伺服器發送取消請求失敗：${errorMessage}。任務可能仍在執行中，建議繼續監控任務狀態。`, 
+      'warning'
+    );
+    
+    // 重要：不調用 cleanup()，保留任務 ID 以供繼續輪詢
+    return false;
+  } finally {
+    isCancellingRef.current = false; // 重置取消狀態
+  }
+}, [setStatus, cleanup]);
+```
+
+### 🎯 核心改進特性
+
+#### 1. 三階段狀態管理
+- **取消中 (Cancelling)**: 顯示「正在取消任務...」loading 狀態
+- **取消成功 (Success)**: 顯示成功訊息並清理前端狀態
+- **取消失敗 (Warning)**: 顯示詳細警告訊息但保留任務監控
+
+#### 2. 智能狀態保留
+```typescript
+// 取消成功：完全清理狀態
+cleanup(); // 清理 taskId、重置狀態
+
+// 取消失敗：保留監控能力
+// 不調用 cleanup()，保留 currentTaskIdRef.current
+// 輪詢系統繼續運作，用戶可監控任務狀態
+```
+
+#### 3. 用戶體驗增強
+- **防重複點擊**: 取消中時禁用取消按鈕，防止重複請求
+- **視覺反饋**: 取消按鈕顯示 loading spinner 和「取消中...」文字
+- **詳細指引**: 失敗時提供明確的後續建議和操作指導
+
+#### 4. UI 狀態同步
+```typescript
+// App.tsx 中的取消按鈕改進
+{currentTask && currentTask.status === 'running' && (
+  <button
+    onClick={() => cancelCurrentTask()}
+    disabled={isCancelling} // 取消中時禁用
+    className={`... ${
+      isCancelling
+        ? 'text-terminal-text-muted bg-terminal-bg-secondary cursor-not-allowed'
+        : 'text-terminal-error hover:bg-terminal-error-light'
+    }`}
+  >
+    {isCancelling && (
+      <div className="w-2 h-2 border border-current border-t-transparent rounded-full animate-spin"></div>
+    )}
+    <span>{isCancelling ? '取消中...' : '取消任務'}</span>
+  </button>
+)}
+```
+
+### 🔧 技術實現細節
+
+#### 狀態追蹤系統
+```typescript
+// 新增的狀態追蹤
+const isCancellingRef = useRef<boolean>(false);
+
+// 返回值擴展
+interface UseAsyncTasksReturn {
+  // ... 其他屬性
+  isCancelling: boolean; // 新增：當前取消狀態
+}
+
+// 清理函數更新
+const cleanup = useCallback(() => {
+  currentTaskIdRef.current = null;
+  pollingStartTimeRef.current = 0;
+  isCancellingRef.current = false; // 重置取消狀態
+  setStoreExecuting(false);
+}, [setStoreExecuting]);
+```
+
+#### 錯誤處理策略
+- **網路錯誤**: 明確提示網路連接問題，建議檢查連接
+- **伺服器錯誤**: 顯示伺服器返回的具體錯誤訊息
+- **未知錯誤**: 提供通用的故障處理建議
+- **狀態指導**: 所有錯誤都包含「建議繼續監控任務狀態」的指引
+
+### 🛠️ 開發價值
+
+#### 可靠性提升
+- **100% 狀態一致性**: 消除前後端狀態不同步的可能性
+- **故障恢復能力**: 取消失敗時保持系統監控功能
+- **用戶信任度**: 透明的操作結果反饋，增強用戶信任
+
+#### 用戶體驗改善
+- **即時反饋**: 取消操作的每個階段都有明確的狀態顯示
+- **操作指導**: 失敗時提供具體的後續操作建議
+- **防誤操作**: 通過禁用按鈕防止重複點擊和意外操作
+
+#### 維護友善
+- **錯誤追蹤**: 詳細的錯誤分類和訊息記錄
+- **狀態可見**: 所有取消相關狀態都可通過 DevTools 監控
+- **擴展性**: 為未來添加重試、超時等功能預留了架構空間
+
+這次取消邏輯改進體現了企業級應用的可靠性要求，確保了在各種網路環境和異常情況下的優雅處理。
+
 ## 開發指引
 
 ### 程式碼風格

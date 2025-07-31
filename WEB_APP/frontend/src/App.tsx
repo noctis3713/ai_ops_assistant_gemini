@@ -41,7 +41,8 @@ function App() {
     executeAsyncAndWait, 
     cancelCurrentTask, 
     isExecuting: isAsyncExecuting, 
-    isPolling 
+    isPolling,
+    isCancelling
   } = useAsyncTasks();
 
   // 統一執行邏輯 - 支援同步和非同步模式
@@ -189,9 +190,17 @@ function App() {
                       {currentTask && currentTask.status === 'running' && (
                         <button
                           onClick={() => cancelCurrentTask()}
-                          className="px-2 py-1 text-xs font-medium text-terminal-error hover:bg-terminal-error-light rounded transition-colors"
+                          disabled={isCancelling}
+                          className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center space-x-1 ${
+                            isCancelling
+                              ? 'text-terminal-text-muted bg-terminal-bg-secondary cursor-not-allowed'
+                              : 'text-terminal-error hover:bg-terminal-error-light'
+                          }`}
                         >
-                          取消任務
+                          {isCancelling && (
+                            <div className="w-2 h-2 border border-current border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                          <span>{isCancelling ? '取消中...' : '取消任務'}</span>
                         </button>
                       )}
                     </div>
