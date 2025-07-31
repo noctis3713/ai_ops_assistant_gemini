@@ -206,6 +206,9 @@ export const useAppStore = create<AppStore>()(
         set({ isAsyncMode: isAsync }, false, 'setIsAsyncMode');
       },
 
+      setTaskPollingActive: (active) => {
+        set({ taskPollingActive: active }, false, 'setTaskPollingActive');
+      },
 
       updateTaskProgress: (taskId, progress, stage) => {
         set(

@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 import { type BatchOutputDisplayProps } from '@/types';
 import BatchResultItem from './BatchResultItem';
 import Button from '@/components/common/Button';
-import { useLogger } from '@/hooks';
 
 const BatchOutputDisplay = ({ 
   results, 
@@ -14,12 +13,6 @@ const BatchOutputDisplay = ({
   statusText,
   statusClassName = 'status-hint'
 }: BatchOutputDisplayProps) => {
-  // 日誌功能
-  const { info, logUserAction } = useLogger({ 
-    component: 'BatchOutputDisplay',
-    autoLogMount: false 
-  });
-
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');
 
@@ -53,15 +46,8 @@ const BatchOutputDisplay = ({
 
   const copyToClipboard = (content: string) => {
     navigator.clipboard.writeText(content).then(() => {
-      info('內容已複製到剪貼板', { 
-        contentLength: content.length,
-        contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : '')
-      });
-      logUserAction('copy-to-clipboard', 'batch-results', { 
-        contentLength: content.length 
-      });
-    }).catch((clipboardError) => {
-      info('複製到剪貼板失敗', clipboardError);
+      // 可以添加一個簡單的通知
+      console.log('已複製到剪貼板');
     });
   };
 

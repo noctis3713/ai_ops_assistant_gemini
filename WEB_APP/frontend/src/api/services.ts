@@ -24,6 +24,8 @@ import {
   type TaskType
 } from '@/types';
 
+import { type LogEntry } from '@/utils/LoggerService';
+
 /**
  * 獲取設備列表
  * 支援自動重試機制
@@ -324,4 +326,111 @@ export const executeAsyncBatchAndWait = async (
   
   // 返回執行結果
   return completedTask.result as BatchExecutionResponse;
+};
+
+// ===================================================================
+// 日誌系統 API 服務
+// ===================================================================
+
+/**
+ * 遠端日誌發送請求介面
+ */
+export interface RemoteLogRequest {
+  logs: LogEntry[];
+  metadata: {
+    userAgent: string;
+    url: string;
+    timestamp: string;
+    sessionId?: string;
+    userId?: string;
+  };
+}
+
+/**
+ * 遠端日誌發送回應介面
+ */
+export interface RemoteLogResponse {
+  success: boolean;
+  message: string;
+  logCount: number;
+  processedAt: string;
+}
+
+/**
+ * 發送前端日誌到後端
+ * 支援批次發送和錯誤處理
+ */
+export const sendFrontendLogs = async (request: RemoteLogRequest): Promise<RemoteLogResponse> => {
+  try {
+    const response = await apiClient.post<RemoteLogResponse>(
+      '/api/frontend-logs',
+      request,
+      {
+        timeout: API_CONFIG.TIMEOUT.DEFAULT, // 30秒超時
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    return response.data;
+  } catch (error) {
+    // 日誌發送失敗不應該影響主要功能
+    // 在控制台記錄錯誤但不拋出異常
+    console.warn('Failed to send frontend logs to backend:', error);
+    
+    // 返回失敗響應而不是拋出錯誤
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      logCount: request.logs.length,
+      processedAt: new Date().toISOString(),
+    };
+  }
+};
+
+/**
+ * 發送單個日誌條目（便利函數）
+ */
+export const sendSingleLogEntry = async (logEntry: LogEntry): Promise<RemoteLogResponse> => {
+  return sendFrontendLogs({
+    logs: [logEntry],
+    metadata: {
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+    },
+  });
+};
+
+/**
+ * 獲取前端日誌配置
+ * 用於動態調整日誌行為
+ */
+export interface FrontendLogConfig {
+  enableRemoteLogging: boolean;
+  logLevel: string;
+  batchSize: number;
+  batchInterval: number;
+  maxLocalStorageEntries: number;
+  enabledCategories: string[];
+}
+
+export const getFrontendLogConfig = async (): Promise<FrontendLogConfig> => {
+  try {
+    const response = await apiClient.get<FrontendLogConfig>('/api/frontend-log-config');
+    return response.data;
+  } catch (error) {
+    // 如果無法獲取配置，返回預設配置
+    console.warn('Failed to fetch frontend log config, using defaults:', error);
+    
+    return {
+      enableRemoteLogging: false,
+      logLevel: 'INFO',
+      batchSize: 10,
+      batchInterval: 30000,
+      maxLocalStorageEntries: 100,
+      enabledCategories: ['api', 'error', 'user'],
+    };
+  }
 };

@@ -5,6 +5,7 @@ import asyncio
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -37,7 +38,8 @@ from ai_service import get_ai_service
 from utils import (
     LoggerConfig, create_stream_handler,
     build_ai_system_prompt,
-    format_device_execution_result, create_ai_logger, build_few_shot_examples
+    format_device_execution_result, create_ai_logger, build_few_shot_examples,
+    get_frontend_log_handler, get_frontend_log_config
 )
 from core.network_tools import run_readonly_show_command, CommandValidator
 from core.nornir_integration import (
@@ -159,21 +161,6 @@ class BatchExecutionResult(BaseModel):
     error: Optional[str] = None
     executionTime: float
 
-class FrontendLogEntry(BaseModel):
-    """前端日誌項目模型"""
-    timestamp: str
-    level: int
-    category: Optional[str] = None
-    message: str
-    data: Optional[Dict[str, Any]] = None
-    component: Optional[str] = None
-    userId: Optional[str] = None
-
-class FrontendLogRequest(BaseModel):
-    """前端日誌請求模型"""
-    entries: List[FrontendLogEntry]
-    metadata: Optional[Dict[str, Any]] = None
-
 # =============================================================================
 # 非同步任務相關模型
 # =============================================================================
@@ -202,6 +189,53 @@ class TaskResponse(BaseModel):
     result: Optional[Any] = None
     error: Optional[str] = None
     execution_time: Optional[float] = None
+
+# ===================================================================
+# 前端日誌相關模型
+# ===================================================================
+
+class FrontendLogEntry(BaseModel):
+    """前端日誌條目模型"""
+    timestamp: str
+    level: int  # 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
+    category: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    stack: Optional[str] = None
+    sessionId: Optional[str] = None
+    userId: Optional[str] = None
+
+class FrontendLogMetadata(BaseModel):
+    """前端日誌元數據模型"""
+    userAgent: str
+    url: str
+    timestamp: str
+    sessionId: Optional[str] = None
+    userId: Optional[str] = None
+
+class FrontendLogRequest(BaseModel):
+    """前端日誌請求模型"""
+    logs: List[FrontendLogEntry]
+    metadata: FrontendLogMetadata
+
+class FrontendLogResponse(BaseModel):
+    """前端日誌回應模型"""
+    success: bool
+    message: str
+    logCount: int
+    processedAt: str
+    stats: Optional[Dict[str, Any]] = None
+
+class FrontendLogConfig(BaseModel):
+    """前端日誌配置模型"""
+    enableRemoteLogging: bool
+    logLevel: str
+    batchSize: int
+    batchInterval: int
+    maxLocalStorageEntries: int
+    enabledCategories: List[str]
+    maxMessageLength: int
+    enableStackTrace: bool
 
 @app.get("/api/devices")
 async def get_devices():
@@ -808,6 +842,83 @@ async def get_task_manager_stats():
         }
     }
 
+# ===================================================================
+# 前端日誌 API 端點
+# ===================================================================
+
+@app.post("/api/frontend-logs", response_model=FrontendLogResponse)
+async def receive_frontend_logs(request: FrontendLogRequest):
+    """
+    接收前端日誌資料
+    
+    Args:
+        request: 包含日誌條目和元數據的請求物件
+        
+    Returns:
+        FrontendLogResponse: 處理結果和統計資訊
+    """
+    logger.info(f"收到前端日誌請求，包含 {len(request.logs)} 條日誌")
+    
+    try:
+        # 獲取前端日誌處理器
+        frontend_log_handler = get_frontend_log_handler()
+        
+        # 處理日誌批次
+        result = frontend_log_handler.process_log_batch(
+            logs=request.logs,
+            metadata=request.metadata
+        )
+        
+        # 構建回應
+        response = FrontendLogResponse(
+            success=True,
+            message=f"成功處理 {len(request.logs)} 條前端日誌",
+            logCount=len(request.logs),
+            processedAt=datetime.now().isoformat(),
+            stats=result.get('stats', {})
+        )
+        
+        logger.info(f"前端日誌處理完成: {response.logCount} 條日誌")
+        return response
+        
+    except Exception as e:
+        error_msg = f"處理前端日誌失敗: {str(e)}"
+        logger.error(error_msg)
+        
+        # 返回錯誤回應
+        return FrontendLogResponse(
+            success=False,
+            message=error_msg,
+            logCount=0,
+            processedAt=datetime.now().isoformat(),
+            stats=None
+        )
+
+@app.get("/api/frontend-log-config", response_model=FrontendLogConfig)
+async def get_frontend_log_config_endpoint():
+    """
+    取得前端日誌系統配置
+    
+    Returns:
+        FrontendLogConfig: 前端日誌配置資訊
+    """
+    logger.info("收到前端日誌配置查詢請求")
+    
+    try:
+        # 導入 utils 模組中的函數，避免名稱衝突
+        from utils import get_frontend_log_config
+        
+        # 獲取前端日誌配置
+        config = get_frontend_log_config()
+        
+        logger.info("成功回傳前端日誌配置")
+        return config
+        
+    except Exception as e:
+        error_msg = f"獲取前端日誌配置失敗: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
 
 @app.get("/")
 async def root():
@@ -1023,66 +1134,6 @@ async def batch_execute(request: BatchExecuteRequest):
             
         raise HTTPException(status_code=status_code, detail=error_msg)
 
-
-@app.post("/api/frontend-logs")
-async def receive_frontend_logs(request: FrontendLogRequest):
-    """接收前端日誌端點"""
-    try:
-        # 建立專用的前端日誌記錄器
-        frontend_logger = LoggerConfig.create_rotating_handler("frontend.log")
-        frontend_log = logging.getLogger("frontend")
-        frontend_log.addHandler(frontend_logger)
-        frontend_log.setLevel(logging.INFO)
-        
-        # 處理每個日誌項目
-        processed_count = 0
-        errors = []
-        
-        for entry in request.entries:
-            try:
-                # 將前端日誌級別映射到 Python logging 級別
-                level_mapping = {
-                    0: logging.DEBUG,   # DEBUG
-                    1: logging.INFO,    # INFO  
-                    2: logging.WARNING, # WARN
-                    3: logging.ERROR    # ERROR
-                }
-                
-                log_level = level_mapping.get(entry.level, logging.INFO)
-                
-                # 格式化日誌訊息
-                category = f"[{entry.category}]" if entry.category else ""
-                component = f"<{entry.component}>" if entry.component else ""
-                user_id = f"(user:{entry.userId})" if entry.userId else ""
-                
-                log_message = f"Frontend{category}{component}{user_id}: {entry.message}"
-                
-                # 記錄到前端日誌檔案
-                frontend_log.log(log_level, log_message, extra={
-                    'timestamp': entry.timestamp,
-                    'data': entry.data,
-                    'metadata': request.metadata
-                })
-                
-                processed_count += 1
-                
-            except Exception as e:
-                errors.append(f"處理日誌項目失敗: {str(e)}")
-                logger.error(f"處理前端日誌項目失敗: {e}")
-        
-        # 記錄接收統計
-        logger.info(f"接收前端日誌 {processed_count} 條，錯誤 {len(errors)} 條")
-        
-        return {
-            "success": True,
-            "message": f"成功處理 {processed_count} 條日誌",
-            "processed": processed_count,
-            "errors": errors if errors else None
-        }
-        
-    except Exception as e:
-        logger.error(f"前端日誌處理失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"日誌處理失敗: {str(e)}")
 
 @app.get("/health")
 async def health_check():

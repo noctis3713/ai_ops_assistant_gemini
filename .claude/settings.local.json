@@ -24,8 +24,7 @@
       "Bash(diff:*)",
       "Bash(move:*)",
       "Bash(npm run dev:*)",
-      "Bash(npm:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npm:*)"
     ],
     "deny": []
   }

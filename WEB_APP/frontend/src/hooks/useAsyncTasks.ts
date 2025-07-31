@@ -1,10 +1,8 @@
 /**
- * 非同步任務管理 Hook - 簡化版本
- * 使用 TanStack Query 管理狀態，移除重複的手動狀態管理
+ * 非同步任務管理 Hook
  * 提供任務建立、輪詢、取消等完整的非同步任務管理功能
  */
-import { useCallback, useRef } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   batchExecuteAsync, 
   getTaskStatus, 
@@ -15,9 +13,9 @@ import { useAppStore } from '@/store';
 import { 
   type BatchExecuteRequest, 
   type TaskResponse, 
-  type BatchExecutionResponse,
-  type APIError
+  type BatchExecutionResponse 
 } from '@/types';
+import { useLogger } from './useLogger';
 
 export interface UseAsyncTasksOptions {
   /**
@@ -73,27 +71,17 @@ export interface UseAsyncTasksReturn {
   queryTaskStatus: (taskId: string) => Promise<TaskResponse>;
   
   /**
-   * 清理函數
-   */
-  cleanup: () => void;
-  
-  /**
-   * 當前執行狀態（從 TanStack Query 衍生）
+   * 當前執行狀態
    */
   isExecuting: boolean;
   
   /**
-   * 當前輪詢狀態（從 TanStack Query 衍生）
+   * 當前輪詢狀態
    */
   isPolling: boolean;
   
   /**
-   * 當前取消狀態（正在嘗試取消任務）
-   */
-  isCancelling: boolean;
-  
-  /**
-   * 錯誤狀態（從 TanStack Query 衍生）
+   * 錯誤狀態
    */
   error: string | null;
 }
@@ -106,141 +94,304 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     autoStartPolling = true,
   } = options;
 
-  // 使用 useRef 儲存非渲染數據
-  const currentTaskIdRef = useRef<string | null>(null);
-  const pollingStartTimeRef = useRef<number>(0);
-  const isCancellingRef = useRef<boolean>(false);
+  // 日誌記錄
+  const logger = useLogger({ 
+    componentName: 'useAsyncTasks',
+    enablePerformanceTracking: true,
+  });
+
+  // 狀態管理
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Store 狀態
   const {
+    currentTask,
     setCurrentTask,
     setIsAsyncMode,
+    setTaskPollingActive,
     updateTaskProgress,
     setBatchResults,
     setStatus,
     setIsExecuting: setStoreExecuting,
   } = useAppStore();
 
-  // 計算動態輪詢間隔（指數退避策略）
-  const calculatePollInterval = useCallback((data: TaskResponse | undefined) => {
-    if (!data || !currentTaskIdRef.current) return false;
-    
-    // 任務完成時停止輪詢
-    if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-      return false;
-    }
-    
-    // 根據執行時間動態調整間隔
-    const elapsedTime = Date.now() - pollingStartTimeRef.current;
-    const baseInterval = pollInterval;
-    const multiplier = Math.min(Math.floor(elapsedTime / 10000) + 1, 5); // 每10秒增加一個倍數，最多5倍
-    
-    return Math.min(baseInterval * multiplier, maxPollInterval);
-  }, [pollInterval, maxPollInterval]);
+  // 輪詢控制
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // 任務建立 Mutation
-  const batchMutation = useMutation<TaskResponse, APIError, BatchExecuteRequest>({
-    mutationFn: async (request) => {
-      const response = await batchExecuteAsync(request);
-      return {
-        task_id: response.task_id,
-        status: 'pending' as const,
-        task_type: 'batch_execute' as const,
-        created_at: new Date().toISOString(),
-        progress: { percentage: 0, current_stage: '初始化任務...', completed_devices: 0, total_devices: request.devices.length },
-        result: null,
-        error: null
-      };
-    },
-    onMutate: () => {
-      setIsAsyncMode(true);
-      setStoreExecuting(true);
-      setStatus('建立非同步任務...', 'loading');
-    },
-    onSuccess: (taskData) => {
-      currentTaskIdRef.current = taskData.task_id;
-      pollingStartTimeRef.current = Date.now();
-      setCurrentTask(taskData);
-      setStatus('任務已建立，開始執行...', 'loading');
-    },
-    onError: (error) => {
-      setStoreExecuting(false);
-      setIsAsyncMode(false);
-      const errorMessage = error.message || '建立任務失敗';
-      setStatus(`建立任務失敗: ${errorMessage}`, 'error');
-    },
-  });
-
-  // 任務狀態輪詢 Query
-  const taskQuery = useQuery<TaskResponse, APIError>({
-    queryKey: ['taskStatus', currentTaskIdRef.current],
-    queryFn: () => getTaskStatus(currentTaskIdRef.current!),
-    enabled: !!currentTaskIdRef.current,
-    refetchInterval: (data) => calculatePollInterval(data),
-    refetchIntervalInBackground: true,
-    staleTime: 0, // 總是認為數據過時，確保及時更新
-    onSuccess: (taskData) => {
-      setCurrentTask(taskData);
-      updateTaskProgress(taskData.task_id, taskData.progress.percentage, taskData.progress.current_stage);
-      
-      // 檢查任務是否完成
-      if (taskData.status === 'completed') {
-        setStoreExecuting(false);
-        if (taskData.result) {
-          setBatchResults(taskData.result.results || []);
-          setStatus('任務執行完成', 'success');
-        }
-        currentTaskIdRef.current = null;
-      } else if (taskData.status === 'failed') {
-        setStoreExecuting(false);
-        setStatus(taskData.error || '任務執行失敗', 'error');
-        currentTaskIdRef.current = null;
-      } else if (taskData.status === 'cancelled') {
-        setStoreExecuting(false);
-        setStatus('任務已被取消', 'warning');
-        currentTaskIdRef.current = null;
-      }
-    },
-    onError: (error) => {
-      setStoreExecuting(false);
-      const errorMessage = error.message || '查詢任務狀態失敗';
-      setStatus(`輪詢失敗: ${errorMessage}`, 'error');
-      currentTaskIdRef.current = null;
-    },
-  });
-
-  // 衍生狀態計算（從 TanStack Query 狀態推導）
-  const isSubmitting = batchMutation.isPending;
-  const isPolling = taskQuery.isFetching && !!currentTaskIdRef.current;
-  const isExecuting = isSubmitting || isPolling;
-  const error = batchMutation.error?.message || taskQuery.error?.message || null;
-
-  // 清理函數
+  /**
+   * 清理函數
+   */
   const cleanup = useCallback(() => {
-    currentTaskIdRef.current = null;
-    pollingStartTimeRef.current = 0;
-    isCancellingRef.current = false;
-    setStoreExecuting(false);
-  }, [setStoreExecuting]);
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsPolling(false);
+    setTaskPollingActive(false);
+  }, [setTaskPollingActive]);
+
+  /**
+   * 組件卸載時清理資源
+   */
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
+
+  /**
+   * 錯誤處理
+   */
+  const handleError = useCallback((error: unknown, context: string) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    setError(`${context}: ${errorMessage}`);
+    setStatus(errorMessage, 'error');
+    
+    // 使用日誌系統記錄錯誤
+    logger.error(
+      `${context} failed`,
+      {
+        errorMessage,
+        context,
+        isPolling: isPolling,
+        currentTaskId: currentTask?.task_id,
+      },
+      error instanceof Error ? error : undefined
+    );
+  }, [setStatus, logger, isPolling, currentTask?.task_id]);
+
+  /**
+   * 輪詢任務狀態
+   */
+  const pollTask = useCallback(async (taskId: string) => {
+    if (!taskId) return;
+
+    logger.info('Starting task polling', { taskId, options });
+    
+    setIsPolling(true);
+    setTaskPollingActive(true);
+    
+    let currentInterval = pollInterval;
+    let pollCount = 0;
+    const startTime = Date.now();
+
+    const poll = async () => {
+      try {
+        pollCount++;
+        
+        // 檢查超時
+        if (Date.now() - startTime > timeout) {
+          logger.warn('Task polling timeout', {
+            taskId,
+            pollDuration: Date.now() - startTime,
+            pollCount,
+          });
+          throw new Error(`任務輪詢超時: ${taskId}`);
+        }
+
+        // 查詢任務狀態
+        const task = await getTaskStatus(taskId);
+        setCurrentTask(task);
+
+        logger.debug('Task status polled', {
+          taskId,
+          status: task.status,
+          progress: task.progress.percentage,
+          stage: task.progress.current_stage,
+          pollCount,
+        });
+
+        // 更新進度
+        updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
+
+        // 檢查任務是否完成
+        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+          const totalDuration = Date.now() - startTime;
+          
+          logger.info('Task polling finished', {
+            taskId,
+            status: task.status,
+            totalDuration,
+            pollCount,
+            avgPollInterval: totalDuration / pollCount,
+          });
+          
+          cleanup();
+          
+          if (task.status === 'completed' && task.result) {
+            // 處理成功結果
+            setBatchResults(task.result.results || []);
+            setStatus('任務執行完成', 'success');
+            
+            logger.info('Task completed successfully', {
+              taskId,
+              resultCount: task.result.results?.length || 0,
+              totalDuration,
+            });
+          } else if (task.status === 'failed') {
+            // 處理失敗結果
+            setStatus(task.error || '任務執行失敗', 'error');
+            
+            logger.error('Task failed', {
+              taskId,
+              error: task.error,
+              totalDuration,
+            });
+          } else if (task.status === 'cancelled') {
+            // 處理取消結果
+            setStatus('任務已被取消', 'warning');
+            
+            logger.warn('Task cancelled', {
+              taskId,
+              totalDuration,
+            });
+          }
+          
+          return;
+        }
+
+        // 設定下次輪詢
+        const previousInterval = currentInterval;
+        currentInterval = Math.min(currentInterval * 1.2, maxPollInterval);
+        
+        logger.debug('Scheduling next poll', {
+          taskId,
+          nextInterval: currentInterval,
+          previousInterval,
+          pollCount,
+        });
+        
+        pollingRef.current = setTimeout(poll, currentInterval);
+
+      } catch (error) {
+        logger.error('Task polling error', {
+          taskId,
+          pollCount,
+          pollDuration: Date.now() - startTime,
+          error: error instanceof Error ? error.message : String(error),
+        }, error instanceof Error ? error : undefined);
+        
+        handleError(error, '輪詢任務狀態失敗');
+        cleanup();
+      }
+    };
+
+    // 開始首次輪詢
+    await poll();
+  }, [
+    pollInterval,
+    maxPollInterval,
+    timeout,
+    setCurrentTask,
+    setTaskPollingActive,
+    updateTaskProgress,
+    setBatchResults,
+    setStatus,
+    handleError,
+    cleanup,
+  ]);
 
   /**
    * 建立並執行非同步批次任務
    */
   const executeAsync = useCallback(async (request: BatchExecuteRequest): Promise<string> => {
-    const result = await batchMutation.mutateAsync(request);
-    return result.task_id;
-  }, [batchMutation]);
+    logger.info('Executing async task', {
+      deviceCount: request.devices.length,
+      mode: request.mode,
+      autoStartPolling,
+    });
+
+    setError(null);
+    setIsExecuting(true);
+    setStoreExecuting(true);
+    setIsAsyncMode(true);
+
+    const startTime = performance.now();
+
+    try {
+      // 建立非同步任務
+      const response = await batchExecuteAsync(request);
+      
+      logger.info('Async task created', {
+        taskId: response.task_id,
+        createdAt: response.created_at,
+        devices: request.devices,
+        mode: request.mode,
+      });
+      
+      // 如果啟用自動輪詢，開始輪詢
+      if (autoStartPolling) {
+        logger.debug('Starting auto polling', { taskId: response.task_id });
+        await pollTask(response.task_id);
+      }
+
+      const duration = performance.now() - startTime;
+      logger.logPerformance('executeAsync', duration, {
+        taskId: response.task_id,
+        deviceCount: request.devices.length,
+      });
+
+      return response.task_id;
+
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      logger.error('Failed to execute async task', {
+        duration,
+        deviceCount: request.devices.length,
+        mode: request.mode,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined);
+
+      handleError(error, '建立非同步任務失敗');
+      setIsExecuting(false);
+      setStoreExecuting(false);
+      setIsAsyncMode(false);
+      throw error;
+    } finally {
+      if (!autoStartPolling) {
+        setIsExecuting(false);
+        setStoreExecuting(false);
+      }
+    }
+  }, [
+    setStoreExecuting,
+    setIsAsyncMode,
+    autoStartPolling,
+    pollTask,
+    handleError,
+  ]);
 
   /**
    * 建立非同步任務並等待完成
    */
   const executeAsyncAndWait = useCallback(async (request: BatchExecuteRequest): Promise<BatchExecutionResponse> => {
-    setIsAsyncMode(true);
+    logger.info('Executing async task and waiting', {
+      deviceCount: request.devices.length,
+      mode: request.mode,
+      timeout,
+    });
+
+    setError(null);
+    setIsExecuting(true);
     setStoreExecuting(true);
+    setIsAsyncMode(true);
+
+    const startTime = performance.now();
 
     try {
       const result = await executeAsyncBatchAndWait(request, {
         onProgress: (task) => {
+          logger.debug('Task progress update', {
+            taskId: task.task_id,
+            progress: task.progress.percentage,
+            stage: task.progress.current_stage,
+          });
+          
           setCurrentTask(task);
           updateTaskProgress(task.task_id, task.progress.percentage, task.progress.current_stage);
         },
@@ -249,16 +400,39 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         timeout,
       });
 
+      const duration = performance.now() - startTime;
+
       setBatchResults(result.results);
       setStatus('任務執行完成', 'success');
+      
+      logger.info('Async task completed successfully', {
+        deviceCount: request.devices.length,
+        resultCount: result.results.length,
+        duration,
+        avgTimePerDevice: duration / request.devices.length,
+      });
+
+      logger.logPerformance('executeAsyncAndWait', duration, {
+        deviceCount: request.devices.length,
+        resultCount: result.results.length,
+      });
       
       return result;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '執行非同步任務失敗';
-      setStatus(`執行失敗: ${errorMessage}`, 'error');
+      const duration = performance.now() - startTime;
+      
+      logger.error('Failed to execute async task and wait', {
+        duration,
+        deviceCount: request.devices.length,
+        mode: request.mode,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined);
+
+      handleError(error, '執行非同步任務失敗');
       throw error;
     } finally {
+      setIsExecuting(false);
       setStoreExecuting(false);
       setIsAsyncMode(false);
     }
@@ -272,78 +446,91 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     pollInterval,
     maxPollInterval,
     timeout,
+    handleError,
   ]);
 
   /**
    * 開始輪詢指定任務
    */
   const startPolling = useCallback((taskId: string) => {
-    cleanup(); // 先清理現有狀態
-    currentTaskIdRef.current = taskId;
-    pollingStartTimeRef.current = Date.now();
-    // useQuery 會自動開始輪詢
-  }, [cleanup]);
+    logger.info('Manually starting polling', { taskId });
+    cleanup(); // 先清理現有輪詢
+    pollTask(taskId);
+  }, [cleanup, pollTask, logger]);
 
   /**
    * 停止當前輪詢
    */
   const stopPolling = useCallback(() => {
+    logger.info('Manually stopping polling', { 
+      wasPolling: isPolling,
+      currentTaskId: currentTask?.task_id 
+    });
     cleanup();
-  }, [cleanup]);
+  }, [cleanup, logger, isPolling, currentTask?.task_id]);
 
   /**
    * 取消當前任務
    */
   const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
-    if (!currentTaskIdRef.current || isCancellingRef.current) {
+    if (!currentTask) {
+      logger.warn('Attempted to cancel task but no current task found');
       return false;
     }
 
-    const taskId = currentTaskIdRef.current;
-    
-    // 設置取消狀態
-    isCancellingRef.current = true;
-    
+    logger.info('Cancelling current task', {
+      taskId: currentTask.task_id,
+      status: currentTask.status,
+    });
+
     try {
-      // 先更新狀態為「取消中」
-      setStatus('正在取消任務...', 'loading');
-      
-      await cancelTask(taskId);
-      
-      // 取消成功：顯示成功訊息並清理狀態
-      setStatus('任務已成功取消', 'success');
+      await cancelTask(currentTask.task_id);
+      setStatus('任務已取消', 'warning');
       cleanup();
+      
+      logger.info('Task cancelled successfully', {
+        taskId: currentTask.task_id,
+      });
+      
       return true;
     } catch (error) {
-      // 取消失敗：顯示警告訊息但保留任務狀態，允許繼續監控
-      const errorMessage = error instanceof Error ? error.message : '未知錯誤';
-      setStatus(
-        `向伺服器發送取消請求失敗：${errorMessage}。任務可能仍在執行中，建議繼續監控任務狀態。`, 
-        'warning'
-      );
+      logger.error('Failed to cancel task', {
+        taskId: currentTask.task_id,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined);
       
-      // 重要：不調用 cleanup()，保留任務 ID 以供繼續輪詢
+      handleError(error, '取消任務失敗');
       return false;
-    } finally {
-      // 無論成功或失敗，都重置取消狀態
-      isCancellingRef.current = false;
     }
-  }, [setStatus, cleanup]);
+  }, [currentTask, setStatus, handleError, cleanup, logger]);
 
   /**
    * 手動查詢任務狀態
    */
   const queryTaskStatus = useCallback(async (taskId: string): Promise<TaskResponse> => {
+    logger.debug('Querying task status', { taskId });
+
     try {
       const task = await getTaskStatus(taskId);
       setCurrentTask(task);
+      
+      logger.debug('Task status retrieved', {
+        taskId,
+        status: task.status,
+        progress: task.progress.percentage,
+      });
+      
       return task;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '查詢任務狀態失敗';
-      setStatus(`查詢失敗: ${errorMessage}`, 'error');
+      logger.error('Failed to query task status', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined);
+      
+      handleError(error, '查詢任務狀態失敗');
       throw error;
     }
-  }, [setCurrentTask, setStatus]);
+  }, [setCurrentTask, handleError, logger]);
 
   return {
     executeAsync,
@@ -352,10 +539,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     stopPolling,
     cancelCurrentTask,
     queryTaskStatus,
-    isExecuting,  // 衍生自 TanStack Query 狀態
-    isPolling,    // 衍生自 TanStack Query 狀態
-    isCancelling: isCancellingRef.current, // 當前取消狀態
-    error,        // 衍生自 TanStack Query 狀態
-    cleanup,
+    isExecuting,
+    isPolling,
+    error,
   };
 };

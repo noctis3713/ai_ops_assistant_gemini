@@ -777,3 +777,386 @@ class ErrorHandler:
         logger.error(f"一般錯誤: {error_str}, 狀態碼: {status_code}")
         
         return error_message, status_code
+
+
+# ===================================================================
+# 前端日誌處理系統
+# ===================================================================
+
+class FrontendLogHandler:
+    """前端日誌處理器
+    
+    負責接收、處理和存儲來自前端的日誌資料
+    支援日誌分類、輪轉存儲和格式化處理
+    """
+    
+    def __init__(self):
+        """初始化前端日誌處理器"""
+        self.frontend_logger = self._setup_frontend_logger()
+        self.error_logger = self._setup_frontend_error_logger()
+        
+        # 日誌級別映射
+        self.log_level_map = {
+            0: logging.DEBUG,
+            1: logging.INFO,
+            2: logging.WARNING,
+            3: logging.ERROR
+        }
+        
+        # 日誌分類統計
+        self.category_stats = {}
+        
+    def _setup_frontend_logger(self) -> logging.Logger:
+        """設置前端一般日誌記錄器"""
+        frontend_logger = logging.getLogger('frontend')
+        frontend_logger.setLevel(logging.DEBUG)
+        
+        # 避免重複添加處理器
+        if not frontend_logger.handlers:
+            # 前端日誌輪轉處理器
+            frontend_handler = LoggerConfig.create_rotating_handler("frontend.log")
+            
+            # 設置日誌格式
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(name)s | [%(session_id)s] | [%(category)s] | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            frontend_handler.setFormatter(formatter)
+            frontend_logger.addHandler(frontend_handler)
+            
+            # 控制台處理器（根據環境變數控制）
+            enable_console = os.getenv('BACKEND_ENABLE_FRONTEND_CONSOLE_LOG', 'false').lower() == 'true'
+            if enable_console:
+                console_handler = logging.StreamHandler()
+                console_handler.setFormatter(formatter)
+                frontend_logger.addHandler(console_handler)
+        
+        return frontend_logger
+    
+    def _setup_frontend_error_logger(self) -> logging.Logger:
+        """設置前端錯誤專用日誌記錄器"""
+        error_logger = logging.getLogger('frontend_error')
+        error_logger.setLevel(logging.WARNING)
+        
+        # 避免重複添加處理器
+        if not error_logger.handlers:
+            # 前端錯誤日誌輪轉處理器
+            error_handler = LoggerConfig.create_rotating_handler("frontend_error.log")
+            
+            # 設置錯誤日誌格式（包含更多詳細資訊）
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | FRONTEND_ERROR | [%(session_id)s] | [%(category)s] | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            error_handler.setFormatter(formatter)
+            error_logger.addHandler(error_handler)
+            
+            # 錯誤日誌控制台處理器（根據環境變數控制）
+            enable_console = os.getenv('BACKEND_ENABLE_FRONTEND_CONSOLE_LOG', 'false').lower() == 'true'
+            if enable_console:
+                console_handler = logging.StreamHandler()
+                console_handler.setFormatter(formatter)
+                error_logger.addHandler(console_handler)
+        
+        return error_logger
+    
+    def process_log_entries(self, log_entries: List[Dict[str, Any]], metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """處理前端日誌條目批次
+        
+        Args:
+            log_entries: 日誌條目列表
+            metadata: 請求元數據（包含用戶代理、URL等）
+            
+        Returns:
+            Dict[str, Any]: 處理結果統計
+        """
+        processed_count = 0
+        error_count = 0
+        category_count = {}
+        level_count = {0: 0, 1: 0, 2: 0, 3: 0}  # DEBUG, INFO, WARN, ERROR
+        
+        # 提取客戶端資訊
+        client_info = f"UA: {metadata.get('userAgent', 'Unknown')[:50]}... | URL: {metadata.get('url', 'Unknown')}"
+        
+        for entry in log_entries:
+            try:
+                # 驗證日誌條目格式
+                if not self._validate_log_entry(entry):
+                    error_count += 1
+                    continue
+                
+                # 統計分類和級別
+                category = entry.get('category', 'unknown')
+                level = entry.get('level', 1)
+                
+                category_count[category] = category_count.get(category, 0) + 1
+                level_count[level] = level_count.get(level, 0) + 1
+                
+                # 準備日誌資料
+                log_data = {
+                    'session_id': entry.get('sessionId', 'unknown'),
+                    'category': category,
+                    'client_info': client_info,
+                }
+                
+                # 格式化日誌訊息
+                message = self._format_log_message(entry)
+                
+                # 記錄日誌
+                logging_level = self.log_level_map.get(level, logging.INFO)
+                
+                if level >= 2:  # WARNING 或 ERROR
+                    # 同時記錄到錯誤日誌
+                    self.error_logger.log(logging_level, message, extra=log_data)
+                
+                # 記錄到一般日誌
+                self.frontend_logger.log(logging_level, message, extra=log_data)
+                
+                processed_count += 1
+                
+            except Exception as e:
+                error_count += 1
+                logger.error(f"處理前端日誌條目失敗: {e}")
+        
+        # 更新統計資訊
+        self._update_stats(category_count, level_count)
+        
+        return {
+            'processed_count': processed_count,
+            'error_count': error_count,
+            'category_breakdown': category_count,
+            'level_breakdown': level_count,
+            'client_info': client_info,
+            'timestamp': time.time()
+        }
+    
+    def _validate_log_entry(self, entry: Dict[str, Any]) -> bool:
+        """驗證日誌條目格式
+        
+        Args:
+            entry: 日誌條目
+            
+        Returns:
+            bool: 是否有效
+        """
+        required_fields = ['timestamp', 'level', 'category', 'message']
+        
+        for field in required_fields:
+            if field not in entry:
+                return False
+        
+        # 驗證級別範圍
+        level = entry.get('level')
+        if not isinstance(level, int) or level < 0 or level > 3:
+            return False
+        
+        return True
+    
+    def _format_log_message(self, entry: Dict[str, Any]) -> str:
+        """格式化日誌訊息
+        
+        Args:
+            entry: 日誌條目
+            
+        Returns:
+            str: 格式化的訊息
+        """
+        message = entry.get('message', '')
+        
+        # 添加額外資料
+        if 'data' in entry and entry['data']:
+            try:
+                import json
+                data_str = json.dumps(entry['data'], ensure_ascii=False, separators=(',', ':'))
+                # 限制資料長度
+                if len(data_str) > 500:
+                    data_str = data_str[:497] + '...'
+                message += f" | Data: {data_str}"
+            except:
+                message += f" | Data: {str(entry['data'])[:100]}..."
+        
+        # 添加堆疊追蹤（如果存在）
+        if 'stack' in entry and entry['stack']:
+            stack_lines = entry['stack'].split('\n')[:5]  # 限制堆疊行數
+            message += f" | Stack: {' | '.join(stack_lines)}"
+        
+        return message
+    
+    def _update_stats(self, category_count: Dict[str, int], level_count: Dict[int, int]):
+        """更新統計資訊
+        
+        Args:
+            category_count: 分類統計
+            level_count: 級別統計
+        """
+        for category, count in category_count.items():
+            self.category_stats[category] = self.category_stats.get(category, 0) + count
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """獲取前端日誌統計資訊
+        
+        Returns:
+            Dict[str, Any]: 統計資訊
+        """
+        return {
+            'category_stats': dict(self.category_stats),
+            'total_categories': len(self.category_stats),
+            'log_files': {
+                'frontend_log': str(LOG_CONFIG["LOG_DIR"] / "frontend.log"),
+                'frontend_error_log': str(LOG_CONFIG["LOG_DIR"] / "frontend_error.log"),
+            },
+            'last_updated': time.time()
+        }
+    
+    def clear_stats(self):
+        """清除統計資訊"""
+        self.category_stats.clear()
+    
+    def process_log_batch(self, logs: List[Any], metadata: Any) -> Dict[str, Any]:
+        """處理前端日誌批次
+        
+        Args:
+            logs: 日誌條目列表
+            metadata: 日誌元數據
+            
+        Returns:
+            Dict[str, Any]: 處理結果和統計資訊
+        """
+        try:
+            category_count = {}
+            level_count = {}
+            processed_count = 0
+            error_count = 0
+            
+            # 處理每個日誌條目
+            for log_entry in logs:
+                try:
+                    # 轉換為字典格式（如果是 Pydantic 模型）
+                    if hasattr(log_entry, 'dict'):
+                        entry_dict = log_entry.dict()
+                    elif hasattr(log_entry, '__dict__'):
+                        entry_dict = log_entry.__dict__
+                    else:
+                        entry_dict = dict(log_entry)
+                    
+                    # 記錄日誌
+                    self._log_entry(entry_dict, metadata)
+                    
+                    # 更新統計
+                    category = entry_dict.get('category', 'unknown')
+                    level = entry_dict.get('level', 1)
+                    
+                    category_count[category] = category_count.get(category, 0) + 1
+                    level_count[level] = level_count.get(level, 0) + 1
+                    
+                    processed_count += 1
+                    
+                except Exception as e:
+                    error_count += 1
+                    # 記錄處理錯誤
+                    self.error_logger.error(f"處理日誌條目失敗: {str(e)}", extra={
+                        'session_id': getattr(metadata, 'sessionId', 'unknown') if hasattr(metadata, 'sessionId') else 'unknown',
+                        'category': 'system_error'
+                    })
+            
+            # 更新統計資訊
+            self._update_stats(category_count, level_count)
+            
+            # 返回處理結果
+            return {
+                'processed_count': processed_count,
+                'error_count': error_count,
+                'stats': {
+                    'category_breakdown': category_count,
+                    'level_breakdown': level_count,
+                    'session_id': getattr(metadata, 'sessionId', 'unknown') if hasattr(metadata, 'sessionId') else 'unknown',
+                    'user_agent': getattr(metadata, 'userAgent', 'unknown') if hasattr(metadata, 'userAgent') else 'unknown',
+                    'url': getattr(metadata, 'url', 'unknown') if hasattr(metadata, 'url') else 'unknown'
+                }
+            }
+            
+        except Exception as e:
+            # 處理批次失敗
+            error_msg = f"處理前端日誌批次失敗: {str(e)}"
+            self.error_logger.error(error_msg, extra={
+                'session_id': 'unknown',
+                'category': 'batch_error'
+            })
+            
+            return {
+                'processed_count': 0,
+                'error_count': len(logs),
+                'stats': {},
+                'error': error_msg
+            }
+    
+    def _log_entry(self, entry: Dict[str, Any], metadata: Any):
+        """記錄單個日誌條目
+        
+        Args:
+            entry: 日誌條目字典
+            metadata: 日誌元數據
+        """
+        try:
+            # 獲取日誌級別
+            level = entry.get('level', 1)
+            log_level = self.log_level_map.get(level, logging.INFO)
+            
+            # 格式化訊息
+            message = self._format_log_message(entry)
+            
+            # 準備額外資訊
+            extra = {
+                'session_id': entry.get('sessionId') or getattr(metadata, 'sessionId', 'unknown') if hasattr(metadata, 'sessionId') else 'unknown',
+                'category': entry.get('category', 'unknown'),
+                'user_id': entry.get('userId') or getattr(metadata, 'userId', 'unknown') if hasattr(metadata, 'userId') else 'unknown'
+            }
+            
+            # 選擇適當的日誌記錄器
+            if log_level >= logging.ERROR:
+                self.error_logger.log(log_level, message, extra=extra)
+            else:
+                self.frontend_logger.log(log_level, message, extra=extra)
+                
+        except Exception as e:
+            # 記錄處理失敗的日誌條目
+            self.error_logger.error(f"記錄日誌條目失敗: {str(e)} | 原始條目: {str(entry)[:200]}...", extra={
+                'session_id': 'unknown',
+                'category': 'log_error'
+            })
+
+
+# 全域前端日誌處理器實例
+_frontend_log_handler = None
+
+def get_frontend_log_handler() -> FrontendLogHandler:
+    """獲取前端日誌處理器單例
+    
+    Returns:
+        FrontendLogHandler: 前端日誌處理器實例
+    """
+    global _frontend_log_handler
+    if _frontend_log_handler is None:
+        _frontend_log_handler = FrontendLogHandler()
+    return _frontend_log_handler
+
+
+def get_frontend_log_config():
+    """獲取前端日誌配置
+    
+    Returns:
+        前端日誌配置物件
+    """
+    # 導入在函數內部避免循環導入
+    from main import FrontendLogConfig
+    
+    return FrontendLogConfig(
+        enableRemoteLogging=True,
+        logLevel=os.getenv('FRONTEND_LOG_LEVEL', 'INFO'),
+        batchSize=int(os.getenv('FRONTEND_LOG_BATCH_SIZE', '10')),
+        batchInterval=int(os.getenv('FRONTEND_LOG_BATCH_INTERVAL', '30000')),
+        maxLocalStorageEntries=int(os.getenv('FRONTEND_MAX_LOCAL_STORAGE_ENTRIES', '100')),
+        enabledCategories=os.getenv('FRONTEND_LOG_CATEGORIES', 'api,error,user,performance').split(','),
+        maxMessageLength=int(os.getenv('FRONTEND_LOG_MAX_MESSAGE_LENGTH', '1000')),
+        enableStackTrace=os.getenv('FRONTEND_LOG_ENABLE_STACK_TRACE', 'false').lower() == 'true'
+    )
