@@ -1,5 +1,5 @@
 // 組件相關類型定義
-import { type Device, type DeviceGroup, type BatchExecutionResult } from './api';
+import { type Device, type DeviceGroup, type BatchExecutionResult, type TaskResponse } from './api';
 
 // 執行模式
 export type ExecutionMode = 'command' | 'ai';
@@ -84,6 +84,12 @@ export interface CommandInputProps {
   placeholder?: string;
   progress?: BatchProgressState;
   status?: StatusMessage;
+  // 新增非同步模式相關屬性
+  isAsyncMode: boolean;
+  onToggleAsyncMode: (enabled: boolean) => void;
+  currentTask?: TaskResponse | null;
+  onCancelTask?: () => void;
+  taskPollingActive?: boolean;
 }
 
 export interface ProgressIndicatorProps {

@@ -25,13 +25,7 @@ const BatchOutputDisplay = ({
   }, [results.length]);
 
   if (results.length === 0) {
-    return (
-      <div className="card">
-        <div className={`card-body ${statusClassName}`}>
-          {statusText || '等待執行結果...'}
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const toggleExpanded = (deviceIp: string) => {

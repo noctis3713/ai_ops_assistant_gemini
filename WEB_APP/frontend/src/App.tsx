@@ -143,78 +143,6 @@ function App() {
                 isLoading={devicesLoading}
               />
 
-              {/* 執行模式切換器 */}
-              <div className="border-t border-terminal-bg-secondary pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <span className="text-sm font-medium text-terminal-text-primary">執行模式：</span>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setIsAsyncMode(false)}
-                        disabled={currentlyExecuting}
-                        className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
-                          !isAsyncMode
-                            ? 'bg-terminal-primary text-white shadow-sm'
-                            : 'bg-terminal-bg-secondary text-terminal-text-secondary hover:bg-gray-200'
-                        } ${currentlyExecuting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        同步執行
-                      </button>
-                      <button
-                        onClick={() => setIsAsyncMode(true)}
-                        disabled={currentlyExecuting}
-                        className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
-                          isAsyncMode
-                            ? 'bg-terminal-primary text-white shadow-sm'
-                            : 'bg-terminal-bg-secondary text-terminal-text-secondary hover:bg-gray-200'
-                        } ${currentlyExecuting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        非同步執行
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* 任務狀態顯示 */}
-                  {isAsyncMode && (
-                    <div className="flex items-center space-x-3">
-                      {currentTask && (
-                        <div className="text-xs text-terminal-text-secondary">
-                          任務：{currentTask.task_id.substring(0, 8)}...
-                        </div>
-                      )}
-                      {taskPollingActive && (
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 bg-terminal-primary rounded-full animate-pulse"></div>
-                          <span className="text-xs text-terminal-text-secondary">輪詢中</span>
-                        </div>
-                      )}
-                      {currentTask && currentTask.status === 'running' && (
-                        <button
-                          onClick={() => cancelCurrentTask()}
-                          className="px-2 py-1 text-xs font-medium text-terminal-error hover:bg-terminal-error-light rounded transition-colors"
-                        >
-                          取消任務
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                
-                {/* 模式說明 */}
-                <div className="mt-2 text-xs text-terminal-text-muted">
-                  {isAsyncMode ? (
-                    <>
-                      <span className="font-medium">非同步模式</span>：
-                      適用於長時間執行的批次操作，避免 HTTP 超時問題，支援真實進度追蹤和任務取消
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-medium">同步模式</span>：
-                      傳統執行模式，適用於快速操作，操作完成後立即回傳結果
-                    </>
-                  )}
-                </div>
-              </div>
 
               <CommandInput
                 value={inputValue}
@@ -224,6 +152,11 @@ function App() {
                 isExecuting={currentlyExecuting}
                 progress={batchProgress}
                 status={status}
+                isAsyncMode={isAsyncMode}
+                onToggleAsyncMode={setIsAsyncMode}
+                currentTask={currentTask}
+                onCancelTask={cancelCurrentTask}
+                taskPollingActive={taskPollingActive}
               />
             </div>
           </section>
