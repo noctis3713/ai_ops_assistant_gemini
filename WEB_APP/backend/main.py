@@ -159,6 +159,21 @@ class BatchExecutionResult(BaseModel):
     error: Optional[str] = None
     executionTime: float
 
+class FrontendLogEntry(BaseModel):
+    """前端日誌項目模型"""
+    timestamp: str
+    level: int
+    category: Optional[str] = None
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    component: Optional[str] = None
+    userId: Optional[str] = None
+
+class FrontendLogRequest(BaseModel):
+    """前端日誌請求模型"""
+    entries: List[FrontendLogEntry]
+    metadata: Optional[Dict[str, Any]] = None
+
 # =============================================================================
 # 非同步任務相關模型
 # =============================================================================
@@ -1008,6 +1023,66 @@ async def batch_execute(request: BatchExecuteRequest):
             
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+
+@app.post("/api/frontend-logs")
+async def receive_frontend_logs(request: FrontendLogRequest):
+    """接收前端日誌端點"""
+    try:
+        # 建立專用的前端日誌記錄器
+        frontend_logger = LoggerConfig.create_rotating_handler("frontend.log")
+        frontend_log = logging.getLogger("frontend")
+        frontend_log.addHandler(frontend_logger)
+        frontend_log.setLevel(logging.INFO)
+        
+        # 處理每個日誌項目
+        processed_count = 0
+        errors = []
+        
+        for entry in request.entries:
+            try:
+                # 將前端日誌級別映射到 Python logging 級別
+                level_mapping = {
+                    0: logging.DEBUG,   # DEBUG
+                    1: logging.INFO,    # INFO  
+                    2: logging.WARNING, # WARN
+                    3: logging.ERROR    # ERROR
+                }
+                
+                log_level = level_mapping.get(entry.level, logging.INFO)
+                
+                # 格式化日誌訊息
+                category = f"[{entry.category}]" if entry.category else ""
+                component = f"<{entry.component}>" if entry.component else ""
+                user_id = f"(user:{entry.userId})" if entry.userId else ""
+                
+                log_message = f"Frontend{category}{component}{user_id}: {entry.message}"
+                
+                # 記錄到前端日誌檔案
+                frontend_log.log(log_level, log_message, extra={
+                    'timestamp': entry.timestamp,
+                    'data': entry.data,
+                    'metadata': request.metadata
+                })
+                
+                processed_count += 1
+                
+            except Exception as e:
+                errors.append(f"處理日誌項目失敗: {str(e)}")
+                logger.error(f"處理前端日誌項目失敗: {e}")
+        
+        # 記錄接收統計
+        logger.info(f"接收前端日誌 {processed_count} 條，錯誤 {len(errors)} 條")
+        
+        return {
+            "success": True,
+            "message": f"成功處理 {processed_count} 條日誌",
+            "processed": processed_count,
+            "errors": errors if errors else None
+        }
+        
+    except Exception as e:
+        logger.error(f"前端日誌處理失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"日誌處理失敗: {str(e)}")
 
 @app.get("/health")
 async def health_check():

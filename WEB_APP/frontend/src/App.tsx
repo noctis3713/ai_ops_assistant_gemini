@@ -4,7 +4,8 @@ import {
   useDevices, 
   useBatchExecution,
   useKeyboardShortcuts,
-  useAsyncTasks
+  useAsyncTasks,
+  useLogger
 } from '@/hooks';
 import {
   Header,
@@ -16,6 +17,13 @@ import {
 import { DEFAULT_TEXT } from '@/constants';
 
 function App() {
+  // 日誌功能
+  const { info, error, logUserAction, logComponentMount, logComponentUnmount } = useLogger({
+    component: 'App',
+    autoLogMount: true,
+    autoLogUnmount: true,
+  });
+
   // 全域狀態
   const {
     mode,
@@ -49,27 +57,49 @@ function App() {
   const handleExecute = async () => {
     if (selectedDevices.length === 0) return;
 
+    // 記錄用戶操作
+    logUserAction('execute', isAsyncMode ? 'async' : 'sync', {
+      deviceCount: selectedDevices.length,
+      mode,
+      inputLength: inputValue.length,
+    });
+
     if (isAsyncMode) {
       // 非同步模式執行
       try {
+        info('開始非同步執行', { 
+          devices: selectedDevices.length, 
+          mode, 
+          inputPreview: inputValue.substring(0, 50) 
+        });
+        
         await executeAsyncAndWait({
           devices: selectedDevices,
           command: inputValue,
           mode: mode === 'ai' ? 'ai' : 'command',
         });
-      } catch (error) {
-        console.error('非同步執行失敗:', error);
+        
+        info('非同步執行完成');
+      } catch (executionError) {
+        error('非同步執行失敗', executionError);
       }
     } else {
       // 同步模式執行
+      info('開始同步執行', { 
+        devices: selectedDevices.length, 
+        mode, 
+        inputPreview: inputValue.substring(0, 50) 
+      });
       executeBatch(selectedDevices, inputValue);
     }
   };
 
   // 手動清空結果 - 同時清除執行時間戳
   const handleClearResults = () => {
+    logUserAction('clear-results', 'batch-results', { count: batchResults.length });
     clearBatchResults();
     clearExecutionStartTime();
+    info('批次結果已清空', { previousCount: batchResults.length });
   };
 
   // 鍵盤快捷鍵

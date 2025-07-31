@@ -10,6 +10,7 @@ import {
   RETRYABLE_STATUS_CODES,
   REQUEST_HEADERS 
 } from '@/config/api';
+import { log } from '@/utils/logger';
 
 // 建立 axios 實例
 export const apiClient = axios.create({
@@ -24,14 +25,12 @@ export const apiClient = axios.create({
 // 請求攔截器
 apiClient.interceptors.request.use(
   (config) => {
-    // 開發環境下記錄請求日誌
-    if (import.meta.env.DEV) {
-      console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-    }
+    // 記錄 API 請求日誌
+    log.api.request(config.method?.toUpperCase() || 'UNKNOWN', config.url || '');
     return config;
   },
   (error) => {
-    console.error('❌ Request Error:', error);
+    log.api.error('Request configuration error', error);
     return Promise.reject(error);
   }
 );
@@ -39,10 +38,8 @@ apiClient.interceptors.request.use(
 // 回應攔截器
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // 開發環境下記錄回應日誌
-    if (import.meta.env.DEV) {
-      console.log(`✅ API Response: ${response.status} ${response.config.url}`);
-    }
+    // 記錄 API 回應日誌
+    log.api.response(response.status, response.config.url || '');
     return response;
   },
   (error: AxiosError) => {
@@ -56,11 +53,11 @@ apiClient.interceptors.response.use(
       message: error.message
     };
     
-    console.error('❌ API Response Error Details:', errorDetails);
+    log.api.error('API Response Error', errorDetails);
     
     // 特別記錄 AI 相關錯誤
     if (error.config?.url?.includes('/ai-') || error.response?.status === 429) {
-      console.error('🤖 AI Service Error:', {
+      log.api.error('AI Service Error', {
         timestamp: new Date().toISOString(),
         provider: 'unknown', // 前端無法直接獲取，但可以從後端回應中推斷
         ...errorDetails
@@ -133,7 +130,7 @@ export const createRetryableRequest = <T>(
               API_CONFIG.RETRY.MAX_DELAY
             );
             
-            console.log(`🔄 Request failed, retrying in ${delay}ms... (${retryCount + 1}/${maxRetries})`);
+            log.api.retry(retryCount, maxRetries, delay);
             setTimeout(() => attempt(retryCount + 1), delay);
           } else {
             reject(error);

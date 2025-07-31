@@ -828,9 +828,10 @@ WEB_APP/
 │   ├── app.log           # 主應用程式日誌（10MB 輪轉）
 │   ├── ai.log            # AI 服務日誌（10MB 輪轉）
 │   ├── network.log       # 網路操作日誌（10MB 輪轉）
-│   └── error.log         # 錯誤專用日誌（10MB 輪轉）
-└── frontend/logs/         # 前端日誌目錄（預留擴展）
-    └── [前端特定日誌]      # 未來可添加前端特定日誌
+│   ├── error.log         # 錯誤專用日誌（10MB 輪轉）
+│   └── frontend.log      # 🆕 前端日誌（10MB 輪轉）
+└── frontend/logs/         # 前端日誌目錄（開發環境本地）
+    └── [本地開發日誌]      # 開發模式的瀏覽器控制台日誌
 ```
 
 #### 日誌系統特性
@@ -1048,6 +1049,134 @@ VITE_APP_TITLE=AI 網路維運助理
 - **日誌系統**: 前後端統一日誌管理，支援 10MB 輪轉機制
 - **非同步任務**: 完整的前端非同步任務管理和輪詢系統整合
 - **API 擴展**: 新增 5 個非同步任務 API 和完整的 TypeScript 類型支援
+
+## 前端日誌管理系統 (v1.0.9 新增)
+
+### 🎯 統一日誌管理
+
+本專案實現了完整的前端日誌管理系統，提供環境感知、類型安全的日誌功能，與後端日誌系統無縫整合。
+
+#### 核心特性
+- **環境感知**: 開發環境顯示詳細日誌，生產環境僅記錄重要級別
+- **多重輸出**: 支援瀏覽器控制台、本地存儲、後端 API 三種輸出模式
+- **智能分類**: 按 API、組件、用戶操作、錯誤等類別自動分類
+- **類型安全**: 完整的 TypeScript 支援和編譯時檢查
+
+### 📁 日誌儲存位置
+
+#### 開發環境
+- **瀏覽器控制台**: 即時調試訊息，保持現有表情符號標識 (🚀/✅/❌/🔄)
+- **localStorage**: 本地持久化存儲，預設保留 200 條記錄
+
+#### 生產環境  
+- **後端整合**: 透過 `POST /api/frontend-logs` API 發送到 `backend/logs/frontend.log`
+- **智能過濾**: 僅發送 WARN/ERROR 級別日誌，減少伺服器負載
+- **本地備份**: localStorage 保留 50 條關鍵錯誤記錄用於故障診斷
+
+### 🏗️ 技術架構
+
+#### 核心組件
+```typescript
+// 1. LoggerService 靜態類別 (src/utils/logger.ts)
+import { logger, log } from '@/utils/logger';
+
+// 2. 環境配置管理 (src/config/logger.ts)
+import { createLoggerConfig, LOG_CATEGORIES } from '@/config/logger';
+
+// 3. React Hook 整合 (src/hooks/useLogger.ts)
+const { info, error, logUserAction } = useLogger({ component: 'MyComponent' });
+
+// 4. TypeScript 類型支援 (src/types/logger.ts)
+import type { LogEntry, LoggerConfig, UseLoggerReturn } from '@/types/logger';
+```
+
+#### 使用範例
+```typescript
+// API 日誌 (已整合到 src/api/client.ts)
+log.api.request('POST', '/api/execute');
+log.api.response(200, '/api/execute');
+log.api.error('Connection failed', errorDetails);
+
+// 組件日誌 (App.tsx, BatchOutputDisplay.tsx)
+const { info, error, logUserAction } = useLogger({ 
+  component: 'App',
+  autoLogMount: true 
+});
+
+info('開始執行任務', { deviceCount: 3, mode: 'async' });
+logUserAction('execute', 'async', { deviceCount: 3 });
+error('執行失敗', errorObject);
+
+// 效能監控
+const { measurePerformance } = usePerformanceLogger('MyComponent');
+const result = measurePerformance('heavyOperation', () => {
+  // 耗時操作
+});
+```
+
+### 🔧 配置選項
+
+#### 環境變數配置
+```bash
+# 前端 .env.local 配置（可選）
+VITE_LOG_LEVEL=DEBUG                    # 日誌级別 (DEBUG/INFO/WARN/ERROR)
+VITE_ENABLE_CONSOLE_LOG=true           # 啟用控制台輸出
+VITE_ENABLE_REMOTE_LOG=false           # 啟用遠端發送（生產環境自動啟用）
+VITE_ENABLE_LOCAL_STORAGE_LOG=true     # 啟用本地存儲
+VITE_MAX_LOCAL_STORAGE_ENTRIES=200     # 本地存儲最大條目數
+VITE_LOG_CATEGORIES=api,error,user     # 啟用的日誌類別
+```
+
+#### 預設配置策略
+- **開發環境**: 顯示所有級別，控制台 + 本地存儲
+- **生產環境**: 僅 WARN/ERROR，發送到後端 + 本地備份
+- **測試環境**: INFO 以上級別，僅控制台輸出
+
+### 🛠️ 開發工具
+
+#### 日誌查看和管理
+```typescript
+// 在組件中使用日誌管理工具
+const { getLogs, clearLogs, getStats, exportLogs } = useLogger();
+
+// 查看日誌統計
+const stats = getStats();  // { total: 150, byLevel: {...}, byCategory: {...} }
+
+// 篩選和匯出
+const errorLogs = getLogs({ levels: [LogLevel.ERROR] });
+const csvData = exportLogs({ format: 'csv', filters: { levels: [LogLevel.ERROR] } });
+```
+
+#### 開發除錯
+```typescript
+// 開發環境可透過瀏覽器控制台使用
+window.__logger = logger;  // 全域訪問（僅開發環境）
+
+// 控制台指令
+logger.getLocalStorageLogs();     // 查看所有日誌
+logger.clearLocalStorageLogs();   // 清空本地日誌
+logger.updateConfig({ minLevel: LogLevel.DEBUG });  // 動態調整配置
+```
+
+### 📊 監控和分析
+
+#### 後端日誌整合
+- **統一格式**: 與後端日誌格式一致，便於日誌分析工具處理
+- **輪轉機制**: 遵循後端 10MB 輪轉、5 個備份的規範
+- **分類標識**: 自動標記為 `Frontend[category]<component>` 格式
+
+#### 效能監控
+- **自動監控**: API 請求自動記錄執行時間
+- **組件生命週期**: 可選的組件掛載/卸載時間記錄
+- **用戶操作追蹤**: 關鍵用戶交互的詳細記錄
+
+### 🔒 安全考量
+
+- **敏感資料過濾**: 自動過濾密碼、Token 等敏感資訊
+- **資料量控制**: 本地存儲限制和自動清理機制
+- **網路優化**: 生產環境批次發送，減少 API 調用次數
+
+此日誌系統為前端應用提供了企業級的日誌管理能力，大幅提升了問題診斷效率和系統可維護性。
 
 ## 技術支援
 
