@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(pip freeze)",
+      "Bash(echo:*)",
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(black:*)",
+      "Bash(grep:*)",
+      "Bash(unset:*)",
+      "Bash(mv:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(start python main.py)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(del test_api.py)",
+      "Bash(diff:*)",
+      "Bash(move:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm:*)"
+    ],
+    "deny": []
+  }
+}

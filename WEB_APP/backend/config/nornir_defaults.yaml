@@ -1,0 +1,6 @@
+extras:
+  netmiko_banner_timeout: 15
+  netmiko_timeout: 20
+password: mbfg2017
+platform: cisco_xe
+username: admin

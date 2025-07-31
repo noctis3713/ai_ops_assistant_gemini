@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npx --no-install tailwindcss init -p)",
+      "Bash(mkdir:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run dev:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(del /f /q nul)",
+      "Bash(rd:*)",
+      "Bash(npm run lint)",
+      "Bash(timeout 10s npm run dev)",
+      "Bash(pip install:*)",
+      "Bash(timeout:*)"
+    ],
+    "deny": []
+  }
+}

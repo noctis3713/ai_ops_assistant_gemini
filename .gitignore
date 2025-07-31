@@ -1,0 +1,57 @@
+# 環境變數和敏感資訊
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虛擬環境
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日誌檔案
+*.log
+logs/
+
+# 測試
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 暫存檔案
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# 設備特定配置（如包含敏感資訊）
+devices_prod.json
+backup_configs/

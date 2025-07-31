@@ -1,0 +1,24 @@
+{
+  "devices": [
+    {
+      "ip": "202.3.182.202",
+      "model": "Cisco ASR 1001-X",
+      "os": "cisco_xe",
+      "name": "SIS-LY-C0609",
+      "description": "LY SIS設備",
+      "username": "admin",
+      "password": "mbfg2017",
+      "device_type": "cisco_xe"
+    },
+    {
+      "ip": "202.153.183.18",
+      "model": "Cisco ASR 1001-X",
+      "os": "cisco_xe",
+      "name": "SIS-HD-H7A08-1",
+      "description": "HD SIS設備",
+      "username": "admin",
+      "password": "mbfg2017",
+      "device_type": "cisco_xe"
+    }
+  ]
+}
