@@ -111,10 +111,10 @@ const CommandInput: React.FC<CommandInputProps> = ({
         <button
           onClick={() => onToggleAsyncMode?.(!isAsyncMode)}
           disabled={isExecuting}
-          className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
+          className={`px-5 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
             isAsyncMode
-              ? 'bg-terminal-primary text-white shadow-sm'
-              : 'bg-terminal-bg-secondary text-terminal-text-secondary hover:bg-gray-200'
+              ? 'bg-blue-100 text-blue-800 shadow-sm'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           } ${isExecuting ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           非同步執行
