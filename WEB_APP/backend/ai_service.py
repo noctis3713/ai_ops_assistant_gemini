@@ -16,6 +16,8 @@ try:
     from langchain_anthropic import ChatAnthropic
     from langchain.agents import AgentExecutor, create_react_agent
     from langchain_core.tools import Tool
+    from langchain_core.output_parsers import PydanticOutputParser
+    from langchain_core.prompts import PromptTemplate
     from langchain import hub
     import warnings
     warnings.filterwarnings("ignore")
@@ -30,6 +32,7 @@ except ImportError:
     SEARCH_AVAILABLE = False
 
 from core.nornir_integration import batch_command_wrapper
+from models.ai_response import NetworkAnalysisResponse
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +61,8 @@ class AIService:
         self.search_enabled = os.getenv("ENABLE_DOCUMENT_SEARCH", "false").lower() == "true"
         self.ai_initialized = False
         
-        # 配置解析器版本: "original", "simplified", "balanced"
-        self.parser_version = os.getenv("PARSER_VERSION", "original").lower()
+        # 初始化 PydanticOutputParser
+        self.parser = PydanticOutputParser(pydantic_object=NetworkAnalysisResponse)
         
         # 初始化 AI 系統
         self._initialize_ai()
@@ -120,9 +123,9 @@ class AIService:
             # 建立工具清單
             tools = self._create_tools()
             
-            # 創建 agent
-            prompt = hub.pull("hwchase17/react")
-            agent = create_react_agent(llm, tools, prompt)
+            # 創建包含結構化輸出格式指令的自定義提示詞
+            prompt_template = self._create_custom_prompt_template()
+            agent = create_react_agent(llm, tools, prompt_template)
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=tools,
@@ -314,6 +317,49 @@ class AIService:
         
         return tools
     
+    def _create_custom_prompt_template(self) -> PromptTemplate:
+        """建立自定義的 ReAct 提示詞模板，整合 PydanticOutputParser 格式指令
+        
+        Returns:
+            PromptTemplate: 整合結構化輸出格式的提示詞模板
+        """
+        # 延遲導入以避免循環導入
+        from utils import build_ai_system_prompt_for_pydantic
+        
+        # 獲取基礎系統提示詞
+        base_prompt = build_ai_system_prompt_for_pydantic(search_enabled=self.search_enabled)
+        
+        # 建立 ReAct 工作流程模板
+        template = f"""{base_prompt}
+
+Answer the following questions as best you can. You have access to the following tools:
+
+{{tools}}
+
+Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{{tool_names}}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: {{format_instructions}}
+
+Question: {{input}}
+{{agent_scratchpad}}"""
+        
+        return PromptTemplate(
+            template=template,
+            input_variables=["input", "agent_scratchpad"],
+            partial_variables={
+                "tools": "\n".join([f"{tool.name}: {tool.description}" for tool in self._create_tools()]),
+                "tool_names": ", ".join([tool.name for tool in self._create_tools()]),
+                "format_instructions": self.parser.get_format_instructions()
+            }
+        )
+    
     def _web_search_wrapper(self, query: str) -> str:
         """Cisco 文檔搜尋工具包裝函式"""
         if not SEARCH_AVAILABLE or not self.search_enabled:
@@ -383,7 +429,7 @@ class AIService:
 建議聯繫系統管理員檢查搜尋服務配置。"""
     
     async def query_ai(self, prompt: str, timeout: float = 30.0, include_examples: bool = True) -> str:
-        """執行 AI 查詢，支援自動整合思考鏈範例
+        """執行 AI 查詢，使用 PydanticOutputParser 異化輸出格式
         
         Args:
             prompt: AI 查詢提示詞
@@ -391,7 +437,7 @@ class AIService:
             include_examples: 是否自動包含思考鏈範例（預設True）
             
         Returns:
-            AI 回應結果
+            str: 格式化的 Markdown 結果
             
         Raises:
             Exception: 當 AI 服務未初始化或查詢失敗時
@@ -402,18 +448,15 @@ class AIService:
         # 智能地整合思考鏈範例
         enhanced_prompt = prompt
         if include_examples and "<examples>" not in prompt:
-            # 如果 prompt 中還沒有範例，就添加思考鏈範例
             few_shot_examples = _get_few_shot_examples()
             if few_shot_examples:
-                # 在 user_query 標籤之前插入範例
                 if "<user_query>" in prompt:
                     enhanced_prompt = prompt.replace("<user_query>", f"{few_shot_examples}\n\n<user_query>")
                 else:
-                    # 如果沒有 user_query 標籤，就直接添加到末尾
                     enhanced_prompt = f"{prompt}\n\n{few_shot_examples}"
         
         try:
-            # 設置超時執行 AI 查詢
+            # 執行 AI 查詢
             result = await asyncio.wait_for(
                 asyncio.to_thread(
                     self.agent_executor.invoke,
@@ -427,73 +470,40 @@ class AIService:
             if isinstance(result, dict):
                 ai_logger.debug(f"AI 回應鍵值: {list(result.keys())}")
             
-            # 根據配置選擇解析器，加入異常恢復機制
-            ai_response = None
-            parsing_errors = []
+            # 取得 Agent 的最終回答
+            final_answer_str = result.get("output", "") if isinstance(result, dict) else str(result)
             
-            # 嘗試使用配置的解析器
+            if not final_answer_str.strip():
+                raise Exception("空的 AI 回應")
+            
             try:
-                if self.parser_version == "simplified":
-                    ai_response = self._parse_agent_result_simplified(result, None)
-                    logger.debug("使用簡化版解析器成功")
-                elif self.parser_version == "balanced":
-                    ai_response = self._parse_agent_result_balanced(result, None)
-                    logger.debug("使用平衡版解析器成功")
-                else:
-                    ai_response = self._parse_agent_result(result, None)
-                    logger.debug("使用原版解析器成功")
-            except Exception as parse_error:
-                parsing_errors.append(f"{self.parser_version}解析器: {str(parse_error)}")
-                ai_logger.warning(f"主解析器失敗: {parse_error}")
-            
-            # 如果主解析器失敗，嘗試其他解析器作為後備
-            if not ai_response or ai_response == "AI回覆解析失敗":
-                backup_parsers = [("balanced", self._parse_agent_result_balanced), 
-                                ("simplified", self._parse_agent_result_simplified), 
-                                ("original", self._parse_agent_result)]
+                # 使用 PydanticOutputParser 解析結構化輸出
+                structured_response: NetworkAnalysisResponse = self.parser.parse(final_answer_str)
                 
-                for parser_name, parser_func in backup_parsers:
-                    if parser_name == self.parser_version:
-                        continue  # 跳過已嘗試的解析器
+                # 記錄成功解析
+                ai_logger.info(f"成功解析結構化回應: {structured_response.analysis_type}")
+                
+                # 轉換為 Markdown 格式返回前端
+                return structured_response.to_markdown()
+                
+            except Exception as parse_error:
+                # 如果結構化解析失敗，嘗試後備解析
+                ai_logger.warning(f"PydanticOutputParser 解析失敗: {parse_error}")
+                ai_logger.warning(f"原始輸出: {final_answer_str[:500]}...")
+                
+                # 後備策略：嘗試直接返回清理後的文本
+                cleaned_response = final_answer_str.strip()
+                if "Final Answer:" in cleaned_response:
+                    cleaned_response = cleaned_response.split("Final Answer:")[-1].strip()
+                if "The final answer is" in cleaned_response:
+                    cleaned_response = cleaned_response.replace("The final answer is", "").strip()
+                
+                if cleaned_response:
+                    ai_logger.info("使用後備解析策略")
+                    return cleaned_response
+                else:
+                    raise Exception(f"結構化解析和後備解析都失敗: {parse_error}")
                     
-                    try:
-                        ai_response = parser_func(result, None)
-                        if ai_response and ai_response != "AI回覆解析失敗":
-                            ai_logger.info(f"後備解析器 {parser_name} 成功")
-                            break
-                    except Exception as backup_error:
-                        parsing_errors.append(f"{parser_name}後備解析器: {str(backup_error)}")
-            
-            # 最後的後備處理
-            if not ai_response or ai_response == "AI回覆解析失敗":
-                # 嘗試直接從結果提取基本內容
-                if isinstance(result, str) and result.strip():
-                    ai_response = result.strip()
-                    ai_logger.warning("使用原始字串作為後備回應")
-                elif isinstance(result, dict):
-                    # 嘗試從任何可能的字串值中提取內容
-                    for key, value in result.items():
-                        if isinstance(value, str) and value.strip() and len(value.strip()) > 10:
-                            ai_response = value.strip()
-                            ai_logger.warning(f"使用 {key} 鍵值作為後備回應")
-                            break
-            
-            # 如果所有解析嘗試都失敗，提供詳細錯誤訊息
-            if not ai_response:
-                error_details = "\n".join(parsing_errors) if parsing_errors else "無具體錯誤資訊"
-                ai_logger.error(f"所有解析器都失敗: {error_details}")
-                ai_response = f"AI 回應解析失敗，所有解析方法都失敗了。原始結果類型: {type(result)}。請稍後再試或聯繫系統管理員。"
-            
-            # 清理回應內容
-            if "The final answer is" in ai_response:
-                ai_response = ai_response.replace("The final answer is", "").strip()
-            
-            # 確保回應不為空
-            if not ai_response.strip():
-                ai_response = "AI 回應為空，請重新提問或簡化問題。"
-            
-            return ai_response
-            
         except asyncio.TimeoutError:
             ai_logger.error(f"AI 查詢超時: {timeout}秒")
             raise Exception(f"AI 分析處理超時（{timeout}秒）- 請簡化查詢內容或稍後重試")
@@ -510,205 +520,6 @@ class AIService:
                 raise Exception("AI API 認證失敗，請檢查 API Key 設定")
             else:
                 raise Exception(f"AI 查詢執行失敗: {error_str}")
-    
-    def _parse_agent_result(self, result, default_message="AI回覆解析失敗"):
-        """解析 agent_executor.invoke 結果的增強版健壯函式"""
-        if not result:
-            logger.debug("Agent result is None or empty")
-            return default_message if default_message else "AI 回應為空，請重新提問"
-        
-        # 記錄結果類型和內容用於調試
-        logger.debug(f"Agent result type: {type(result)}")
-        logger.debug(f"Agent result content: {str(result)[:500]}...")
-        
-        # 處理直接字串回傳
-        if isinstance(result, str):
-            cleaned = result.strip()
-            if cleaned:
-                # 移除常見的LangChain格式標記
-                if cleaned.startswith("The final answer is"):
-                    cleaned = cleaned.replace("The final answer is", "").strip()
-                logger.debug("Successfully parsed string result")
-                return cleaned
-            return default_message
-        
-        # 處理字典格式回傳 - 按優先順序嘗試多種 key
-        if isinstance(result, dict):
-            logger.debug(f"Agent result keys: {list(result.keys())}")
-            
-            # 主要的輸出欄位 - 擴展更多可能的欄位名稱
-            for key in ["output", "final_output", "response", "answer", "result", "text", "content"]:
-                if key in result and result[key]:
-                    content = result[key]
-                    if isinstance(content, str) and content.strip():
-                        cleaned = content.strip()
-                        # 移除常見的格式標記
-                        if cleaned.startswith("The final answer is"):
-                            cleaned = cleaned.replace("The final answer is", "").strip()
-                        logger.debug(f"Successfully extracted content from key: {key}")
-                        return cleaned
-            
-            # 嘗試從中間步驟提取最後的觀察結果
-            intermediate_steps = result.get("intermediate_steps", [])
-            if intermediate_steps:
-                logger.debug(f"Found {len(intermediate_steps)} intermediate steps")
-                
-                # 從最後的步驟開始檢查
-                for i, step in enumerate(reversed(intermediate_steps)):
-                    try:
-                        if isinstance(step, (list, tuple)) and len(step) >= 2:
-                            # 格式: (action, observation)
-                            observation = step[1]
-                            if isinstance(observation, str) and observation.strip():
-                                # 檢查觀察結果是否是工具的實際輸出
-                                obs_lower = observation.lower()
-                                skip_keywords = [
-                                    "tool:", "action:", "thought:", "final answer is",
-                                    "i need to", "let me", "based on", "according to",
-                                    "the command", "執行指令", "executing"
-                                ]
-                                
-                                # 如果觀察結果不包含這些跳過關鍵字，可能是真實的設備輸出
-                                if not any(keyword in obs_lower for keyword in skip_keywords):
-                                    # 進一步檢查是否看起來像設備輸出
-                                    if any(indicator in obs_lower for indicator in [
-                                        "cisco", "ios", "version", "interface", "up", "down",
-                                        "protocol", "hardware", "software", "memory", "cpu"
-                                    ]):
-                                        logger.debug(f"Found device output in intermediate step {i}")
-                                        return observation.strip()
-                    except Exception as step_error:
-                        logger.debug(f"Error processing step {i}: {step_error}")
-                        continue
-            
-            # 嘗試從錯誤信息中提取有用內容
-            if "error" in result:
-                error_content = result["error"]
-                if isinstance(error_content, str) and error_content.strip():
-                    logger.debug("Found error content in result")
-                    return f"處理過程中發生錯誤: {error_content.strip()}"
-            
-            # 最後嘗試：查找任何看起來像真實內容的字串值
-            for key, value in result.items():
-                if isinstance(value, str) and value.strip() and len(value.strip()) > 10:
-                    # 避免系統消息和元數據
-                    if not any(keyword in key.lower() for keyword in ["log", "debug", "trace", "meta"]):
-                        logger.debug(f"Using fallback content from key: {key}")
-                        return value.strip()
-        
-        # 處理其他類型 - 嘗試轉換成字串
-        try:
-            str_result = str(result).strip()
-            if str_result and str_result not in ["None", "{}", "[]", "()", "null"]:
-                logger.debug("Using string conversion of result")
-                return str_result
-        except Exception as e:
-            logger.debug(f"String conversion failed: {e}")
-        
-        # 詳細記錄失敗情況以便調試
-        logger.warning(f"All parsing attempts failed for result type {type(result)}")
-        if isinstance(result, dict):
-            logger.warning(f"Available keys were: {list(result.keys())}")
-        
-        return default_message if default_message else "AI 回應解析失敗，請稍後重試"
-    
-    def _parse_agent_result_simplified(self, result, default_message="AI回覆解析失敗"):
-        """簡化版解析函數 - 專注於最常見的情況，代碼行數大幅減少"""
-        # 優先處理標準格式 - 這應該是優化prompt後的主要情況
-        if isinstance(result, dict) and "output" in result:
-            output = result["output"].strip()
-            if output:
-                # 移除常見的格式標記
-                if output.startswith("The final answer is"):
-                    output = output.replace("The final answer is", "").strip()
-                logger.debug("Successfully parsed from output key")
-                return output
-        
-        # 處理直接字符串返回
-        if isinstance(result, str) and result.strip():
-            cleaned = result.strip()
-            if cleaned.startswith("The final answer is"):
-                cleaned = cleaned.replace("The final answer is", "").strip()
-            logger.debug("Successfully parsed string result")
-            return cleaned
-        
-        # 基本的後備機制 - 處理其他常見key
-        if isinstance(result, dict):
-            for key in ["final_output", "response", "answer", "result"]:
-                if key in result and result[key]:
-                    content = result[key]
-                    if isinstance(content, str) and content.strip():
-                        cleaned = content.strip()
-                        if cleaned.startswith("The final answer is"):
-                            cleaned = cleaned.replace("The final answer is", "").strip()
-                        logger.debug(f"Successfully parsed from key: {key}")
-                        return cleaned
-        
-        # 記錄解析失敗情況
-        logger.warning(f"Simplified parser failed for result type {type(result)}")
-        if isinstance(result, dict):
-            logger.warning(f"Available keys: {list(result.keys())}")
-        
-        return default_message if default_message else "AI 回應解析失敗，請稍後重試"
-    
-    def _parse_agent_result_balanced(self, result, default_message="AI回覆解析失敗"):
-        """平衡版解析函數 - 在簡化和功能完整性之間取得平衡"""
-        # 優先處理標準格式 - 這應該是優化prompt後的主要情況
-        if isinstance(result, dict) and "output" in result:
-            output = result["output"]
-            if output and isinstance(output, str) and output.strip():
-                cleaned = output.strip()
-                if cleaned.startswith("The final answer is"):
-                    cleaned = cleaned.replace("The final answer is", "").strip()
-                logger.debug("Successfully parsed from output key")
-                return cleaned
-        
-        # 處理直接字符串返回
-        if isinstance(result, str) and result.strip():
-            cleaned = result.strip()
-            if cleaned.startswith("The final answer is"):
-                cleaned = cleaned.replace("The final answer is", "").strip()
-            logger.debug("Successfully parsed string result")
-            return cleaned
-        
-        # 處理其他常見key
-        if isinstance(result, dict):
-            for key in ["final_output", "response", "answer", "result"]:
-                if key in result and result[key]:
-                    content = result[key]
-                    if isinstance(content, str) and content.strip():
-                        cleaned = content.strip()
-                        if cleaned.startswith("The final answer is"):
-                            cleaned = cleaned.replace("The final answer is", "").strip()
-                        logger.debug(f"Successfully parsed from key: {key}")
-                        return cleaned
-        
-        # 簡化的 intermediate_steps 處理 - 只處理最明顯的設備輸出
-        if isinstance(result, dict) and "intermediate_steps" in result:
-            intermediate_steps = result.get("intermediate_steps", [])
-            if intermediate_steps:
-                # 只檢查最後一個步驟
-                try:
-                    last_step = intermediate_steps[-1]
-                    if isinstance(last_step, (list, tuple)) and len(last_step) >= 2:
-                        observation = last_step[1]
-                        if isinstance(observation, str) and observation.strip():
-                            obs_clean = observation.strip()
-                            # 只接受明顯的設備輸出（包含Cisco關鍵字）
-                            if any(keyword in obs_clean.lower() for keyword in [
-                                "cisco", "ios", "version", "interface", "gigabitethernet", 
-                                "software", "hardware", "protocol"
-                            ]):
-                                logger.debug("Found device output in last intermediate step")
-                                return obs_clean
-                except (IndexError, AttributeError):
-                    pass
-        
-        logger.warning(f"Balanced parser failed for result type {type(result)}")
-        if isinstance(result, dict):
-            logger.warning(f"Available keys: {list(result.keys())}")
-        
-        return default_message if default_message else "AI 回應解析失敗，請稍後重試"
     
     def classify_ai_error(self, error_str: str) -> Tuple[str, int]:
         """分類 AI API 錯誤並返回錯誤訊息和狀態碼
@@ -782,11 +593,12 @@ class AIService:
         else:
             search_status_detail["status_message"] = "搜尋功能完全啟用"
         
+        # 移除解析器版本配置，因為已使用 PydanticOutputParser
         return {
             "ai_available": AI_AVAILABLE,
             "ai_initialized": self.ai_initialized,
             "ai_provider": ai_provider,
-            "parser_version": self.parser_version,
+            "pydantic_parser_enabled": True,
             "search_enabled": self.search_enabled and SEARCH_AVAILABLE,
             "search_available": SEARCH_AVAILABLE,
             "search_detail": search_status_detail,
