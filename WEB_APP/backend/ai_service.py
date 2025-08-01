@@ -36,15 +36,141 @@ from models.ai_response import NetworkAnalysisResponse
 
 logger = logging.getLogger(__name__)
 
-# 延遲導入以避免循環導入
+# 內部思考鏈範例函數
+def _get_react_examples() -> str:
+    """建立思考鏈 (Chain-of-Thought) 範例
+    
+    提供完整的思考過程範例，幫助 AI 更穩定地遵循指示和工具選擇邏輯
+    
+    Returns:
+        str: 完整的思考鏈範例字串
+    """
+    examples = """
+<examples>
+以下是一些完整的思考過程範例，請學習這種思考模式。
+**重要**: 注意每個範例都以 `Final Answer:` 開始最終回應，你必須嚴格遵循這個格式：
+
+**範例1: 搜尋型查詢 (不確定具體指令時)**
+
+<user_query>
+我想知道 202.3.182.202 這台設備的溫度狀況
+</user_query>
+
+Thought: 使用者想要查詢設備溫度，但我不確定具體應該使用哪個 show 指令來獲取溫度資訊。根據 workflow，我應該先使用 CiscoCommandSearch 搜尋正確的指令。
+
+Action: CiscoCommandSearch
+Action Input: cisco device temperature monitoring command
+
+Observation: 搜尋結果顯示可以使用 `show environment all` 或 `show environment temperature` 來查看設備溫度狀態。
+
+Thought: 很好，我已經找到了適合的指令。現在我可以使用 BatchCommandRunner 在指定設備上執行 `show environment all` 來獲取完整的環境資訊。
+
+Action: BatchCommandRunner  
+Action Input: 202.3.182.202: show environment all
+
+Observation: 指令執行成功，返回了設備的完整環境狀態資訊，包括溫度感測器讀數、風扇狀態等。
+
+Thought: 我已經獲得了設備的環境資訊。根據 output_format，這是單一設備查詢，我需要使用單一設備格式來整理分析報告。
+
+Final Answer:
+### 重點分析
+- **狀態概況**: 設備環境狀態正常，所有溫度感測器讀數在正常範圍內
+- **關鍵數據**: 
+  - CPU 溫度: 45°C (正常)
+  - 機箱溫度: 32°C (正常)  
+  - 所有風扇運作正常
+- **異常發現**: 無
+
+### 專業建議
+建議定期監控環境狀態，確保設備在適當的運作溫度範圍內。如發現溫度異常上升，應檢查機房空調和設備通風狀況。
+
+**範例2: 直接執行型查詢 (明確指令時)**
+
+<user_query>
+請幫我查看 202.3.182.202 和 202.153.183.18 這兩台設備的版本資訊
+</user_query>
+
+Thought: 使用者明確要求查詢版本資訊，這對應到 `show version` 指令，我不需要搜尋。這是多設備查詢，我可以直接使用 BatchCommandRunner 執行指令。
+
+Action: BatchCommandRunner
+Action Input: 202.3.182.202,202.153.183.18: show version
+
+Observation: 指令在兩台設備上都執行成功，返回了詳細的版本資訊，包括軟體版本、硬體型號、序號等。
+
+Thought: 我已經獲得了兩台設備的版本資訊。根據 output_format，這是多設備查詢，我需要使用多設備格式來整理對比分析報告。
+
+Final Answer:
+{
+  "analysis_summary": "兩台設備版本一致且狀態良好，所有設備均運行 Cisco IOS XE 軟體",
+  "key_findings": [
+    "202.3.182.202: ASR1001-X, 序號 FXS1836Q2T6",
+    "202.153.183.18: ASR1001-X, 序號 FXS1836Q2T7",
+    "兩台設備均運行相同版本的 IOS XE 軟體"
+  ],
+  "anomalies": [],
+  "recommendations": [
+    "建議保持當前配置以維持環境一致性",
+    "如需進行軟體更新，建議制定統一的更新計劃",
+    "建議定期檢查軟體版本確保安全性"
+  ],
+  "device_count": 2,
+  "successful_device_count": 2,
+  "failed_device_count": 0,
+  "analysis_type": "multi_device"
+}
+
+**範例3: 錯誤處理範例**
+
+<user_query>
+檢查設備的 BGP 狀態
+</user_query>
+
+Thought: 使用者要求檢查 BGP 狀態，但沒有指定設備。我需要先搜尋適當的 BGP 狀態檢查指令。
+
+Action: CiscoCommandSearch
+Action Input: BGP status monitoring commands
+
+Observation: 搜尋結果建議使用 `show ip bgp summary` 來查看 BGP 狀態摘要。
+
+Thought: 我找到了指令，但使用者沒有指定設備。根據 device_context，我應該對所有可用設備執行指令。
+
+Action: BatchCommandRunner
+Action Input: show ip bgp summary
+
+Observation: 部分設備執行成功，但有設備返回錯誤，可能是因為該設備未配置 BGP。
+
+Thought: 執行過程中遇到了部分失敗，這是正常情況。我需要根據實際結果分析，並在報告中說明失敗原因。
+
+Final Answer:
+{
+  "analysis_summary": "設備 BGP 配置不一致，部分設備未配置 BGP 功能",
+  "key_findings": [
+    "202.3.182.202: BGP 狀態正常，有 3 個鄰居連接",
+    "202.153.183.18: 未配置 BGP 功能"
+  ],
+  "anomalies": [
+    "202.153.183.18 未配置 BGP 功能，指令執行失敗"
+  ],
+  "recommendations": [
+    "建議檢查網路架構設計，確認是否所有設備都需要配置 BGP",
+    "對於需要 BGP 的設備，建議完善配置",
+    "對於不需要 BGP 的設備，此錯誤可忽略",
+    "建議統一網路設備的路由協定配置策略"
+  ],
+  "device_count": 2,
+  "successful_device_count": 1,
+  "failed_device_count": 1,
+  "analysis_type": "multi_device"
+}
+
+</examples>
+"""
+    
+    return examples
+
 def _get_few_shot_examples():
-    """延遲導入思考鏈範例函數"""
-    try:
-        from utils import build_few_shot_examples
-        return build_few_shot_examples()
-    except ImportError:
-        logger.warning("無法導入 build_few_shot_examples，跳過思考鏈範例")
-        return ""
+    """延遲導入思考鏈範例函數（重構版）"""
+    return _get_react_examples()
 
 def get_ai_logger():
     """建立 AI 專用日誌記錄器（使用統一配置）"""

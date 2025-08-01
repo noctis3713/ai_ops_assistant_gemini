@@ -39,12 +39,8 @@ export const useBatchExecution = () => {
   // 創建進度回調處理器
   const createProgressHandler = useCallback((totalDevices: number) => {
     return createProgressCallback((update) => {
-      // 更新進度條狀態
-      if (update.percentage !== undefined) {
-        setBatchProgress({ 
-          completedDevices: Math.round((update.percentage / 100) * totalDevices)
-        });
-      }
+      // 只更新階段和訊息，不重新計算 completedDevices
+      // 這樣可以避免與 simulateProgress 的數值更新衝突
       
       // 更新階段訊息
       if (update.stage) {
@@ -79,10 +75,16 @@ export const useBatchExecution = () => {
     }, delay);
   }, [clearStatus, hideBatchProgress]);
 
-  // 模擬批次進度更新 - 使用平滑遞增邏輯，增加狀態保護
-  const simulateProgress = useCallback((deviceCount: number) => {
+  // 模擬批次進度更新 - 根據執行模式調整目標進度，避免與階段進度衝突
+  const simulateProgress = useCallback((deviceCount: number, executionMode: string) => {
     let currentCompleted = 0;
-    const maxProgress = Math.max(1, deviceCount - 1); // 保留最後一個設備給實際完成時更新
+    
+    // 根據執行模式調整最大進度目標
+    // AI 模式：目標到達約75%的設備數，為 AI_ANALYZING 階段(85%)預留空間
+    // 指令模式：目標到達約85%的設備數，為 COMPLETED 階段(100%)預留空間
+    const progressTargetRatio = executionMode === 'ai' ? 0.75 : 0.85;
+    const maxProgress = Math.max(0.5, deviceCount * progressTargetRatio);
+    
     const totalSteps = Math.max(8, Math.min(deviceCount * 2, 15)); // 動態步數，根據設備數量調整
     const incrementStep = maxProgress / totalSteps;
     const updateInterval = Math.max(400, Math.min(1000, 600 + deviceCount * 50)); // 動態間隔時間
@@ -90,7 +92,7 @@ export const useBatchExecution = () => {
     const progressInterval = setInterval(() => {
       // 強化狀態檢查：確保執行狀態有效且進度未達到最大值
       if (isExecutingRef.current && currentCompleted < maxProgress && progressIntervalRef.current) {
-        // 平滑遞增，確保進度自然前進
+        // 平滑遞增，確保進度自然前進但不會超過階段進度
         currentCompleted = Math.min(currentCompleted + incrementStep, maxProgress);
         updateBatchProgress(Math.floor(currentCompleted));
       } else {
@@ -170,8 +172,8 @@ export const useBatchExecution = () => {
                     clearInterval(progressIntervalRef.current);
                   }
                   
-                  // 啟動新的進度模擬
-                  progressIntervalRef.current = simulateProgress(deviceCount);
+                  // 啟動新的進度模擬，傳入執行模式以調整目標進度
+                  progressIntervalRef.current = simulateProgress(deviceCount, mode);
                 }
               }, baseDelay.executing);
             }
@@ -187,21 +189,21 @@ export const useBatchExecution = () => {
           progressIntervalRef.current = null;
         }
         
-        // 創建進度處理器
-        const progress = createProgressHandler(response.summary.total);
-        
         // 先設置批次結果，確保結果立即可用
         setBatchResults(response.results);
         
-        // 顯示完成階段
+        // 設置最終進度（確保在清除模擬後設置，避免數值衝突）
+        updateBatchProgress(response.summary.total);
+        
+        // 創建進度處理器並顯示完成階段
+        const progress = createProgressHandler(response.summary.total);
         progress.updateStage(PROGRESS_STAGE.COMPLETED);
         
         const { successful, failed, total } = response.summary;
         const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
         
-        // 更新狀態和最終進度（確保在清除模擬後設置）
+        // 更新狀態訊息
         setStatus(completionMessage, failed > 0 ? 'error' : 'success');
-        updateBatchProgress(response.summary.total);
         
         // 更新完成訊息
         progress.updateMessage(completionMessage);

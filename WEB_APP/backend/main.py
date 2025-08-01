@@ -37,8 +37,7 @@ from config_manager import get_config_manager
 from ai_service import get_ai_service
 from utils import (
     LoggerConfig, create_stream_handler,
-    build_ai_system_prompt,
-    format_device_execution_result, create_ai_logger, build_few_shot_examples,
+    format_device_execution_result, create_ai_logger,
     get_frontend_log_handler, get_frontend_log_config
 )
 from core.network_tools import run_readonly_show_command, CommandValidator
@@ -237,6 +236,43 @@ class FrontendLogConfig(BaseModel):
     maxMessageLength: int
     enableStackTrace: bool
 
+# =============================================================================
+# 統一的 AI 請求處理輔助函數
+# =============================================================================
+
+async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
+    """統一處理所有 AI 相關請求的輔助函數
+    
+    這個函數封裝了與 AIService 的互動、錯誤處理和回應格式化。
+    AIService 內部會自動處理所有提示詞工程，不需要手動建構。
+    
+    Args:
+        query: 用戶的純粹查詢內容
+        device_ips: 相關的設備 IP 列表（可選）
+        
+    Returns:
+        str: AI 分析結果（Markdown 格式）
+        
+    Raises:
+        HTTPException: 當 AI 服務未初始化或查詢失敗時
+    """
+    if not ai_service.ai_initialized:
+        raise HTTPException(status_code=503, detail="AI 服務未啟用或初始化失敗")
+    
+    try:
+        # 直接傳入用戶查詢，讓 AIService 內部處理所有提示詞工程
+        ai_response = await ai_service.query_ai(
+            prompt=query, 
+            timeout=40.0
+        )
+        return ai_response
+        
+    except Exception as e:
+        # 使用 AIService 的錯誤分類機制
+        error_msg, status_code = ai_service.classify_ai_error(str(e))
+        logger.error(f"AI 請求處理失敗: {error_msg} (Query: {query[:50]}...)")
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
 @app.get("/api/devices")
 async def get_devices():
     """取得所有設備列表"""
@@ -366,14 +402,8 @@ async def execute_command(request: ExecuteRequest):
 
 @app.post("/api/ai-query", response_class=PlainTextResponse)
 async def ai_query(request: AIQueryRequest):
-    """AI 查詢端點"""
+    """AI 查詢端點（重構版）"""
     logger.info(f"收到 AI 查詢請求: {request.device_ip} -> {request.query}")
-    
-    # 檢查 AI 服務是否可用
-    if not ai_service.ai_initialized:
-        error_msg = "AI 服務未啟用或初始化失敗"
-        logger.error(error_msg)
-        raise HTTPException(status_code=503, detail=error_msg)
     
     # 驗證設備IP
     try:
@@ -390,61 +420,12 @@ async def ai_query(request: AIQueryRequest):
         logger.error(f"驗證設備配置失敗: {e}")
         raise HTTPException(status_code=500, detail="驗證設備配置失敗")
     
-    # 構建 AI 系統提示詞 (統一使用 utils 中的函數)
-    ai_service = get_ai_service()
-    search_enabled = ai_service.search_enabled and hasattr(ai_service, '_web_search_wrapper')
-    system_prompt = build_ai_system_prompt(device_config=device_config, include_examples=True, search_enabled=search_enabled)
-    
-    # 組合完整的提示詞 (移除對話歷史以提升性能)
-    full_prompt = f"{system_prompt}\n\n<user_query>\n{request.query}\n</user_query>"
-    
-    # 執行 AI 查詢
-    try:
-        logger.info(f"開始執行 AI 查詢: {request.device_ip} -> {request.query}")
-        
-        # 使用 AI 服務執行查詢 (include_examples=False 因為已經在 system_prompt 中包含)
-        ai_response = await ai_service.query_ai(full_prompt, timeout=30.0, include_examples=False)
-        
-        logger.info(f"AI 查詢執行成功: {request.device_ip} -> {request.query}")
-        return ai_response
-        
-    except Exception as e:
-        error_str = str(e)
-        logger.error(f"AI 查詢錯誤: {error_str} - {request.device_ip} -> {request.query}")
-        
-        # 使用 AI 服務的錯誤分類
-        error_msg, status_code = ai_service.classify_ai_error(error_str)
-        
-        raise HTTPException(status_code=status_code, detail=error_msg)
+    # 直接呼叫統一的 AI 處理函數
+    return await _handle_ai_request(
+        query=request.query,
+        device_ips=[request.device_ip]
+    )
 
-async def execute_ai_mode(command: str, devices: List[str] = None) -> str:
-    """AI 模式統一處理函數 - 重構版"""
-    # 使用全域 ai_service 實例
-    if not ai_service.ai_initialized:
-        raise HTTPException(status_code=503, detail="AI 服務未啟用或初始化失敗")
-
-    # 1. 獲取設備配置 (如果需要)
-    device_config = None
-    if devices and len(devices) == 1:
-        device_config = config_manager.get_device_by_ip(devices[0])
-
-    # 2. 建立系統提示詞 (所有邏輯都在 utils 中，包含思考鏈範例)
-    search_enabled = ai_service.search_enabled and hasattr(ai_service, '_web_search_wrapper')
-    system_prompt = build_ai_system_prompt(device_config=device_config, devices=devices, include_examples=True, search_enabled=search_enabled)
-    
-    # 3. 組合最終 Prompt (移除對話歷史以提升性能)
-    full_prompt = f"{system_prompt}\n\n<user_query>\n{command}\n</user_query>"
-    
-    try:
-        # 4. 執行 AI 查詢 (include_examples=False 因為已經在 system_prompt 中包含)
-        ai_response = await ai_service.query_ai(full_prompt, timeout=40.0, include_examples=False)
-        
-        return ai_response
-        
-    except Exception as e:
-        # 統一的錯誤處理
-        error_msg, status_code = ai_service.classify_ai_error(str(e))
-        raise HTTPException(status_code=status_code, detail=error_msg)
 
 # =============================================================================
 # 非同步任務背景工作函數
@@ -479,7 +460,8 @@ async def run_batch_task_worker(task_id: str, devices: List[str], command: str, 
             await task_manager.update_progress(task_id, 10.0, "AI 正在分析需求...")
             
             try:
-                result = await execute_ai_mode(command=command, devices=devices)
+                # 直接呼叫 _handle_ai_request，不再需要 execute_ai_mode
+                result = await _handle_ai_request(query=command, device_ips=devices)
                 await task_manager.update_progress(task_id, 90.0, "AI 分析完成")
                 
                 # 構建 AI 模式的結果格式
@@ -1018,9 +1000,10 @@ async def batch_execute(request: BatchExecuteRequest):
             # AI 模式批次執行 - 使用統一處理函數
             logger.info(f"AI 模式批次執行: {request.devices} -> {request.command}")
             
-            ai_response = await execute_ai_mode(
-                command=request.command,
-                devices=request.devices
+            # 直接呼叫 _handle_ai_request，不再需要 execute_ai_mode
+            ai_response = await _handle_ai_request(
+                query=request.command,
+                device_ips=request.devices
             )
             
             # 構建AI模式的回應格式 - 每個設備顯示相同的 AI 分析結果
