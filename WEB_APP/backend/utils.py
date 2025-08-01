@@ -247,6 +247,8 @@ def build_ai_system_prompt_for_pydantic(search_enabled: bool = False) -> str:
 2. **選擇工具**：使用 BatchCommandRunner 執行相關 show 指令
 3. **分析結果**：深入分析設備輸出，識別關鍵資訊和異常
 4. **結構化回應**：將分析結果組織成結構化的 JSON 格式
+   - **特別是**在處理多設備時，你**必須**從 BatchCommandRunner 回傳結果的 `summary` 物件中，提取 `successful_devices` 和 `failed_devices` 的數值，並填入到最終 JSON 回應的 `successful_device_count` 和 `failed_device_count` 欄位中
+   - 不可猜測或計算這些數值，必須從工具回傳的確切數據中提取
 </workflow>
 
 <output_format>
@@ -439,19 +441,24 @@ Observation: 指令在兩台設備上都執行成功，返回了詳細的版本�
 Thought: 我已經獲得了兩台設備的版本資訊。根據 output_format，這是多設備查詢，我需要使用多設備格式來整理對比分析報告。
 
 Final Answer:
-### 批次執行概況
-- **執行範圍**: [2 台設備]
-- **成功/失敗**: [2 成功 / 0 失敗]
-
-### 關鍵對比分析
-- **一致性**: 兩台設備均運行 Cisco IOS XE 軟體，版本一致
-- **異常設備**: 無，所有設備狀態正常
-- **硬體資訊**: 
-  - 202.3.182.202: ASR1001-X, 序號 FXS1836Q2T6
-  - 202.153.183.18: ASR1001-X, 序號 FXS1836Q2T7
-
-### 統合建議
-兩台設備版本一致且狀態良好，建議保持當前配置。如需進行軟體更新，建議制定統一的更新計劃以維持環境一致性。
+{
+  "analysis_summary": "兩台設備版本一致且狀態良好，所有設備均運行 Cisco IOS XE 軟體",
+  "key_findings": [
+    "202.3.182.202: ASR1001-X, 序號 FXS1836Q2T6",
+    "202.153.183.18: ASR1001-X, 序號 FXS1836Q2T7",
+    "兩台設備均運行相同版本的 IOS XE 軟體"
+  ],
+  "anomalies": [],
+  "recommendations": [
+    "建議保持當前配置以維持環境一致性",
+    "如需進行軟體更新，建議制定統一的更新計劃",
+    "建議定期檢查軟體版本確保安全性"
+  ],
+  "device_count": 2,
+  "successful_device_count": 2,
+  "failed_device_count": 0,
+  "analysis_type": "multi_device"
+}
 
 **範例3: 錯誤處理範例**
 
@@ -476,17 +483,26 @@ Observation: 部分設備執行成功，但有設備返回錯誤，可能是因�
 Thought: 執行過程中遇到了部分失敗，這是正常情況。我需要根據實際結果分析，並在報告中說明失敗原因。
 
 Final Answer:
-### 批次執行概況
-- **執行範圍**: [2 台設備]
-- **成功/失敗**: [1 成功 / 1 失敗]
-
-### 關鍵對比分析
-- **一致性**: 設備 BGP 配置不一致
-- **異常設備**: 202.153.183.18 未配置 BGP 功能，指令執行失敗
-- **成功設備**: 202.3.182.202 BGP 狀態正常，有 3 個鄰居連接
-
-### 統合建議
-建議檢查網路架構設計，確認是否所有設備都需要配置 BGP。對於需要 BGP 的設備，建議完善配置；對於不需要的設備，此錯誤可忽略。
+{
+  "analysis_summary": "設備 BGP 配置不一致，部分設備未配置 BGP 功能",
+  "key_findings": [
+    "202.3.182.202: BGP 狀態正常，有 3 個鄰居連接",
+    "202.153.183.18: 未配置 BGP 功能"
+  ],
+  "anomalies": [
+    "202.153.183.18 未配置 BGP 功能，指令執行失敗"
+  ],
+  "recommendations": [
+    "建議檢查網路架構設計，確認是否所有設備都需要配置 BGP",
+    "對於需要 BGP 的設備，建議完善配置",
+    "對於不需要 BGP 的設備，此錯誤可忽略",
+    "建議統一網路設備的路由協定配置策略"
+  ],
+  "device_count": 2,
+  "successful_device_count": 1,
+  "failed_device_count": 1,
+  "analysis_type": "multi_device"
+}
 
 </examples>
 """

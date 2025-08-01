@@ -36,6 +36,16 @@ class NetworkAnalysisResponse(BaseModel):
         description="此次分析涉及的設備數量，用於區分單設備分析或多設備批次分析。單設備分析時為 1，多設備分析時為實際設備數量。"
     )
     
+    successful_device_count: Optional[int] = Field(
+        None, 
+        description="成功執行指令的設備數量，僅在多設備分析時使用。**重要**：必須從 BatchCommandRunner 回傳結果的 summary.successful_devices 中提取此數值，不可猜測或計算。"
+    )
+    
+    failed_device_count: Optional[int] = Field(
+        None,
+        description="執行指令失敗的設備數量，僅在多設備分析時使用。**重要**：必須從 BatchCommandRunner 回傳結果的 summary.failed_devices 中提取此數值，不可猜測或計算。"
+    )
+    
     analysis_type: Literal["single_device", "multi_device"] = Field(
         description="分析類型，根據設備數量自動判斷：'single_device' 表示單一設備分析，'multi_device' 表示多設備批次分析"
     )
@@ -87,11 +97,12 @@ class NetworkAnalysisResponse(BaseModel):
     def _to_multi_device_markdown(self) -> str:
         """多設備分析的 Markdown 格式"""
         device_count = self.device_count or 0
-        successful_count = device_count  # 簡化處理，假設都成功
+        successful_count = self.successful_device_count or 0
+        failed_count = self.failed_device_count or 0
         
         output = "### 批次執行概況\n"
         output += f"- **執行範圍**: [{device_count} 台設備]\n"
-        output += f"- **成功/失敗**: [{successful_count} 成功 / {device_count - successful_count} 失敗]\n\n"
+        output += f"- **成功/失敗**: [{successful_count} 成功 / {failed_count} 失敗]\n\n"
         
         output += "### 關鍵對比分析\n"
         output += f"- **整體狀況**: {self.analysis_summary}\n"
@@ -136,6 +147,8 @@ class NetworkAnalysisResponse(BaseModel):
                     "建議每月檢查一次介面狀態"
                 ],
                 "device_count": 1,
+                "successful_device_count": None,
+                "failed_device_count": None,
                 "analysis_type": "single_device"
             }
         }
