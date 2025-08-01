@@ -33,6 +33,8 @@ export const useBatchExecution = () => {
   const isExecutingRef = useRef(false);
   const clearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastExecutionTimeRef = useRef<number>(0);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 創建進度回調處理器
   const createProgressHandler = useCallback((totalDevices: number) => {
@@ -77,21 +79,28 @@ export const useBatchExecution = () => {
     }, delay);
   }, [clearStatus, hideBatchProgress]);
 
-  // 模擬批次進度更新 - 使用遞增邏輯避免進度倒退
+  // 模擬批次進度更新 - 使用平滑遞增邏輯，增加狀態保護
   const simulateProgress = useCallback((deviceCount: number) => {
     let currentCompleted = 0;
     const maxProgress = Math.max(1, deviceCount - 1); // 保留最後一個設備給實際完成時更新
-    const incrementStep = Math.max(1, Math.ceil(maxProgress / 10)); // 每次增加的步長
+    const totalSteps = Math.max(8, Math.min(deviceCount * 2, 15)); // 動態步數，根據設備數量調整
+    const incrementStep = maxProgress / totalSteps;
+    const updateInterval = Math.max(400, Math.min(1000, 600 + deviceCount * 50)); // 動態間隔時間
     
     const progressInterval = setInterval(() => {
-      if (isExecutingRef.current && currentCompleted < maxProgress) {
-        // 漸進式增加完成數量，確保進度只會前進
+      // 強化狀態檢查：確保執行狀態有效且進度未達到最大值
+      if (isExecutingRef.current && currentCompleted < maxProgress && progressIntervalRef.current) {
+        // 平滑遞增，確保進度自然前進
         currentCompleted = Math.min(currentCompleted + incrementStep, maxProgress);
-        updateBatchProgress(currentCompleted);
+        updateBatchProgress(Math.floor(currentCompleted));
       } else {
+        // 自動清理無效的間隔
         clearInterval(progressInterval);
+        if (progressIntervalRef.current === progressInterval) {
+          progressIntervalRef.current = null;
+        }
       }
-    }, 800); // 稍微加快更新頻率
+    }, updateInterval);
     
     // 存儲 interval ID 以便清理
     return progressInterval;
@@ -126,12 +135,20 @@ export const useBatchExecution = () => {
       // 第一階段：提交任務
       progress.updateStage(PROGRESS_STAGE.SUBMITTING);
       
-      // 延遲顯示已提交狀態，模擬真實的任務提交過程
+      // 動態計算延遲時間，根據設備數量調整
+      const deviceCount = variables.devices.length;
+      const baseDelay = {
+        submitted: 200,      // 快速確認提交
+        connecting: 300,     // 適中的連接準備時間
+        executing: 500 + Math.min(deviceCount * 100, 500)  // 根據設備數量動態調整，最多增加500ms
+      };
+
+      // 延遲顯示已提交狀態
       setTimeout(() => {
         if (isExecutingRef.current) {
           progress.updateStage(PROGRESS_STAGE.SUBMITTED);
           
-          // 再延遲一下顯示連接狀態
+          // 顯示連接狀態
           setTimeout(() => {
             if (isExecutingRef.current) {
               progress.updateStage(PROGRESS_STAGE.CONNECTING);
@@ -139,7 +156,6 @@ export const useBatchExecution = () => {
               // 開始執行階段並啟動進度模擬
               setTimeout(() => {
                 if (isExecutingRef.current) {
-                  const deviceCount = variables.devices.length;
                   const message = deviceCount === 1 
                     ? '執行中... (1 個設備)' 
                     : `執行中... (${deviceCount} 個設備)`;
@@ -157,14 +173,20 @@ export const useBatchExecution = () => {
                   // 啟動新的進度模擬
                   progressIntervalRef.current = simulateProgress(deviceCount);
                 }
-              }, 800);
+              }, baseDelay.executing);
             }
-          }, 600);
+          }, baseDelay.connecting);
         }
-      }, 400);
+      }, baseDelay.submitted);
     },
     onSuccess: (response) => {
       if (isExecutingRef.current) {
+        // 立即清除進度模擬，防止與最終結果衝突
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        
         // 創建進度處理器
         const progress = createProgressHandler(response.summary.total);
         
@@ -177,7 +199,7 @@ export const useBatchExecution = () => {
         const { successful, failed, total } = response.summary;
         const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
         
-        // 更新狀態和最終進度
+        // 更新狀態和最終進度（確保在清除模擬後設置）
         setStatus(completionMessage, failed > 0 ? 'error' : 'success');
         updateBatchProgress(response.summary.total);
         
@@ -190,18 +212,18 @@ export const useBatchExecution = () => {
     },
     onError: (error) => {
       if (isExecutingRef.current) {
+        // 立即清除進度模擬，防止錯誤狀態下仍在更新進度
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        
         // 創建進度處理器來顯示失敗狀態
         const progress = createProgressHandler(1); // 使用 1 作為默認值
         
         // 立即重置執行狀態，確保按鈕狀態恢復
         isExecutingRef.current = false;
         setIsBatchExecution(false);
-        
-        // 清理進度追蹤
-        if (progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
-          progressIntervalRef.current = null;
-        }
         
         // 顯示失敗階段
         progress.updateStage(PROGRESS_STAGE.FAILED);
@@ -221,6 +243,11 @@ export const useBatchExecution = () => {
         
         // 更新失敗訊息
         progress.updateMessage(failureMessage);
+        
+        // 確保進度條顯示錯誤狀態一段時間後再清理
+        setTimeout(() => {
+          hideBatchProgress();
+        }, 8000);
         
         // 延長錯誤顯示時間，讓用戶有足夠時間閱讀
         clearStateWithDelay(12000);
@@ -248,11 +275,35 @@ export const useBatchExecution = () => {
 
   // 統一的執行函數 - 支援所有設備操作場景
   const executeBatch = useCallback((deviceIps: string[], command: string) => {
+    const now = Date.now();
+    const DEBOUNCE_DELAY = 1000; // 1秒防抖延遲
+
+    // 防抖機制：防止用戶快速連續點擊
+    if (now - lastExecutionTimeRef.current < DEBOUNCE_DELAY) {
+      setStatus('請勿快速重複點擊，請稍候...', 'warning');
+      
+      // 清除現有的防抖計時器
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      
+      // 延遲執行
+      debounceTimeoutRef.current = setTimeout(() => {
+        lastExecutionTimeRef.current = Date.now();
+        executeBatch(deviceIps, command);
+      }, DEBOUNCE_DELAY - (now - lastExecutionTimeRef.current));
+      
+      return;
+    }
+
     // 防止重複執行
     if (isExecutingRef.current || batchMutation.isPending) {
       setStatus('操作正在進行中，請稍候...', 'error');
       return;
     }
+
+    // 更新上次執行時間
+    lastExecutionTimeRef.current = now;
 
     // 輸入驗證
     if (deviceIps.length === 0) {
@@ -278,6 +329,11 @@ export const useBatchExecution = () => {
       progressIntervalRef.current = null;
     }
 
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+
     try {
       batchMutation.mutate({
         devices: deviceIps,
@@ -285,10 +341,17 @@ export const useBatchExecution = () => {
         mode: mode
       });
     } catch (error) {
-      // 確保捕捉到的錯誤也會重置狀態
+      // 確保捕捉到的錯誤也會重置狀態和清理進度模擬
       isExecutingRef.current = false;
       setIsBatchExecution(false);
       hideBatchProgress();
+      lastExecutionTimeRef.current = 0; // 重置執行時間，允許立即重試
+      
+      // 清理可能殘留的進度模擬
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
       
       if (error instanceof Error) {
         setStatus(`執行失敗: ${error.message}`, 'error');
@@ -297,17 +360,29 @@ export const useBatchExecution = () => {
     }
   }, [batchMutation, mode, setStatus, clearStateWithDelay, setIsBatchExecution, hideBatchProgress]);
 
-  // 清理函數
+  // 清理函數 - 強化進度模擬清理，防止殘留更新
   const cleanup = useCallback(() => {
+    // 清理狀態顯示計時器
     if (clearTimeoutRef.current) {
       clearTimeout(clearTimeoutRef.current);
       clearTimeoutRef.current = null;
     }
+    
+    // 強制清理進度模擬間隔，確保不會繼續更新進度
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
+    
+    // 清理防抖計時器
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+    
+    // 重置執行狀態
     isExecutingRef.current = false;
+    lastExecutionTimeRef.current = 0;
   }, []);
 
   return {

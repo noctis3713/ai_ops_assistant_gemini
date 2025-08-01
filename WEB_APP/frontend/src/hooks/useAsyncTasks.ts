@@ -130,6 +130,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   // 輪詢控制
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastExecutionTimeRef = useRef<number>(0);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 創建進度回調處理器
   const createProgressHandler = useCallback((totalDevices: number) => {
@@ -170,8 +172,13 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
     setIsPolling(false);
     setTaskPollingActive(false);
+    lastExecutionTimeRef.current = 0;
   }, [setTaskPollingActive]);
 
   /**
@@ -242,6 +249,28 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           stage: task.progress.current_stage,
           pollCount,
         });
+
+        // 根據任務狀態和進度映射到前端階段
+        const requestMode = task.params?.mode;
+        const mapTaskStatusToStage = () => {
+          if (task.status === 'running') {
+            if (task.progress.percentage < 20) {
+              return PROGRESS_STAGE.CONNECTING;
+            } else if (task.progress.percentage < 80) {
+              // 根據請求模式決定執行階段
+              return requestMode === 'ai' ? PROGRESS_STAGE.AI_ANALYZING : PROGRESS_STAGE.EXECUTING;
+            } else {
+              return requestMode === 'ai' ? PROGRESS_STAGE.AI_ANALYZING : PROGRESS_STAGE.EXECUTING;
+            }
+          }
+          return null;
+        };
+
+        const currentStage = mapTaskStatusToStage();
+        if (currentStage) {
+          const progressHandler = createProgressHandler(task.params?.devices?.length || 1);
+          progressHandler.updateStage(currentStage);
+        }
 
         // 更新進度
         updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
@@ -415,6 +444,14 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       // 如果啟用自動輪詢，開始輪詢
       if (autoStartPolling) {
         logger.debug('Starting auto polling', { taskId: response.task_id });
+        
+        // 在開始輪詢前，先顯示連接階段
+        setTimeout(() => {
+          if (isExecuting) {
+            progress.updateStage(PROGRESS_STAGE.CONNECTING);
+          }
+        }, 300);
+        
         await pollTask(response.task_id);
       }
 

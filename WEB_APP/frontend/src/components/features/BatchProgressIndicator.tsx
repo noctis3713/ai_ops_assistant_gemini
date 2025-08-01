@@ -19,10 +19,14 @@ const BatchProgressIndicator = ({ progress }: BatchProgressIndicatorProps) => {
     if (progress.currentStage && PROGRESS_STAGE_TEXT[progress.currentStage]) {
       return PROGRESS_STAGE_TEXT[progress.currentStage];
     }
-    return progress.isVisible ? '執行中...' : '待命中...';
+    // 統一的未定義狀態顯示
+    if (progress.isVisible) {
+      return progress.currentStage ? '處理中...' : '執行中...';
+    }
+    return '待命中...';
   };
 
-  // 根據階段決定樣式
+  // 根據階段決定文字樣式
   const getStageStyles = () => {
     if (!progress.currentStage) {
       return 'text-terminal-text-secondary';
@@ -36,17 +40,40 @@ const BatchProgressIndicator = ({ progress }: BatchProgressIndicatorProps) => {
         return 'text-terminal-error-dark';
       case 'executing':
       case 'ai-analyzing':
-        return 'text-terminal-primary';
+        return 'text-terminal-text-primary';
       default:
         return 'text-terminal-text-secondary';
+    }
+  };
+
+  // 根據階段決定進度條樣式
+  const getProgressBarClass = () => {
+    if (!progress.currentStage) {
+      return 'active';
+    }
+    
+    switch (progress.currentStage) {
+      case 'completed':
+        return 'success';
+      case 'failed':
+      case 'cancelled':  
+        return 'error';
+      case 'executing':
+      case 'ai-analyzing':
+      case 'connecting':
+      case 'submitting':
+      case 'submitted':
+        return 'active';
+      default:
+        return 'active';
     }
   };
 
   return (
     <div className={`
       mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]
-      transition-all duration-300 ease-in-out
-      ${progress.isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-70'}
+      transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)
+      ${progress.isVisible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-2'}
     `}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-terminal-text-primary">執行進度</h3>
@@ -57,7 +84,7 @@ const BatchProgressIndicator = ({ progress }: BatchProgressIndicatorProps) => {
 
       {/* 階段訊息顯示 */}
       <div className="mb-3">
-        <div className={`text-sm font-medium transition-colors duration-200 ${getStageStyles()}`}>
+        <div className={`stage-text text-sm font-medium ${getStageStyles()}`}>
           {getStageText()}
         </div>
       </div>
@@ -70,7 +97,7 @@ const BatchProgressIndicator = ({ progress }: BatchProgressIndicatorProps) => {
         </div>
         <div className="progress-bar">
           <div
-            className={`progress-fill transition-all duration-300 ease-out ${progress.isVisible ? 'active' : ''}`}
+            className={`progress-fill ${progress.isVisible ? getProgressBarClass() : ''}`}
             style={{ width: progress.isVisible ? `${progressPercentage}%` : '0%' }}
           ></div>
         </div>

@@ -23,6 +23,10 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
     if (progress.currentStage && PROGRESS_STAGE_TEXT[progress.currentStage]) {
       return PROGRESS_STAGE_TEXT[progress.currentStage];
     }
+    // 統一的未定義狀態顯示
+    if (progress.isVisible && progress.currentStage) {
+      return '處理中...';
+    }
     return null;
   };
 
@@ -42,7 +46,7 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
         case 'connecting':
         case 'executing':
         case 'ai-analyzing':
-          return 'bg-terminal-primary-light text-terminal-primary border-terminal-primary/20';
+          return 'bg-gray-50 text-gray-700 border-gray-200';
         default:
           break;
       }
@@ -51,13 +55,36 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
     // 回退到原有的狀態樣式
     switch (statusType) {
       case 'loading':
-        return 'bg-terminal-primary-light text-terminal-primary border-terminal-primary/20';
+        return 'bg-gray-50 text-gray-700 border-gray-200';
       case 'success':
         return 'bg-terminal-success-light text-terminal-success-dark border-terminal-success/30';
       case 'error':
         return 'bg-terminal-error-light text-terminal-error-dark border-terminal-error/30';
       default:
         return 'bg-gray-50 text-gray-600 border-gray-200';
+    }
+  };
+
+  // 根據階段決定進度條樣式
+  const getProgressBarClass = () => {
+    if (!progress.currentStage) {
+      return 'active';
+    }
+    
+    switch (progress.currentStage) {
+      case 'completed':
+        return 'success';
+      case 'failed':
+      case 'cancelled':  
+        return 'error';
+      case 'executing':
+      case 'ai-analyzing':
+      case 'connecting':
+      case 'submitting':
+      case 'submitted':
+        return 'active';
+      default:
+        return 'active';
     }
   };
 
@@ -97,12 +124,7 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
                 hasStatus ? 'bg-white/30' : 'bg-gray-200'
               }`}>
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    hasStatus && status.type === 'success' ? 'bg-terminal-success-dark' :
-                    hasStatus && status.type === 'error' ? 'bg-terminal-error-dark' :
-                    hasStatus && status.type === 'loading' ? 'bg-terminal-primary' :
-                    'bg-terminal-primary'
-                  }`}
+                  className={`progress-fill h-full rounded-full transition-all duration-500 ease-out ${getProgressBarClass()}`}
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
