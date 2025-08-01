@@ -1,5 +1,0 @@
-cisco_xe_devices:
-  data:
-    device_type: cisco_xe
-    scope: all
-  platform: cisco_xe

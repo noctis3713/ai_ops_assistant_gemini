@@ -14,8 +14,12 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from nornir import InitNornir
+from nornir.core import Nornir
 from nornir.core.task import Task, Result
 from nornir.core.filter import F
+from nornir.core.inventory import Inventory, Host, Group
+from nornir.core.configuration import Config
+from nornir.plugins.runners import ThreadedRunner
 from nornir_netmiko.tasks import netmiko_send_command
 from nornir_utils.plugins.functions import print_result
 
@@ -276,21 +280,18 @@ class NornirManager:
             self.groups_config = {"groups": []}
     
     def _initialize_nornir(self):
-        """初始化 Nornir 實例 - 動態生成 YAML 文件"""
+        """初始化 Nornir 實例 - 使用記憶體字典，避免檔案 I/O 操作"""
         try:
-            # 動態生成 Nornir 配置文件
-            self._create_nornir_config_files()
+            # 建構配置字典（完全在記憶體中進行）
+            hosts_data = self._build_hosts_data()
+            groups_data = self._build_groups_data()
+            defaults_data = self._build_defaults_data()
             
-            # 初始化 Nornir - 使用標準的 SimpleInventory
-            self.nr = InitNornir(
-                inventory={
-                    "plugin": "SimpleInventory",
-                    "options": {
-                        "host_file": str(self.config_dir / "nornir_hosts.yaml"),
-                        "group_file": str(self.config_dir / "nornir_groups.yaml"),
-                        "defaults_file": str(self.config_dir / "nornir_defaults.yaml")
-                    }
-                },
+            # 建構 Inventory 物件 - 直接在記憶體中建立，無需檔案系統操作
+            inventory = self._build_inventory_from_dict(hosts_data, groups_data, defaults_data)
+            
+            # 建構 Nornir 配置
+            config = Config(
                 runner={
                     "plugin": "threaded",
                     "options": {
@@ -301,20 +302,29 @@ class NornirManager:
                     "enabled": True,
                     "level": "INFO",
                     "log_file": str(Path(__file__).parent.parent / "logs" / "network.log")
-                }
+                },
+                inventory={"plugin": "simple"}  # 占位符，不會被使用
             )
-            logger.info(f"Nornir 初始化成功，載入 {len(self.nr.inventory.hosts)} 台設備")
-            network_logger.info(f"Nornir 初始化成功，載入 {len(self.nr.inventory.hosts)} 台設備")
+            
+            # 初始化 Nornir - 直接使用 Inventory 物件，績過 InitNornir 函數
+            self.nr = Nornir(
+                inventory=inventory,
+                config=config,
+                runner=ThreadedRunner(num_workers=int(os.getenv("NORNIR_WORKERS", "5")))
+            )
+            logger.info(f"Nornir 初始化成功，載入 {len(self.nr.inventory.hosts)} 台設備（使用記憶體字典，無檔案 I/O）")
+            network_logger.info(f"Nornir 初始化成功，載入 {len(self.nr.inventory.hosts)} 台設備（使用記憶體字典，無檔案 I/O）")
             
         except Exception as e:
             logger.error(f"Nornir 初始化失敗: {e}")
             raise
     
-    def _create_nornir_config_files(self):
-        """動態建立 Nornir 配置檔案 - 從 JSON 配置生成運行時 YAML"""
-        import yaml
+    def _build_hosts_data(self) -> Dict[str, Any]:
+        """建構主機配置字典 - 記憶體操作，替代檔案寫入
         
-        # 建立 hosts.yaml
+        Returns:
+            主機配置字典
+        """
         hosts_data = {}
         for device in self.devices_config.get("devices", []):
             host_config = {
@@ -336,11 +346,14 @@ class NornirManager:
             
             hosts_data[device["name"]] = host_config
         
-        hosts_file = self.config_dir / "nornir_hosts.yaml"
-        with open(hosts_file, 'w', encoding='utf-8') as f:
-            yaml.dump(hosts_data, f, default_flow_style=False, allow_unicode=True)
+        return hosts_data
+    
+    def _build_groups_data(self) -> Dict[str, Any]:
+        """建構群組配置字典 - 記憶體操作，替代檔案寫入
         
-        # 建立 groups.yaml
+        Returns:
+            群組配置字典
+        """
         groups_data = {}
         for group in self.groups_config.get("groups", []):
             groups_data[group["name"]] = {
@@ -348,11 +361,14 @@ class NornirManager:
                 "data": group.get("data", {})
             }
         
-        groups_file = self.config_dir / "nornir_groups.yaml"
-        with open(groups_file, 'w', encoding='utf-8') as f:
-            yaml.dump(groups_data, f, default_flow_style=False, allow_unicode=True)
+        return groups_data
+    
+    def _build_defaults_data(self) -> Dict[str, Any]:
+        """建構預設配置字典 - 記憶體操作，替代檔案寫入
         
-        # 建立 defaults.yaml
+        Returns:
+            預設配置字典
+        """
         # 嘗試從環境變數獲取憑證，如果沒有則使用第一個設備的憑證作為預設
         default_username = os.getenv("DEVICE_USERNAME")
         default_password = os.getenv("DEVICE_PASSWORD")
@@ -373,9 +389,60 @@ class NornirManager:
             }
         }
         
-        defaults_file = self.config_dir / "nornir_defaults.yaml"
-        with open(defaults_file, 'w', encoding='utf-8') as f:
-            yaml.dump(defaults_data, f, default_flow_style=False, allow_unicode=True)
+        return defaults_data
+    
+    def _build_inventory_from_dict(self, hosts_data: Dict[str, Any], groups_data: Dict[str, Any], defaults_data: Dict[str, Any]) -> Inventory:
+        """從字典建構 Nornir Inventory 物件 - 完全在記憶體中操作
+        
+        Args:
+            hosts_data: 主機配置字典
+            groups_data: 群組配置字典
+            defaults_data: 預設配置字典
+            
+        Returns:
+            Inventory: Nornir Inventory 物件
+        """
+        # 建立 Groups
+        groups = {}
+        for group_name, group_config in groups_data.items():
+            groups[group_name] = Group(
+                name=group_name,
+                platform=group_config.get("platform", "cisco_xe"),
+                data=group_config.get("data", {})
+            )
+        
+        # 建立 Hosts
+        hosts = {}
+        for host_name, host_config in hosts_data.items():
+            host_groups = []
+            for group_name in host_config.get("groups", []):
+                if group_name in groups:
+                    host_groups.append(groups[group_name])
+            
+            hosts[host_name] = Host(
+                name=host_name,
+                hostname=host_config["hostname"],
+                platform=host_config.get("platform", "cisco_xe"),
+                groups=host_groups,
+                data=host_config.get("data", {}),
+                username=host_config.get("username"),
+                password=host_config.get("password")
+            )
+        
+        # 建立 Inventory
+        inventory = Inventory(
+            hosts=hosts,
+            groups=groups,
+            defaults=Group(
+                name="defaults",
+                platform=defaults_data.get("platform", "cisco_xe"),
+                username=defaults_data.get("username"),
+                password=defaults_data.get("password"),
+                data=defaults_data.get("extras", {})
+            )
+        )
+        
+        return inventory
     
     def _get_device_groups(self, device: Dict) -> List[str]:
         """取得設備所屬的群組"""
