@@ -7,7 +7,8 @@ import {
   batchExecuteAsync, 
   getTaskStatus, 
   cancelTask,
-  executeAsyncBatchAndWait 
+  TaskPoller,
+  type PollMeta
 } from '@/api';
 import { useAppStore } from '@/store';
 import { 
@@ -19,7 +20,8 @@ import { useLogger } from './useLogger';
 import { 
   PROGRESS_STAGE, 
   PROGRESS_STAGE_TEXT, 
-  createProgressCallback 
+  createProgressCallback,
+  type ProgressStage 
 } from '@/constants';
 
 export interface UseAsyncTasksOptions {
@@ -129,7 +131,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
 
   // 輪詢控制
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const taskPollerRef = useRef<TaskPoller | null>(null);
   const lastExecutionTimeRef = useRef<number>(0);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -168,9 +170,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    if (taskPollerRef.current) {
+      taskPollerRef.current.cancel();
+      taskPollerRef.current = null;
     }
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -180,6 +182,74 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setTaskPollingActive(false);
     lastExecutionTimeRef.current = 0;
   }, [setTaskPollingActive]);
+
+
+  /**
+   * 處理任務最終結果（成功、失敗、取消）
+   */
+  const handleFinalTaskResult = useCallback((task: TaskResponse) => {
+    const deviceCount = task.params?.devices?.length || 1;
+    const progress = createProgressHandler(deviceCount);
+
+    if (task.status === 'completed' && task.result) {
+      // 處理成功結果
+      const results = task.result.results || [];
+      setBatchResults(results);
+      
+      // 顯示完成階段
+      progress.updateStage(PROGRESS_STAGE.COMPLETED);
+      
+      // 更新最終進度
+      updateBatchProgress(results.length);
+      
+      // 計算統計資訊以匹配同步執行格式
+      const successful = results.filter((r: { success: boolean }) => r.success).length;
+      const failed = results.length - successful;
+      const total = results.length;
+      
+      const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
+      setStatus(completionMessage, failed > 0 ? 'error' : 'success');
+      
+      // 更新完成訊息
+      progress.updateMessage(completionMessage);
+      
+      logger.info('Task completed successfully', {
+        taskId: task.task_id,
+        resultCount: results.length,
+        successful,
+        failed,
+      });
+    } else if (task.status === 'failed') {
+      // 處理失敗結果
+      progress.updateStage(PROGRESS_STAGE.FAILED);
+      
+      const failureMessage = task.error || '任務執行失敗';
+      setStatus(failureMessage, 'error');
+      progress.updateMessage(failureMessage);
+      
+      logger.error('Task failed', {
+        taskId: task.task_id,
+        error: task.error,
+      });
+    } else if (task.status === 'cancelled') {
+      // 處理取消結果
+      progress.updateStage(PROGRESS_STAGE.CANCELLED);
+      
+      const cancelMessage = '任務已被取消';
+      setStatus(cancelMessage, 'warning');
+      progress.updateMessage(cancelMessage);
+      
+      logger.warn('Task cancelled', {
+        taskId: task.task_id,
+      });
+    }
+  }, [
+    createProgressHandler,
+    setBatchResults,
+    updateBatchProgress,
+    setStatus,
+    logger,
+  ]);
 
   /**
    * 組件卸載時清理資源
@@ -210,181 +280,102 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   }, [setStatus, logger, isPolling, currentTask?.task_id]);
 
   /**
-   * 輪詢任務狀態
+   * 輪詢任務狀態（重構版，使用服務層輪詢函數）
    */
   const pollTask = useCallback(async (taskId: string) => {
     if (!taskId) return;
 
-    logger.info('Starting task polling', { taskId, options });
+    logger.info('Starting task polling using enhanced service layer', { taskId, options });
     
     setIsPolling(true);
     setTaskPollingActive(true);
     
-    let currentInterval = pollInterval;
-    let pollCount = 0;
-    const startTime = Date.now();
-
-    const poll = async () => {
-      try {
-        pollCount++;
-        
-        // 檢查超時
-        if (Date.now() - startTime > timeout) {
-          logger.warn('Task polling timeout', {
-            taskId,
-            pollDuration: Date.now() - startTime,
-            pollCount,
-          });
-          throw new Error(`任務輪詢超時: ${taskId}`);
-        }
-
-        // 查詢任務狀態
-        const task = await getTaskStatus(taskId);
-        setCurrentTask(task);
-
-        logger.debug('Task status polled', {
-          taskId,
-          status: task.status,
-          progress: task.progress.percentage,
-          stage: task.progress.current_stage,
-          pollCount,
-        });
-
-        // 根據任務狀態和進度映射到前端階段
-        const requestMode = task.params?.mode;
-        const mapTaskStatusToStage = () => {
-          if (task.status === 'running') {
-            if (task.progress.percentage < 20) {
-              return PROGRESS_STAGE.CONNECTING;
-            } else if (task.progress.percentage < 80) {
-              // 根據請求模式決定執行階段
-              return requestMode === 'ai' ? PROGRESS_STAGE.AI_ANALYZING : PROGRESS_STAGE.EXECUTING;
-            } else {
-              return requestMode === 'ai' ? PROGRESS_STAGE.AI_ANALYZING : PROGRESS_STAGE.EXECUTING;
-            }
-          }
-          return null;
-        };
-
-        const currentStage = mapTaskStatusToStage();
-        if (currentStage) {
-          const progressHandler = createProgressHandler(task.params?.devices?.length || 1);
-          progressHandler.updateStage(currentStage);
-        }
-
-        // 更新進度
-        updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
-        
-        // 更新批次進度（從任務參數中獲取設備數量）
-        if (task.params?.devices?.length) {
-          const deviceCount = task.params.devices.length;
-          const completed = Math.round((task.progress.percentage / 100) * deviceCount);
-          updateBatchProgress(completed);
-        }
-
-        // 檢查任務是否完成
-        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
-          const totalDuration = Date.now() - startTime;
+    try {
+      // 創建 TaskPoller 實例
+      const taskPoller = new TaskPoller();
+      taskPollerRef.current = taskPoller;
+      
+      // 使用增強版輪詢函數
+      await taskPoller.pollTask(taskId, {
+        // 進度更新回調
+        onProgress: (task: TaskResponse, meta: PollMeta) => {
+          setCurrentTask(task);
+          updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
           
-          logger.info('Task polling finished', {
+          logger.debug('Task progress update', {
             taskId,
             status: task.status,
-            totalDuration,
-            pollCount,
-            avgPollInterval: totalDuration / pollCount,
+            progress: task.progress.percentage,
+            stage: task.progress.current_stage,
+            pollCount: meta.pollCount,
           });
           
-          cleanup();
-          
-          // 為完成狀態創建進度處理器
-          const deviceCount = task.params?.devices?.length || 1;
-          const progress = createProgressHandler(deviceCount);
-
-          if (task.status === 'completed' && task.result) {
-            // 處理成功結果
-            const results = task.result.results || [];
-            setBatchResults(results);
-            
-            // 顯示完成階段
-            progress.updateStage(PROGRESS_STAGE.COMPLETED);
-            
-            // 更新最終進度
-            updateBatchProgress(results.length);
-            
-            // 計算統計資訊以匹配同步執行格式
-            const successful = results.filter((r: any) => r.success).length;
-            const failed = results.length - successful;
-            const total = results.length;
-            
-            const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
-            setStatus(completionMessage, failed > 0 ? 'error' : 'success');
-            
-            // 更新完成訊息
-            progress.updateMessage(completionMessage);
-            
-            logger.info('Task completed successfully', {
-              taskId,
-              resultCount: task.result.results?.length || 0,
-              totalDuration,
-            });
-          } else if (task.status === 'failed') {
-            // 處理失敗結果
-            progress.updateStage(PROGRESS_STAGE.FAILED);
-            
-            const failureMessage = task.error || '任務執行失敗';
-            setStatus(failureMessage, 'error');
-            progress.updateMessage(failureMessage);
-            
-            logger.error('Task failed', {
-              taskId,
-              error: task.error,
-              totalDuration,
-            });
-          } else if (task.status === 'cancelled') {
-            // 處理取消結果
-            progress.updateStage(PROGRESS_STAGE.CANCELLED);
-            
-            const cancelMessage = '任務已被取消';
-            setStatus(cancelMessage, 'warning');
-            progress.updateMessage(cancelMessage);
-            
-            logger.warn('Task cancelled', {
-              taskId,
-              totalDuration,
-            });
+          // 更新批次進度
+          if (task.params?.devices?.length) {
+            const deviceCount = task.params.devices.length;
+            const completed = Math.round((task.progress.percentage / 100) * deviceCount);
+            updateBatchProgress(completed);
           }
+        },
+        
+        // 階段變化回調
+        onStageChange: (stage: ProgressStage, message: string, task: TaskResponse) => {
+          const deviceCount = task.params?.devices?.length || 1;
+          const progressHandler = createProgressHandler(deviceCount);
           
-          return;
-        }
-
-        // 設定下次輪詢
-        const previousInterval = currentInterval;
-        currentInterval = Math.min(currentInterval * 1.2, maxPollInterval);
+          // 直接使用服務層階段（現在類型統一）
+          progressHandler.updateStage(stage);
+          
+          logger.debug('Task stage changed', {
+            taskId,
+            stage,
+            message,
+          });
+        },
         
-        logger.debug('Scheduling next poll', {
-          taskId,
-          nextInterval: currentInterval,
-          previousInterval,
-          pollCount,
-        });
+        // 錯誤處理回調
+        onError: (error: Error, context: string) => {
+          logger.error('Task polling error', {
+            taskId,
+            context,
+            error: error.message,
+          }, error);
+          
+          handleError(error, `輪詢失敗: ${context}`);
+        },
         
-        pollingRef.current = setTimeout(poll, currentInterval);
-
-      } catch (error) {
-        logger.error('Task polling error', {
-          taskId,
-          pollCount,
-          pollDuration: Date.now() - startTime,
-          error: error instanceof Error ? error.message : String(error),
-        }, error instanceof Error ? error : undefined);
+        // 任務完成回調
+        onComplete: (task: TaskResponse, meta: PollMeta) => {
+          logger.info('Task polling completed', {
+            taskId,
+            status: task.status,
+            totalDuration: meta.duration,
+            pollCount: meta.pollCount,
+            avgPollInterval: meta.duration / meta.pollCount,
+          });
+          
+          // 處理最終結果
+          handleFinalTaskResult(task);
+          
+          // 清理輪詢狀態
+          cleanup();
+        },
         
-        handleError(error, '輪詢任務狀態失敗');
-        cleanup();
-      }
-    };
-
-    // 開始首次輪詢
-    await poll();
+        // 輪詢配置
+        pollInterval,
+        maxPollInterval,
+        timeout,
+      });
+      
+    } catch (error) {
+      logger.error('Task polling failed', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined);
+      
+      handleError(error, '輪詢任務狀態失敗');
+      cleanup();
+    }
   }, [
     pollInterval,
     maxPollInterval,
@@ -393,10 +384,12 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setTaskPollingActive,
     updateTaskProgress,
     updateBatchProgress,
-    setBatchResults,
-    setStatus,
     handleError,
     cleanup,
+    logger,
+    createProgressHandler,
+    handleFinalTaskResult,
+    options,
   ]);
 
   /**
@@ -498,6 +491,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     autoStartPolling,
     pollTask,
     handleError,
+    isExecuting,
+    logger,
   ]);
 
   /**
@@ -524,12 +519,27 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     const startTime = performance.now();
 
     try {
-      const result = await executeAsyncBatchAndWait(request, {
-        onProgress: (task) => {
-          logger.debug('Task progress update', {
+      // 創建 TaskPoller 實例並執行任務
+      const taskPoller = new TaskPoller();
+      taskPollerRef.current = taskPoller;
+      
+      // 先建立任務
+      const taskCreation = await batchExecuteAsync(request);
+      logger.info('Async task created for executeAndWait', {
+        taskId: taskCreation.task_id,
+        devices: request.devices,
+        mode: request.mode,
+      });
+      
+      // 使用增強版輪詢器等待完成
+      const completedTask = await taskPoller.pollTask(taskCreation.task_id, {
+        // 進度更新回調
+        onProgress: (task: TaskResponse, meta: PollMeta) => {
+          logger.debug('Task progress update in executeAndWait', {
             taskId: task.task_id,
             progress: task.progress.percentage,
             stage: task.progress.current_stage,
+            pollCount: meta.pollCount,
           });
           
           setCurrentTask(task);
@@ -539,11 +549,32 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           const completed = Math.round((task.progress.percentage / 100) * request.devices.length);
           updateBatchProgress(completed);
         },
+        
+        // 錯誤處理回調
+        onError: (error: Error, context: string) => {
+          logger.error('Task polling error in executeAndWait', {
+            taskId: taskCreation.task_id,
+            context,
+            error: error.message,
+          }, error);
+        },
+        
         pollInterval,
         maxPollInterval,
         timeout,
       });
-
+      
+      // 檢查任務結果
+      if (completedTask.status === 'failed') {
+        throw new Error(completedTask.error || '任務執行失敗');
+      }
+      
+      if (completedTask.status === 'cancelled') {
+        throw new Error('任務已被取消');
+      }
+      
+      // 取得執行結果
+      const result = completedTask.result as BatchExecutionResponse;
       const duration = performance.now() - startTime;
 
       setBatchResults(result.results);
@@ -608,6 +639,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     maxPollInterval,
     timeout,
     handleError,
+    logger,
   ]);
 
   /**
