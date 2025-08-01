@@ -115,6 +115,10 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setBatchResults,
     setStatus,
     setIsExecuting: setStoreExecuting,
+    setExecutionStartTime,
+    showBatchProgress,
+    updateBatchProgress,
+    hideBatchProgress,
   } = useAppStore();
 
   // 輪詢控制
@@ -208,6 +212,13 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
 
         // 更新進度
         updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
+        
+        // 更新批次進度（從任務參數中獲取設備數量）
+        if (task.params?.devices?.length) {
+          const deviceCount = task.params.devices.length;
+          const completed = Math.round((task.progress.percentage / 100) * deviceCount);
+          updateBatchProgress(completed);
+        }
 
         // 檢查任務是否完成
         if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
@@ -225,8 +236,21 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           
           if (task.status === 'completed' && task.result) {
             // 處理成功結果
-            setBatchResults(task.result.results || []);
-            setStatus('任務執行完成', 'success');
+            const results = task.result.results || [];
+            setBatchResults(results);
+            
+            // 更新最終進度
+            updateBatchProgress(results.length);
+            
+            // 計算統計資訊以匹配同步執行格式
+            const successful = results.filter(r => r.success).length;
+            const failed = results.length - successful;
+            const total = results.length;
+            
+            setStatus(
+              `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`,
+              failed > 0 ? 'error' : 'success'
+            );
             
             logger.info('Task completed successfully', {
               taskId,
@@ -290,6 +314,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setCurrentTask,
     setTaskPollingActive,
     updateTaskProgress,
+    updateBatchProgress,
     setBatchResults,
     setStatus,
     handleError,
@@ -310,6 +335,12 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setIsExecuting(true);
     setStoreExecuting(true);
     setIsAsyncMode(true);
+    
+    // 記錄執行開始時間
+    setExecutionStartTime(Date.now());
+    
+    // 初始化批次進度
+    showBatchProgress(request.devices.length);
 
     const startTime = performance.now();
 
@@ -319,7 +350,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       logger.info('Async task created', {
         taskId: response.task_id,
-        createdAt: response.created_at,
         devices: request.devices,
         mode: request.mode,
       });
@@ -351,16 +381,21 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       setIsExecuting(false);
       setStoreExecuting(false);
       setIsAsyncMode(false);
+      hideBatchProgress();
       throw error;
     } finally {
       if (!autoStartPolling) {
         setIsExecuting(false);
         setStoreExecuting(false);
+        hideBatchProgress();
       }
     }
   }, [
     setStoreExecuting,
     setIsAsyncMode,
+    setExecutionStartTime,
+    showBatchProgress,
+    hideBatchProgress,
     autoStartPolling,
     pollTask,
     handleError,
@@ -380,6 +415,12 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setIsExecuting(true);
     setStoreExecuting(true);
     setIsAsyncMode(true);
+    
+    // 記錄執行開始時間
+    setExecutionStartTime(Date.now());
+    
+    // 初始化批次進度
+    showBatchProgress(request.devices.length);
 
     const startTime = performance.now();
 
@@ -394,6 +435,10 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           
           setCurrentTask(task);
           updateTaskProgress(task.task_id, task.progress.percentage, task.progress.current_stage);
+          
+          // 更新批次進度
+          const completed = Math.round((task.progress.percentage / 100) * request.devices.length);
+          updateBatchProgress(completed);
         },
         pollInterval,
         maxPollInterval,
@@ -403,7 +448,19 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       const duration = performance.now() - startTime;
 
       setBatchResults(result.results);
-      setStatus('任務執行完成', 'success');
+      
+      // 更新最終進度
+      updateBatchProgress(result.results.length);
+      
+      // 計算統計資訊以匹配同步執行格式
+      const successful = result.results.filter(r => r.success).length;
+      const failed = result.results.length - successful;
+      const total = result.results.length;
+      
+      setStatus(
+        `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`,
+        failed > 0 ? 'error' : 'success'
+      );
       
       logger.info('Async task completed successfully', {
         deviceCount: request.devices.length,
@@ -435,10 +492,15 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       setIsExecuting(false);
       setStoreExecuting(false);
       setIsAsyncMode(false);
+      hideBatchProgress();
     }
   }, [
     setStoreExecuting,
     setIsAsyncMode,
+    setExecutionStartTime,
+    showBatchProgress,
+    updateBatchProgress,
+    hideBatchProgress,
     setCurrentTask,
     updateTaskProgress,
     setBatchResults,

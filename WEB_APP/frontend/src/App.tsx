@@ -33,6 +33,9 @@ function App() {
     setInputValue,
     clearBatchResults,
     clearExecutionStartTime,
+    hideProgress,
+    hideBatchProgress,
+    clearStatus,
     setIsAsyncMode,
   } = useAppStore();
 
@@ -67,10 +70,13 @@ function App() {
     }
   };
 
-  // 手動清空結果 - 同時清除執行時間戳
+  // 手動清空結果 - 同時清除執行時間戳和進度條狀態
   const handleClearResults = () => {
     clearBatchResults();
     clearExecutionStartTime();
+    hideProgress();
+    hideBatchProgress();
+    clearStatus();
   };
 
   // 鍵盤快捷鍵

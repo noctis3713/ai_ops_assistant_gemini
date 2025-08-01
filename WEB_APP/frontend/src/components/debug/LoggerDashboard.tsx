@@ -105,7 +105,7 @@ const LoggerDashboard: React.FC = () => {
     <>
       {/* 觸發按鈕 */}
       <div 
-        className="fixed bottom-4 right-4 z-50"
+        className="fixed top-4 right-4 z-50"
         style={{ zIndex: 9999 }}
       >
         <button
