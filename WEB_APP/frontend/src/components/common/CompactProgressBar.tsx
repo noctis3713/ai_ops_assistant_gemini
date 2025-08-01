@@ -4,6 +4,7 @@
  * 包含進度條和狀態顯示
  */
 import { type BatchProgressIndicatorProps, type StatusMessage } from '@/types';
+import { PROGRESS_STAGE_TEXT } from '@/constants';
 
 interface CompactProgressBarProps extends BatchProgressIndicatorProps {
   status?: StatusMessage;
@@ -14,8 +15,40 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
     ? Math.round((progress.completedDevices / progress.totalDevices) * 100)
     : 0;
 
-  // 獲取狀態樣式
+  // 獲取階段顯示文字（優先顯示自訂訊息）
+  const getStageText = () => {
+    if (progress.stageMessage) {
+      return progress.stageMessage;
+    }
+    if (progress.currentStage && PROGRESS_STAGE_TEXT[progress.currentStage]) {
+      return PROGRESS_STAGE_TEXT[progress.currentStage];
+    }
+    return null;
+  };
+
+  // 獲取狀態樣式，考慮階段狀態
   const getStatusStyles = (statusType?: string) => {
+    // 優先使用階段狀態來決定樣式
+    if (progress.currentStage) {
+      switch (progress.currentStage) {
+        case 'completed':
+          return 'bg-terminal-success-light text-terminal-success-dark border-terminal-success/30';
+        case 'failed':
+          return 'bg-terminal-error-light text-terminal-error-dark border-terminal-error/30';
+        case 'cancelled':
+          return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+        case 'submitting':
+        case 'submitted':
+        case 'connecting':
+        case 'executing':
+        case 'ai-analyzing':
+          return 'bg-terminal-primary-light text-terminal-primary border-terminal-primary/20';
+        default:
+          break;
+      }
+    }
+    
+    // 回退到原有的狀態樣式
     switch (statusType) {
       case 'loading':
         return 'bg-terminal-primary-light text-terminal-primary border-terminal-primary/20';
@@ -31,9 +64,10 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
   // 判斷是否有內容需要顯示
   const hasProgress = progress.isVisible;
   const hasStatus = status?.message && status?.type;
+  const hasStageText = getStageText();
   
   // 如果沒有任何內容，不渲染
-  if (!hasProgress && !hasStatus) {
+  if (!hasProgress && !hasStatus && !hasStageText) {
     return null;
   }
 
@@ -86,11 +120,11 @@ const CompactProgressBar = ({ progress, status }: CompactProgressBarProps) => {
           </div>
         )}
 
-        {/* 狀態訊息 */}
-        {hasStatus && (
+        {/* 狀態訊息或階段訊息 */}
+        {(hasStatus || hasStageText) && (
           <div className={`px-3 flex items-center min-w-0 flex-1 ${hasProgress ? 'border-l border-current/20' : ''}`}>
-            <span className="text-sm font-medium whitespace-nowrap overflow-visible">
-              {status.message}
+            <span className="text-sm font-medium whitespace-nowrap overflow-visible transition-all duration-200">
+              {hasStageText || status?.message}
             </span>
           </div>
         )}

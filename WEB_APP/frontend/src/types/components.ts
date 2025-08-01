@@ -1,5 +1,6 @@
 // 組件相關類型定義
 import { type Device, type DeviceGroup, type BatchExecutionResult, type TaskResponse } from './api';
+import { type ProgressStage } from '../constants';
 
 // 執行模式
 export type ExecutionMode = 'command' | 'ai';
@@ -15,10 +16,25 @@ export interface StatusMessage {
   type: StatusType;
 }
 
+// 進度階段枚舉 - 從常數檔案導入
+// export type ProgressStage - 已從 '../constants' 導入
+
+// 進度回調函數接口
+export interface ProgressCallback {
+  (progress: {
+    percentage?: number;
+    stage?: ProgressStage;
+    message?: string;
+    details?: Record<string, any>;
+  }): void;
+}
+
 // 簡化的進度狀態
 export interface ProgressState {
   isVisible: boolean;
   percentage: number;
+  currentStage?: ProgressStage;
+  stageMessage?: string;
 }
 
 // 簡化的批次進度狀態
@@ -26,6 +42,8 @@ export interface BatchProgressState {
   isVisible: boolean;
   totalDevices: number;
   completedDevices: number;
+  currentStage?: ProgressStage;
+  stageMessage?: string;
 }
 
 // 組件 Props 類型

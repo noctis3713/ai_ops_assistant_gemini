@@ -20,34 +20,68 @@ export const STATUS_TYPE = {
 
 export type StatusType = typeof STATUS_TYPE[keyof typeof STATUS_TYPE];
 
-// 進度階段枚舉
+// 進度階段枚舉 - 覆蓋完整生命週期
 export const PROGRESS_STAGE = {
-  INIT: 'init',
-  CONNECTING: 'connecting',
-  EXECUTING: 'executing',
-  AI_ANALYZING: 'ai-analyzing',
-  COMPLETED: 'completed',
+  SUBMITTING: 'submitting',     // 正在提交任務
+  SUBMITTED: 'submitted',       // 任務已提交
+  CONNECTING: 'connecting',     // 連接設備中
+  EXECUTING: 'executing',       // 執行指令中
+  AI_ANALYZING: 'ai-analyzing', // AI 分析中
+  COMPLETED: 'completed',       // 任務完成
+  FAILED: 'failed',             // 執行失敗
+  CANCELLED: 'cancelled',       // 任務取消
 } as const;
 
 export type ProgressStage = typeof PROGRESS_STAGE[keyof typeof PROGRESS_STAGE];
 
 // 進度階段文字對應
 export const PROGRESS_STAGE_TEXT = {
-  [PROGRESS_STAGE.INIT]: '初始化中...',
+  [PROGRESS_STAGE.SUBMITTING]: '正在提交任務...',
+  [PROGRESS_STAGE.SUBMITTED]: '任務已提交，準備執行...',
   [PROGRESS_STAGE.CONNECTING]: '連接設備中...',
   [PROGRESS_STAGE.EXECUTING]: '執行指令中...',
   [PROGRESS_STAGE.AI_ANALYZING]: 'AI 分析中...',
-  [PROGRESS_STAGE.COMPLETED]: '處理完成',
+  [PROGRESS_STAGE.COMPLETED]: '任務執行完成',
+  [PROGRESS_STAGE.FAILED]: '任務執行失敗',
+  [PROGRESS_STAGE.CANCELLED]: '任務已取消',
 } as const;
 
 // 進度百分比配置
 export const PROGRESS_PERCENTAGES = {
-  [PROGRESS_STAGE.INIT]: 10,
+  [PROGRESS_STAGE.SUBMITTING]: 5,
+  [PROGRESS_STAGE.SUBMITTED]: 10,
   [PROGRESS_STAGE.CONNECTING]: 30,
   [PROGRESS_STAGE.EXECUTING]: 70,
-  [PROGRESS_STAGE.AI_ANALYZING]: 75,
+  [PROGRESS_STAGE.AI_ANALYZING]: 85,
   [PROGRESS_STAGE.COMPLETED]: 100,
+  [PROGRESS_STAGE.FAILED]: 0,
+  [PROGRESS_STAGE.CANCELLED]: 0,
 } as const;
+
+// 進度回調工具函數
+export const createProgressCallback = (onProgress: (update: {
+  percentage?: number;
+  stage?: ProgressStage;
+  message?: string;
+  details?: Record<string, any>;
+}) => void) => ({
+  updateStage: (stage: ProgressStage, message?: string, details?: Record<string, any>) => {
+    const percentage = PROGRESS_PERCENTAGES[stage];
+    const defaultMessage = message || PROGRESS_STAGE_TEXT[stage];
+    onProgress({ 
+      percentage, 
+      stage, 
+      message: defaultMessage,
+      details 
+    });
+  },
+  updateProgress: (percentage: number, message?: string, details?: Record<string, any>) => {
+    onProgress({ percentage, message, details });
+  },
+  updateMessage: (message: string, details?: Record<string, any>) => {
+    onProgress({ message, details });
+  }
+});
 
 // AI 查詢進度時間配置（毫秒）
 export const AI_PROGRESS_TIMING = {

@@ -8,6 +8,11 @@ import {
   type APIError 
 } from '@/types';
 import { useAppStore } from '@/store';
+import { 
+  PROGRESS_STAGE, 
+  PROGRESS_STAGE_TEXT, 
+  createProgressCallback 
+} from '@/constants';
 
 export const useBatchExecution = () => {
   const { 
@@ -19,6 +24,7 @@ export const useBatchExecution = () => {
     showBatchProgress,
     updateBatchProgress,
     hideBatchProgress,
+    setBatchProgress,
     setExecutionStartTime,
     mode 
   } = useAppStore();
@@ -27,6 +33,33 @@ export const useBatchExecution = () => {
   const isExecutingRef = useRef(false);
   const clearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 創建進度回調處理器
+  const createProgressHandler = useCallback((totalDevices: number) => {
+    return createProgressCallback((update) => {
+      // 更新進度條狀態
+      if (update.percentage !== undefined) {
+        setBatchProgress({ 
+          completedDevices: Math.round((update.percentage / 100) * totalDevices)
+        });
+      }
+      
+      // 更新階段訊息
+      if (update.stage) {
+        setBatchProgress({ 
+          currentStage: update.stage, 
+          stageMessage: update.message || PROGRESS_STAGE_TEXT[update.stage]
+        });
+      } else if (update.message) {
+        setBatchProgress({ stageMessage: update.message });
+      }
+      
+      // 更新狀態訊息
+      if (update.message) {
+        setStatus(update.message, 'loading');
+      }
+    });
+  }, [setBatchProgress, setStatus]);
 
   // 清除狀態的統一函數 - 只清除狀態訊息和進度，保留批次結果
   const clearStateWithDelay = useCallback((delay = 5000) => {
@@ -74,7 +107,6 @@ export const useBatchExecution = () => {
       
       isExecutingRef.current = true;
       setIsBatchExecution(true);
-      setStatus('準備執行...', 'loading');
       clearBatchResults();
       
       // 記錄執行開始時間
@@ -88,38 +120,69 @@ export const useBatchExecution = () => {
       // 顯示批次進度
       showBatchProgress(variables.devices.length);
       
-      // 開始模擬進度
+      // 創建進度處理器
+      const progress = createProgressHandler(variables.devices.length);
+      
+      // 第一階段：提交任務
+      progress.updateStage(PROGRESS_STAGE.SUBMITTING);
+      
+      // 延遲顯示已提交狀態，模擬真實的任務提交過程
       setTimeout(() => {
         if (isExecutingRef.current) {
-          const deviceCount = variables.devices.length;
-          const statusText = deviceCount === 1 
-            ? '執行中... (1 個設備)' 
-            : `執行中... (${deviceCount} 個設備)`;
-          setStatus(statusText, 'loading');
+          progress.updateStage(PROGRESS_STAGE.SUBMITTED);
           
-          // 清除之前的進度 interval（如果存在）
-          if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current);
-          }
-          
-          // 啟動新的進度模擬
-          progressIntervalRef.current = simulateProgress(deviceCount);
+          // 再延遲一下顯示連接狀態
+          setTimeout(() => {
+            if (isExecutingRef.current) {
+              progress.updateStage(PROGRESS_STAGE.CONNECTING);
+              
+              // 開始執行階段並啟動進度模擬
+              setTimeout(() => {
+                if (isExecutingRef.current) {
+                  const deviceCount = variables.devices.length;
+                  const message = deviceCount === 1 
+                    ? '執行中... (1 個設備)' 
+                    : `執行中... (${deviceCount} 個設備)`;
+                  
+                  progress.updateStage(
+                    mode === 'ai' ? PROGRESS_STAGE.AI_ANALYZING : PROGRESS_STAGE.EXECUTING,
+                    message
+                  );
+                  
+                  // 清除之前的進度 interval（如果存在）
+                  if (progressIntervalRef.current) {
+                    clearInterval(progressIntervalRef.current);
+                  }
+                  
+                  // 啟動新的進度模擬
+                  progressIntervalRef.current = simulateProgress(deviceCount);
+                }
+              }, 800);
+            }
+          }, 600);
         }
-      }, 1000);
+      }, 400);
     },
     onSuccess: (response) => {
       if (isExecutingRef.current) {
+        // 創建進度處理器
+        const progress = createProgressHandler(response.summary.total);
+        
         // 先設置批次結果，確保結果立即可用
         setBatchResults(response.results);
         
-        const { successful, failed, total } = response.summary;
-        setStatus(
-          `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`, 
-          failed > 0 ? 'error' : 'success'
-        );
+        // 顯示完成階段
+        progress.updateStage(PROGRESS_STAGE.COMPLETED);
         
-        // 更新最終進度
+        const { successful, failed, total } = response.summary;
+        const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
+        
+        // 更新狀態和最終進度
+        setStatus(completionMessage, failed > 0 ? 'error' : 'success');
         updateBatchProgress(response.summary.total);
+        
+        // 更新完成訊息
+        progress.updateMessage(completionMessage);
         
         // 延長狀態顯示時間，確保用戶能看到結果
         clearStateWithDelay(8000);
@@ -127,6 +190,9 @@ export const useBatchExecution = () => {
     },
     onError: (error) => {
       if (isExecutingRef.current) {
+        // 創建進度處理器來顯示失敗狀態
+        const progress = createProgressHandler(1); // 使用 1 作為默認值
+        
         // 立即重置執行狀態，確保按鈕狀態恢復
         isExecutingRef.current = false;
         setIsBatchExecution(false);
@@ -137,8 +203,8 @@ export const useBatchExecution = () => {
           progressIntervalRef.current = null;
         }
         
-        // 隱藏進度條並顯示錯誤訊息
-        hideBatchProgress();
+        // 顯示失敗階段
+        progress.updateStage(PROGRESS_STAGE.FAILED);
         
         // 提供用戶友善的錯誤訊息
         let errorMessage = error.message;
@@ -150,7 +216,11 @@ export const useBatchExecution = () => {
           errorMessage = '網路連接異常，請檢查網路連接後重試';
         }
         
-        setStatus(`執行失敗：${errorMessage}`, 'error');
+        const failureMessage = `執行失敗：${errorMessage}`;
+        setStatus(failureMessage, 'error');
+        
+        // 更新失敗訊息
+        progress.updateMessage(failureMessage);
         
         // 延長錯誤顯示時間，讓用戶有足夠時間閱讀
         clearStateWithDelay(12000);

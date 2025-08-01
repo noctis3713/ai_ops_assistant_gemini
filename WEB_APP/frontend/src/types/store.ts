@@ -111,11 +111,15 @@ export const initialAppState: AppState = {
   progress: {
     isVisible: false,
     percentage: 0,
+    currentStage: undefined,
+    stageMessage: undefined,
   },
   batchProgress: {
     isVisible: false,
     totalDevices: 0,
     completedDevices: 0,
+    currentStage: undefined,
+    stageMessage: undefined,
   },
   status: {
     message: '',

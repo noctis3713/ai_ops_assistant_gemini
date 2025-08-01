@@ -16,6 +16,11 @@ import {
   type BatchExecutionResponse 
 } from '@/types';
 import { useLogger } from './useLogger';
+import { 
+  PROGRESS_STAGE, 
+  PROGRESS_STAGE_TEXT, 
+  createProgressCallback 
+} from '@/constants';
 
 export interface UseAsyncTasksOptions {
   /**
@@ -119,11 +124,39 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     showBatchProgress,
     updateBatchProgress,
     hideBatchProgress,
+    setBatchProgress,
   } = useAppStore();
 
   // 輪詢控制
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 創建進度回調處理器
+  const createProgressHandler = useCallback((totalDevices: number) => {
+    return createProgressCallback((update) => {
+      // 更新進度條狀態
+      if (update.percentage !== undefined) {
+        setBatchProgress({ 
+          completedDevices: Math.round((update.percentage / 100) * totalDevices)
+        });
+      }
+      
+      // 更新階段訊息
+      if (update.stage) {
+        setBatchProgress({ 
+          currentStage: update.stage, 
+          stageMessage: update.message || PROGRESS_STAGE_TEXT[update.stage]
+        });
+      } else if (update.message) {
+        setBatchProgress({ stageMessage: update.message });
+      }
+      
+      // 更新狀態訊息
+      if (update.message) {
+        setStatus(update.message, 'loading');
+      }
+    });
+  }, [setBatchProgress, setStatus]);
 
   /**
    * 清理函數
@@ -234,23 +267,31 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           
           cleanup();
           
+          // 為完成狀態創建進度處理器
+          const deviceCount = task.params?.devices?.length || 1;
+          const progress = createProgressHandler(deviceCount);
+
           if (task.status === 'completed' && task.result) {
             // 處理成功結果
             const results = task.result.results || [];
             setBatchResults(results);
             
+            // 顯示完成階段
+            progress.updateStage(PROGRESS_STAGE.COMPLETED);
+            
             // 更新最終進度
             updateBatchProgress(results.length);
             
             // 計算統計資訊以匹配同步執行格式
-            const successful = results.filter(r => r.success).length;
+            const successful = results.filter((r: any) => r.success).length;
             const failed = results.length - successful;
             const total = results.length;
             
-            setStatus(
-              `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`,
-              failed > 0 ? 'error' : 'success'
-            );
+            const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
+            setStatus(completionMessage, failed > 0 ? 'error' : 'success');
+            
+            // 更新完成訊息
+            progress.updateMessage(completionMessage);
             
             logger.info('Task completed successfully', {
               taskId,
@@ -259,7 +300,11 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
             });
           } else if (task.status === 'failed') {
             // 處理失敗結果
-            setStatus(task.error || '任務執行失敗', 'error');
+            progress.updateStage(PROGRESS_STAGE.FAILED);
+            
+            const failureMessage = task.error || '任務執行失敗';
+            setStatus(failureMessage, 'error');
+            progress.updateMessage(failureMessage);
             
             logger.error('Task failed', {
               taskId,
@@ -268,7 +313,11 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
             });
           } else if (task.status === 'cancelled') {
             // 處理取消結果
-            setStatus('任務已被取消', 'warning');
+            progress.updateStage(PROGRESS_STAGE.CANCELLED);
+            
+            const cancelMessage = '任務已被取消';
+            setStatus(cancelMessage, 'warning');
+            progress.updateMessage(cancelMessage);
             
             logger.warn('Task cancelled', {
               taskId,
@@ -341,12 +390,21 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     
     // 初始化批次進度
     showBatchProgress(request.devices.length);
+    
+    // 創建進度處理器
+    const progress = createProgressHandler(request.devices.length);
 
     const startTime = performance.now();
 
     try {
+      // 第一階段：提交任務
+      progress.updateStage(PROGRESS_STAGE.SUBMITTING);
+
       // 建立非同步任務
       const response = await batchExecuteAsync(request);
+      
+      // 第二階段：任務已提交
+      progress.updateStage(PROGRESS_STAGE.SUBMITTED);
       
       logger.info('Async task created', {
         taskId: response.task_id,
@@ -377,6 +435,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         error: error instanceof Error ? error.message : String(error),
       }, error instanceof Error ? error : undefined);
 
+      // 顯示失敗階段
+      progress.updateStage(PROGRESS_STAGE.FAILED);
+
       handleError(error, '建立非同步任務失敗');
       setIsExecuting(false);
       setStoreExecuting(false);
@@ -396,6 +457,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setExecutionStartTime,
     showBatchProgress,
     hideBatchProgress,
+    createProgressHandler,
     autoStartPolling,
     pollTask,
     handleError,
