@@ -439,24 +439,46 @@ class CommandCache:
 # 全域指令快取實例
 command_cache = CommandCache()
 
-def _process_long_output(command: str, output: str) -> str:
-    """處理超長輸出 - AI 摘要或截斷"""
-    AI_THRESHOLD = 10000
-    MAX_CHARS = 50000
+def _process_long_output(command: str, output: str, enable_ai_summary: bool = False, execution_mode: str = "device") -> str:
+    """
+    處理超長輸出 - 根據執行模式決定是否使用 AI 摘要或截斷
     
-    if len(output) <= AI_THRESHOLD:
+    Args:
+        command: 執行的指令
+        output: 指令輸出結果
+        enable_ai_summary: 是否啟用 AI 摘要功能
+        execution_mode: 執行模式 ("device" 或 "ai")
+    
+    Returns:
+        處理後的輸出內容
+    """
+    # 從環境變數讀取配置，提供預設值
+    ai_threshold = int(os.getenv("AI_SUMMARY_THRESHOLD", "10000"))
+    max_chars = int(os.getenv("DEVICE_OUTPUT_MAX_LENGTH", "50000"))
+    global_ai_summary_enabled = os.getenv("ENABLE_AI_SUMMARIZATION", "false").lower() == "true"
+    
+    # 如果輸出長度小於等於門檻值，直接返回完整輸出
+    if len(output) <= ai_threshold:
         return output
     
-    if len(output) > MAX_CHARS:
-        logger.warning(f"輸出超過上限: {command}")
-        return output[:MAX_CHARS] + f"\n\n--- [警告] 指令 '{command}' 輸出已強制截斷 ---"
+    # 如果輸出超過最大長度限制，強制截斷
+    if len(output) > max_chars:
+        logger.warning(f"輸出超過上限 ({max_chars} 字元): {command} (模式: {execution_mode})")
+        return output[:max_chars] + f"\n\n--- [警告] 指令 '{command}' 輸出已強制截斷 (超過 {max_chars} 字元) ---"
     
-    if output_summarizer.llm:
-        logger.info(f"使用 AI 摘要: {command}")
+    # 處理中等長度輸出 (門檻值 < 長度 <= 最大長度)
+    # 只有在同時滿足以下條件時才使用 AI 摘要：
+    # 1. 全域 AI 摘要功能已啟用
+    # 2. 當前呼叫允許 AI 摘要
+    # 3. AI 摘要器可用
+    if global_ai_summary_enabled and enable_ai_summary and output_summarizer.llm:
+        logger.info(f"使用 AI 摘要處理超長輸出: {command} (模式: {execution_mode}, 長度: {len(output)})")
         return output_summarizer.summarize_output(command, output)
     else:
-        logger.info(f"AI 不可用，截斷輸出: {command}")
-        return output[:AI_THRESHOLD] + f"\n\n--- [警告] 指令 '{command}' 輸出已截斷 ---"
+        # 使用截斷處理
+        reason = "設備指令模式" if execution_mode == "device" else "AI 摘要不可用或未啟用"
+        logger.info(f"截斷超長輸出: {command} (模式: {execution_mode}, 原因: {reason}, 長度: {len(output)})")
+        return output[:ai_threshold] + f"\n\n--- [訊息] 指令 '{command}' 輸出已截斷，如需完整內容請重新查詢 ---"
 
 def run_readonly_show_command(device_ip: str, command: str, device_config=None) -> str:
     """執行唯讀網路指令 - 支援連線池、快取和安全驗證"""
@@ -483,8 +505,8 @@ def run_readonly_show_command(device_ip: str, command: str, device_config=None) 
             output = connection.send_command(command, read_timeout=read_timeout)
             logger.info(f"指令執行成功: {command}")
             
-            # 使用智能輸出處理
-            processed_output = _process_long_output(command, output)
+            # 使用智能輸出處理 - 設備指令模式不啟用 AI 摘要
+            processed_output = _process_long_output(command, output, enable_ai_summary=False, execution_mode="device")
             
             # 將處理後的結果加入快取（針對特定指令類型）
             if any(keyword in command.lower() for keyword in cacheable_commands):
@@ -516,8 +538,8 @@ def _direct_connection_fallback(device_ip: str, command: str, device_config=None
             read_timeout = int(os.getenv("COMMAND_TIMEOUT", "20"))
             output = net_connect.send_command(command, read_timeout=read_timeout)
             logger.info(f"直接連線執行成功: {command}")
-            # 使用智能輸出處理
-            processed_output = _process_long_output(command, output)
+            # 使用智能輸出處理 - 設備指令模式不啟用 AI 摘要
+            processed_output = _process_long_output(command, output, enable_ai_summary=False, execution_mode="device")
             return processed_output
             
     except NetmikoTimeoutException:

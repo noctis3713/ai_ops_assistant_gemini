@@ -10,6 +10,7 @@ Author: Claude Code Assistant
 """
 
 import asyncio
+import os
 import uuid
 import time
 import threading
@@ -114,19 +115,22 @@ class AsyncTaskManager:
     - 錯誤處理和恢復
     """
 
-    def __init__(self, cleanup_interval: int = 3600, task_ttl: int = 86400):
+    def __init__(self, cleanup_interval: int = None, task_ttl: int = None):
         """
         初始化任務管理器
         
         Args:
-            cleanup_interval: 清理檢查的間隔時間（秒），預設 1 小時
-            task_ttl: 任務過期時間（秒），預設 24 小時
+            cleanup_interval: 清理檢查的間隔時間（秒），None 時從環境變數載入
+            task_ttl: 任務過期時間（秒），None 時從環境變數載入
         """
+        # 從環境變數載入配置，提供預設值作為備用
+        self.cleanup_interval = cleanup_interval or int(os.getenv("ASYNC_TASK_CLEANUP_INTERVAL", "3600"))
+        task_ttl_seconds = task_ttl or int(os.getenv("ASYNC_TASK_TTL", "86400"))
+        
         self.tasks: Dict[str, AsyncTask] = {}
         self._lock = asyncio.Lock()
         self._cleanup_task: Optional[asyncio.Task] = None
-        self.cleanup_interval = cleanup_interval
-        self.task_ttl = timedelta(seconds=task_ttl)
+        self.task_ttl = timedelta(seconds=task_ttl_seconds)
         self.start_time = datetime.now()  # 記錄任務管理器啟動時間
         
         # 統計資訊
@@ -140,8 +144,12 @@ class AsyncTaskManager:
         }
         
         task_logger.info("AsyncTaskManager 已初始化", extra={
-            "cleanup_interval": cleanup_interval,
-            "task_ttl": task_ttl
+            "cleanup_interval": self.cleanup_interval,
+            "task_ttl": task_ttl_seconds,
+            "env_loaded": {
+                "ASYNC_TASK_CLEANUP_INTERVAL": os.getenv("ASYNC_TASK_CLEANUP_INTERVAL", "未設定（使用預設值 3600）"),
+                "ASYNC_TASK_TTL": os.getenv("ASYNC_TASK_TTL", "未設定（使用預設值 86400）")
+            }
         })
 
     async def start_cleanup_loop(self):
