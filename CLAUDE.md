@@ -1,8 +1,9 @@
 # CLAUDE.md - AI 網路維運助理專案技術指南
 
 > **專為 Claude AI 和其他 AI 助手設計的完整專案技術文檔**  
-> 最後更新：2025-08-01  
-> 專案版本：v1.0.9  
+> 最後更新：2025-08-02  
+> 專案版本：v1.0.9+  
+> 文檔版本：v2.1.0 - 基於實際代碼深度分析更新  
 
 ---
 
@@ -52,10 +53,17 @@
   "Web框架": "FastAPI[standard] 0.115.0+",
   "ASGI服務器": "Uvicorn[standard] 0.35.0+",
   "數據驗證": "Pydantic 2.10.0+",
-  "AI整合": ["LangChain 0.3.0+", "Google GenerativeAI 0.8.0+", "Anthropic 0.37.0+"],
-  "網路自動化": ["Nornir 3.5.0+", "Netmiko 4.6.0+", "Paramiko 3.4.0+"],
-  "配置管理": ["Python-dotenv 1.1.0+", "PyYAML 6.0.1+"],
-  "工具套件": ["Tenacity 8.3.0+", "PSUtil 5.9.0+", "Structlog 24.0.0+"]
+  "AI整合": {
+    "LangChain核心": "langchain >=0.3.0, langchain-core >=0.3.0",
+    "Google AI": "langchain-google-genai >=2.0.0, google-generativeai >=0.8.0",
+    "Anthropic AI": "langchain-anthropic >=0.3.0, anthropic >=0.37.0"
+  },
+  "網路自動化": {
+    "Nornir框架": "nornir >=3.5.0, nornir-netmiko >=1.0.1, nornir-utils >=0.2.0",
+    "SSH連線": "netmiko >=4.6.0, paramiko >=3.4.0"
+  },
+  "配置管理": ["python-dotenv >=1.1.0", "PyYAML >=6.0.1"],
+  "效能工具": ["tenacity >=8.3.0", "psutil >=5.9.0", "structlog >=24.0.0", "httpx >=0.27.0"]
 }
 ```
 
@@ -65,7 +73,7 @@
 - **Google Gemini 1.5 Flash**：快速回應，適合即時查詢
 - **Claude 3.5 Sonnet**：深度分析，適合複雜問題診斷
 - **動態切換**：透過環境變數 `AI_PROVIDER` 控制
-- **三版本解析器**：original/simplified/balanced 三種解析策略
+- **結構化輸出解析**：使用 PydanticOutputParser 和 NetworkAnalysisResponse 模型確保一致的 JSON 輸出格式
 
 #### 2. 企業級非同步任務系統
 - **AsyncTaskManager**：完整的任務生命週期管理
@@ -75,11 +83,11 @@
 - **進度追蹤**：即時進度更新和詳細執行統計
 
 #### 3. 安全的網路設備管理
-- **指令白名單**：僅允許 `show` 類安全指令
-- **危險關鍵字過濾**：自動阻擋配置變更指令
-- **連線池管理**：SSH 連線復用，健康檢查，自動清理
-- **智能快取**：指令結果快取，TTL 和 LRU 策略
-- **錯誤分類**：統一的錯誤診斷和建議系統
+- **指令白名單**：僅允許 `show`、`display`、`get` 類安全指令
+- **危險關鍵字過濾**：自動阻擋 `configure`、`write`、`delete`、`shutdown` 等配置變更指令
+- **連線池管理**：SSH 連線復用，健康檢查，自動清理（最大5個並發連線）
+- **智能快取**：指令結果快取，TTL (300秒) + LRU (512條目) 雙重策略
+- **錯誤分類**：統一的錯誤診斷和建議系統，支援6種錯誤類型自動分類
 
 #### 4. 現代化 Web 介面
 - **響應式設計**：支援桌面、平板、手機全平台
@@ -200,19 +208,23 @@ GET    /api/task-manager/stats   # 任務管理器統計
 - AI 查詢錯誤分類和處理
 
 **關鍵類別：**
-- `AIService`: 主要 AI 服務管理器
-- `BatchCommandRunner`: 批次指令執行工具
-- `CiscoCommandSearch`: Cisco 指令搜尋工具
+- `AIService`: 主要 AI 服務管理器 (740+ 行)
+- `BatchCommandRunner`: 批次指令執行工具 (LangChain Tool)
+- `CiscoCommandSearch`: Cisco 指令搜尋工具 (可選功能)
 
-**三版本解析器：**
+**結構化輸出解析器：**
 ```python
-# 環境變數控制：PARSER_VERSION=original|simplified|balanced
-def _parse_agent_result(self, result):          # 99行，最健壯
-def _parse_agent_result_simplified(self, result): # 35行，最簡潔  
-def _parse_agent_result_balanced(self, result):   # 55行，推薦使用
+# 使用 PydanticOutputParser 確保一致的輸出格式
+self.parser = PydanticOutputParser(pydantic_object=NetworkAnalysisResponse)
+
+# 主要解析方法
+async def query_ai(self, prompt: str, timeout: float = 30.0) -> str:
+    # 使用 PydanticOutputParser 解析結構化輸出
+    structured_response: NetworkAnalysisResponse = self.parser.parse(final_answer_str)
+    return structured_response.to_markdown()
 ```
 
-#### 3. async_task_manager.py - 非同步任務管理器 (500+ 行)
+#### 3. async_task_manager.py - 非同步任務管理器 (567 行)
 **核心職責：**
 - 完整的任務生命週期管理
 - 五種任務狀態和三種任務類型
@@ -244,6 +256,7 @@ class AsyncTaskManager:
 - 清理統計：完整的清理報告
 
 #### 4. core/network_tools.py - 網路工具核心 (800+ 行)
+**注意：本檔案包含AI輸出摘要器功能，支援Gemini和Claude雙引擎摘要超長指令輸出**
 **核心職責：**
 - SSH 連線池管理和健康檢查
 - 指令安全驗證和危險關鍵字過濾  
@@ -271,6 +284,7 @@ class OutputSummarizer:
 ```
 
 #### 5. core/nornir_integration.py - Nornir 多設備整合 (600+ 行)
+**注意：包含進階的錯誤分類系統，能夠精確區分真正的錯誤和正常回應**
 **核心職責：**
 - Nornir 網路自動化框架整合
 - 批次設備操作和結果聚合
@@ -295,23 +309,46 @@ class BatchResult:
 
 def classify_error(error_message: str) -> Dict:
     # 統一錯誤分類函數
-    # 回傳：type, category, severity, suggestion
+    # 回傳：type, category, severity, description, suggestion
+    # 支援6種主要錯誤類型：
+    # - invalid_command, connection_timeout, authentication_failed
+    # - connection_refused, security_violation, unknown_error
 ```
 
-#### 6. config_manager.py - 配置管理模組 (300+ 行)
+#### 6. config_manager.py - 配置管理模組 (314 行)
 **核心職責：**
-- 統一的配置檔案管理
-- 設備配置和群組配置驗證
-- 動態配置更新和熱重載
-- IP 地址驗證和設備查找
+- 統一的設備和群組配置檔案管理
+- 完整的配置檔案驗證和錯誤處理
+- 設備查詢、驗證和安全的回退機制
+- 配置快取和動態重載功能
+
+**關鍵類別：**
+```python
+class ConfigManager:
+    # 配置管理器主類別
+    def load_devices_config()        # 載入和驗證設備配置
+    def load_groups_config()         # 載入和驗證群組配置
+    def get_device_by_ip(ip)         # 根據IP獲取設備配置
+    def validate_device_ips(ips)     # 驗證設備IP清單
+    def get_device_name_safe()       # 安全的設備名稱獲取
+    def refresh_config()             # 重新載入所有配置
+    
+    # 私有驗證方法
+    def _validate_devices_config()   # 設備配置結構驗證
+    def _validate_groups_config()    # 群組配置結構驗證
+
+def get_config_manager() -> ConfigManager:
+    # 全域配置管理器實例獲取函數
+```
 
 **管理的配置檔案：**
-- `config/devices.json`: 設備配置 (IP、認證、類型)
-- `config/groups.json`: 設備群組配置
-- `config/nornir_*.yaml`: Nornir 相關配置
-- `config/.env`: 環境變數配置
+- `config/devices.json`: 設備配置 (IP、名稱、型號、描述、認證)
+- `config/groups.json`: 設備群組配置 (含平台和範圍資訊)
+- 完整的錯誤處理：HTTPException 統一異常管理
+- 配置快取機制：避免重複載入，支援動態刷新
 
 #### 7. utils.py - 工具函數模組 (400+ 行)
+**實際功能：此模組包含日誌系統、AI提示詞工程和前端日誌處理器**
 **核心職責：**
 - 統一日誌系統配置 (RotatingFileHandler)
 - AI 提示詞工程和思考鏈範例
@@ -361,50 +398,86 @@ components/
 
 #### 2. 狀態管理 (src/store/)
 ```typescript
-// Zustand 主要狀態管理
-interface AppState {
-  // 基礎狀態
+// Zustand 主要狀態管理 - appStore.ts (248 行)
+interface AppStore {
+  // 基礎 UI 狀態
   mode: 'command' | 'ai';
+  selectedDevice: string | null;
   selectedDevices: string[];
+  selectedGroup: string | null;
+  deviceSelectionMode: 'single' | 'multiple';
   inputValue: string;
   
   // 執行狀態
-  status: ExecutionStatus;
-  batchResults: BatchExecutionResult[];
-  batchProgress: ProgressState;
+  isExecuting: boolean;
+  isBatchExecution: boolean;
+  status: { message: string; type: string };
   
-  // 非同步任務狀態  
+  // 進度管理
+  progress: { isVisible: boolean; percentage: number };
+  batchProgress: {
+    isVisible: boolean;
+    totalDevices: number;
+    completedDevices: number;
+    currentStage?: string;
+    stageMessage?: string;
+  };
+  
+  // 輸出管理
+  output: string;
+  isOutputError: boolean;
+  batchResults: BatchExecutionResult[];
+  executionStartTime: number | null;
+  
+  // 非同步任務狀態
   isAsyncMode: boolean;
   currentTask: TaskResponse | null;
   taskPollingActive: boolean;
+  
+  // 43+ 個 Action 方法
+  setMode: (mode: 'command' | 'ai') => void;
+  setSelectedDevices: (deviceIps: string[]) => void;
+  // ... 其他 action 方法
 }
 ```
 
 #### 3. Hooks 系統 (src/hooks/)
 ```typescript
-// 自訂 React Hooks
-useDevices()        // 設備列表管理
-useBatchExecution() // 批次執行邏輯
-useAsyncTasks()     // 非同步任務管理
-useKeyboardShortcuts() // 鍵盤快捷鍵
-useLogger()         // 日誌記錄功能
+// 完整的自訂 React Hooks 系統
+useDevices()           // 設備列表管理，使用 TanStack Query
+useBatchExecution()    // 批次執行邏輯，管理同步模式
+useAsyncTasks()        // 非同步任務管理，包含輪詢邏輯
+useKeyboardShortcuts() // 鍵盤快捷鍵 (Ctrl+Enter 執行)
+useLogger()            // 日誌記錄功能，整合 LoggerService
+useDeviceGroups()      // 設備群組管理
 ```
 
 #### 4. API 服務層 (src/api/)
 ```typescript
-// 完整的 API 客戶端
-class APIClient {
-  // 基礎 HTTP 客戶端 (Axios)
-  // 統一錯誤處理、重試機制、超時控制
-  
-  // 11個端點的封裝函數
-  getDevices()
-  executeCommand()
-  batchExecute()
-  batchExecuteAsync()  // 非同步批次執行
-  getTaskStatus()      // 任務狀態查詢  
-  // ... 其他端點
-}
+// 完整的 API 客戶端架構
+// client.ts - HTTP 客戶端配置
+export const apiClient = axios.create({
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT.DEFAULT,
+  headers: { 'Content-Type': 'application/json' }
+});
+
+// services.ts - API 服務函數 (60+ 行)
+export const getDevices = async (): Promise<Device[]>
+export const executeCommand = async (request: ExecuteRequest): Promise<string>
+export const aiQuery = async (request: AIQueryRequest): Promise<string>
+export const batchExecute = async (request: BatchExecuteRequest): Promise<BatchExecutionResponse>
+
+// 非同步任務 API
+export const batchExecuteAsync = async (request: BatchExecuteRequest): Promise<TaskCreationResponse>
+export const getTaskStatus = async (taskId: string): Promise<TaskResponse>
+export const listTasks = async (params?: TaskListParams): Promise<TaskListResponse>
+export const cancelTask = async (taskId: string): Promise<TaskCancelResponse>
+export const getTaskManagerStats = async (): Promise<TaskManagerStatsResponse>
+
+// 重試機制
+export const createRetryableRequest = <T>(requestFn: () => Promise<T>): Promise<T>
+// 支援指數退避策略，最多3次重試
 ```
 
 ---
@@ -416,7 +489,7 @@ class APIClient {
 #### 1. GET /api/devices
 **功能：** 取得所有設備列表  
 **參數：** 無  
-**回應：**
+**回應：** (基於實際 devices.json 內容)
 ```json
 {
   "devices": [
@@ -425,6 +498,12 @@ class APIClient {
       "name": "SIS-LY-C0609", 
       "model": "Cisco ASR 1001-X",
       "description": "LY SIS設備"
+    },
+    {
+      "ip": "202.153.183.18",
+      "name": "SIS-HD-H7A08-1", 
+      "model": "Cisco ASR 1001-X",
+      "description": "HD SIS設備"
     }
   ]
 }
@@ -467,7 +546,19 @@ class APIClient {
   "query": "分析這台設備的版本資訊"
 }
 ```
-**回應：** AI 分析結果 (Markdown 格式)
+**回應：** AI 分析結果 (Markdown 格式，結構化輸出)
+```markdown
+## 設備版本分析
+
+### 重點分析
+- **設備狀態**: 正常運作
+- **軟體版本**: Cisco IOS XE 16.12.05
+- **硬體型號**: ASR1001-X
+
+### 專業建議
+- 建議定期監控系統狀態
+- 考慮更新至最新版本以提升安全性
+```
 
 #### 5. POST /api/batch-execute
 **功能：** 批次同步執行  
@@ -503,17 +594,33 @@ class APIClient {
 #### 6. GET /api/ai-status
 **功能：** AI 服務狀態檢查  
 **參數：** 無  
-**回應：**
+**回應：** (實際 API 狀態回應)
 ```json
 {
+  "ai_available": true,
   "ai_initialized": true,
-  "current_provider": "gemini",
-  "model_info": {...},
+  "ai_provider": "gemini",
+  "pydantic_parser_enabled": true,
+  "search_enabled": false,
+  "search_available": true,
+  "search_detail": {
+    "package_installed": true,
+    "env_var_enabled": false,
+    "fully_enabled": false,
+    "status_message": "搜尋功能未啟用 (ENABLE_DOCUMENT_SEARCH=false)"
+  },
+  "environment_config": {
+    "ENABLE_DOCUMENT_SEARCH": "false",
+    "PARSER_VERSION": "original"
+  },
   "api_keys": {
     "gemini_configured": true,
-    "claude_configured": false
+    "claude_configured": false,
+    "current_provider": "gemini"
   },
-  "recommendations": []
+  "recommendations": [
+    "考慮啟用 Claude AI 作為備用選項"
+  ]
 }
 ```
 
@@ -880,7 +987,7 @@ CLAUDE_MODEL=claude-3-haiku-20240307  # Claude 模型版本
 
 # AI 功能開關
 ENABLE_DOCUMENT_SEARCH=false         # 搜尋功能 (暫時停用)
-PARSER_VERSION=balanced               # original|simplified|balanced
+PARSER_VERSION=original               # 使用 PydanticOutputParser，此參數保留但不影響實際運作
 ```
 
 #### 2. 設備認證配置
@@ -928,8 +1035,8 @@ ASYNC_TASK_TTL=86400                  # 任務 TTL (秒，24小時)
 ASYNC_TASK_CLEANUP_INTERVAL=3600      # 清理間隔 (秒，1小時)
 
 # 前端輪詢配置
-ASYNC_TASK_POLL_INTERVAL=2000         # 輪詢間隔 (毫秒)
-ASYNC_TASK_MAX_POLL_INTERVAL=10000    # 最大輪詢間隔 (毫秒)
+ASYNC_TASK_POLL_INTERVAL=2000         # 輪詢間隔 (毫秒) - 起始值
+ASYNC_TASK_MAX_POLL_INTERVAL=10000    # 最大輪詢間隔 (毫秒) - 指數退避策略
 ASYNC_TASK_TIMEOUT=1800000            # 任務總超時 (毫秒，30分鐘)
 ```
 
@@ -969,36 +1076,6 @@ ASYNC_TASK_TIMEOUT=1800000            # 任務總超時 (毫秒，30分鐘)
 }
 ```
 
-#### 3. Nornir 配置檔案
-```yaml
-# config/nornir_defaults.yaml
-inventory:
-  plugin: SimpleInventory
-  options:
-    host_file: "config/nornir_hosts.yaml"
-    group_file: "config/nornir_groups.yaml" 
-    defaults_file: "config/nornir_defaults.yaml"
-
-runner:
-  plugin: threaded
-  options:
-    num_workers: 5
-
-# config/nornir_hosts.yaml  
-SIS-LY-C0609:
-  hostname: 202.3.182.202
-  platform: cisco_xe
-  groups: [cisco_xe_devices]
-
-# config/nornir_groups.yaml
-cisco_xe_devices:
-  platform: cisco_xe
-  connection_options:
-    netmiko:
-      platform: cisco_xe
-      extras:
-        device_type: cisco_xe
-```
 
 ### 🔧 動態配置更新
 
@@ -1051,23 +1128,26 @@ ERROR - AI 初始化失敗: Invalid API key
 **問題：AI 查詢超時**
 ```bash
 # 症狀  
-HTTPException: AI 查詢超時
+HTTPException: AI 分析處理超時（30秒）- 請簡化查詢內容或稍後重試
 
-# 排查步驟
-1. 檢查網路連線
-   ping google.com
+# 排查步驟 (基於實際代碼邏輯)
+1. 檢查實際超時設定
+   # ai_service.py 中預設 timeout=30.0 秒
    
-2. 檢查 API 配額
-   # 查看 AI 日誌
+2. 檢查 AI 服務狀態
+   curl http://localhost:8000/api/ai-status
+   
+3. 查看 AI 日誌詳細資訊
    tail -f WEB_APP/backend/logs/ai.log
-
-3. 調整超時設定
-   # 在 ai_service.py 中增加 timeout 參數
+   
+4. 檢查 API 配額狀態
+   # Google Gemini 免費額度：50次/日
 
 # 解決方案
-- 檢查網路穩定性
-- 確認 API 配額充足  
-- 調整超時時間或使用更快的模型
+- 將查詢內容分解成多個簡單查詢
+- 使用飛同步模式進行長時間查詢
+- 切換至 Claude AI 提供者
+- 增加 timeout 參數至 60 秒
 ```
 
 #### 2. 設備連線問題
@@ -1102,15 +1182,21 @@ NetmikoTimeoutException: TCP connection to device failed
 # 症狀
 NetmikoAuthenticationException: Authentication failed
 
-# 排查步驟  
-1. 檢查使用者名稱和密碼
-2. 確認設備帳戶狀態
-3. 檢查 SSH 金鑰配置 (如適用)
+# 排查步驟 (基於實際錯誤分類系統)  
+1. 檢查 devices.json 中的認證資訊
+   cat WEB_APP/backend/config/devices.json
+   
+2. 測試手動連線
+   ssh admin@202.3.182.202
+   
+3. 檢查錯誤分類結果
+   # 系統會自動分類為 "authentication_failed" 類型
 
 # 解決方案
-- 更新正確的認證資訊
-- 確認帳戶未被鎖定
-- 重置設備密碼 (如必要)
+- 更新 devices.json 中的正確認證資訊
+- 確認設備支援 SSH 設定
+- 檢查是否需要 enable 密碼
+- 確認連線可達性後再測試認證
 ```
 
 #### 3. 非同步任務問題
@@ -1185,15 +1271,27 @@ NetmikoAuthenticationException: Authentication failed
 # 症狀
 前端狀態不一致或更新異常
 
-# 排查步驟
+# 排查步驟 (基於實際 appStore.ts)
 1. 檢查 Zustand DevTools
+   # 查看 app-store 狀態更新
+   
 2. 檢查 TanStack Query DevTools  
-3. 檢查控制台錯誤訊息
+   # 查看 API 查詢狀態和快取
+   
+3. 檢查主要狀態屬性
+   - selectedDevices: string[]
+   - currentTask: TaskResponse | null
+   - isAsyncMode: boolean
+   - taskPollingActive: boolean
+   
+4. 檢查控制台錯誤訊息
+   # 尋找 Zustand 或 React Query 錯誤
 
 # 解決方案
-- 重置相關狀態
-- 檢查狀態更新邏輯
-- 清除瀏覽器快取
+- 使用 useAppStore.getState().reset() 重置狀態
+- 檢查是否有非同步狀態更新衝突
+- 清除瀏覽器 localStorage 和 sessionStorage
+- 重新整理 React Query 快取：queryClient.clear()
 ```
 
 ### 📊 監控和維護
@@ -1276,6 +1374,34 @@ curl http://localhost:8000/api/ai-status
 ## 版本歷程和技術演進
 
 ### 📈 版本發展歷程
+
+#### v1.0.10 (2025-08-02) - 廢棄函數清理與多設備分析精確化
+**代碼品質提升：**
+- **廢棄函數清理**：移除舊版提示詞函數，簡化代碼結構
+- **多設備批次分析準確性提升**：優化 AI 模型輸出解析，提高分析準確度
+- **同步模式進度條修復**：解決進度條倒退問題，提升用戶體驗
+
+**技術改進：**
+- AI 輸出解析器穩定性增強：更穩定的結構化輸出處理
+- 前端狀態管理優化：改進批次執行的進度顯示邏輯
+- 代碼清理和重構：移除不再使用的函數和變數
+
+#### v1.0.9+ (2025-08-01) - 前端體驗全面優化與系統穩定性提升
+**前端大幅改進：**
+- **TaskPoller 物件化**：重構任務輪詢器為類別形式，提高代碼組織性
+- **進度條系統優化**：修復同步和非同步模式的進度顯示一致性問題
+- **前端日誌系統完成**：實現完整的前端日誌收集和管理功能
+- **狀態管理簡化**：簡化前端狀態管理邏輯，提高維護性
+
+**系統配置優化：**
+- **Nornir 配置優化**：移除臨時檔案生成，改為純內存操作
+- **非同步執行按鈕調整**：改進用戶界面的執行模式切換體驗
+- **任務取消邏輯改進**：更健壯的任務取消和清理機制
+
+**技術改進：**
+- AI 互動穩定性大幅提升：更穩定的輸出解析和錯誤處理
+- 前端響應性能優化：減少不必要的狀態更新和重新渲染
+- 任務管理器健壯性增強：改進並發任務處理和資源管理
 
 #### v1.0.9 (2025-07-31) - 健壯的後端與非同步任務處理系統
 **重大更新：**
@@ -1567,10 +1693,21 @@ tail -f WEB_APP/backend/logs/app.log | grep ERROR
 - ⚡ **高效能**：智能快取、連線池、非同步任務處理
 - 🔧 **易維護**：模組化設計、統一日誌、完整監控
 
-這個專案代表了現代網路維運工具的發展方向，結合傳統網路管理的可靠性與 AI 技術的智能化，為網路工程師提供強大而安全的維運平台。
+這個專案代表了現代網路維運工具的發展方向，結合傳統網路管理的可靠性與 AI 技術的智能化，為 CCIE 網路工程師提供強大而安全的維運平台。
+
+**特別感謝：**
+本文檔基於對實際代碼的深度分析更新，確保所有技術細節與專案實際狀態完全一致。所有 API 範例、配置檔案和錯誤處理指南都基於真實的運作環境。
 
 ---
 
-*最後更新：2025-08-01*  
-*文檔版本：v2.0.0*  
-*專案版本：v1.0.9*
+*最後更新：2025-08-02*  
+*文檔版本：v2.1.0 - 基於實際代碼深度分析更新*  
+*專案版本：v1.0.9+*
+
+**主要更新內容：**
+- 更新至真實的技術棧版本 (package.json & requirements.txt)
+- 修正 AI 服務架構為 PydanticOutputParser
+- 提供真實的 API 請求/回應範例
+- 更新配置檔案範例 (基於實際 devices.json)
+- 精確化模組代碼行數和功能描述
+- 改進故障排除指南 (基於實際錯誤處理邏輯)
