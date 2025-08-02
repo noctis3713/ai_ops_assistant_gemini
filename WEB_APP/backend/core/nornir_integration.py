@@ -236,6 +236,19 @@ class BatchResult:
     error_details: Dict[str, Dict[str, Any]]  # 詳細錯誤分類
     cache_hits: int = 0  # 快取命中次數
     cache_misses: int = 0  # 快取未命中次數
+    
+    def to_api_response(self) -> Dict[str, Any]:
+        """
+        將 BatchResult 轉換為標準 API 回應格式
+        
+        使用外部 formatters.py 模組來處理格式化邏輯，保持代碼組織的清晰性
+        
+        Returns:
+            標準化的 API 回應字典
+        """
+        # 動態導入避免循環依賴
+        from formatters import format_command_results
+        return format_command_results(self)
 
 class NornirManager:
     """Nornir 網路自動化管理器

@@ -236,6 +236,19 @@ class FrontendLogConfig(BaseModel):
     maxMessageLength: int
     enableStackTrace: bool
 
+class ReloadConfigRequest(BaseModel):
+    """配置重載請求模型"""
+    api_key: str
+    reload_configs: Optional[List[str]] = ["devices", "groups", "security"]  # 預設重載所有配置
+
+class ReloadConfigResponse(BaseModel):
+    """配置重載回應模型"""
+    success: bool
+    message: str
+    reloaded_configs: List[str]
+    timestamp: str
+    errors: Optional[List[str]] = None
+
 # =============================================================================
 # 統一的 AI 請求處理輔助函數
 # =============================================================================
@@ -464,30 +477,9 @@ async def run_batch_task_worker(task_id: str, devices: List[str], command: str, 
                 result = await _handle_ai_request(query=command, device_ips=devices)
                 await task_manager.update_progress(task_id, 90.0, "AI 分析完成")
                 
-                # 構建 AI 模式的結果格式
-                ai_results = []
-                for device_ip in devices:
-                    device_config = config_manager.get_device_by_ip(device_ip)
-                    device_name = config_manager.get_device_name_safe(device_config, device_ip) if device_config else device_ip
-                    
-                    ai_results.append({
-                        "deviceName": device_name,
-                        "deviceIp": device_ip,
-                        "success": True,
-                        "output": result,
-                        "error": None,
-                        "executionTime": 2.0
-                    })
-                
-                final_result = {
-                    "results": ai_results,
-                    "summary": {
-                        "total": len(devices),
-                        "successful": len(devices),
-                        "failed": 0,
-                        "totalTime": 2.0 * len(devices)
-                    }
-                }
+                # 使用統一的格式化函數處理 AI 結果
+                from formatters import format_ai_results
+                final_result = format_ai_results(devices, result, execution_time=2.0)
                 
             except Exception as ai_error:
                 logger.error(f"AI 模式執行失敗: {ai_error}")
@@ -507,66 +499,8 @@ async def run_batch_task_worker(task_id: str, devices: List[str], command: str, 
                 
                 await task_manager.update_progress(task_id, 80.0, "處理執行結果...")
                 
-                # 轉換 BatchResult 為 API 回應格式
-                results = []
-                
-                # 處理成功的設備
-                for device_ip, device_output in batch_result.results.items():
-                    device_config = config_manager.get_device_by_ip(device_ip)
-                    device_name = config_manager.get_device_name_safe(device_config, device_ip) if device_config else device_ip
-                    
-                    results.append({
-                        "deviceName": device_name,
-                        "deviceIp": device_ip,
-                        "success": True,
-                        "output": device_output,
-                        "error": None,
-                        "executionTime": batch_result.execution_time / max(batch_result.total_devices, 1)
-                    })
-                
-                # 處理失敗的設備
-                for device_ip, error_msg in batch_result.errors.items():
-                    device_config = config_manager.get_device_by_ip(device_ip)
-                    device_name = config_manager.get_device_name_safe(device_config, device_ip) if device_config else device_ip
-                    
-                    # 取得詳細錯誤分類
-                    error_detail = batch_result.error_details.get(device_ip, {})
-                    formatted_error = f"{error_msg}"
-                    if error_detail:
-                        formatted_error += f"\n分類: {error_detail.get('category', '未知')} ({error_detail.get('type', 'unknown')})"
-                        formatted_error += f"\n嚴重性: {error_detail.get('severity', 'unknown')}"
-                        formatted_error += f"\n建議: {error_detail.get('suggestion', '請檢查設備狀態')}"
-                    
-                    results.append({
-                        "deviceName": device_name,
-                        "deviceIp": device_ip,
-                        "success": False,
-                        "output": None,
-                        "error": formatted_error,
-                        "executionTime": 0.0
-                    })
-                
-                # 構建最終結果
-                successful = sum(1 for r in results if r["success"])
-                failed = len(results) - successful
-                total_time = sum(r["executionTime"] for r in results)
-                
-                final_result = {
-                    "results": results,
-                    "summary": {
-                        "total": len(results),
-                        "successful": successful,
-                        "failed": failed,
-                        "totalTime": total_time,
-                        # 包含快取統計（如果有）
-                        "cacheStats": {
-                            "hits": getattr(batch_result, 'cache_hits', 0),
-                            "misses": getattr(batch_result, 'cache_misses', 0),
-                            "hitRate": round((getattr(batch_result, 'cache_hits', 0) / 
-                                           max(getattr(batch_result, 'cache_hits', 0) + getattr(batch_result, 'cache_misses', 0), 1)) * 100, 1)
-                        } if hasattr(batch_result, 'cache_hits') else None
-                    }
-                }
+                # 使用 BatchResult 的新方法轉換為 API 回應格式
+                final_result = batch_result.to_api_response()
                 
             except Exception as cmd_error:
                 logger.error(f"指令模式執行失敗: {cmd_error}")
@@ -921,7 +855,8 @@ async def root():
             "task-status": "/api/task/{task_id}",
             "tasks": "/api/tasks",
             "cancel-task": "/api/task/{task_id}",
-            "task-manager-stats": "/api/task-manager/stats"
+            "task-manager-stats": "/api/task-manager/stats",
+            "admin-reload-config": "/api/admin/reload-config"
         },
         "ai_available": ai_service.ai_initialized,
         "ai_provider": ai_provider,
@@ -1218,6 +1153,95 @@ async def get_device_status(device_ip: str):
     except Exception as e:
         logger.error(f"設備 {device_ip} 狀態檢查失敗: {e}")
         raise HTTPException(status_code=500, detail=f"設備狀態檢查失敗: {str(e)}")
+
+# =============================================================================
+# 管理 API 端點
+# =============================================================================
+
+@app.post("/api/admin/reload-config", response_model=ReloadConfigResponse)
+async def reload_config_endpoint(request: ReloadConfigRequest):
+    """
+    重載配置檔案（管理員功能）
+    
+    這個端點允許在不重啟服務的情況下重新載入配置檔案，
+    適用於生產環境中需要更新設備清單或安全規則的場景。
+    
+    Args:
+        request: 包含 API Key 和要重載的配置類型
+        
+    Returns:
+        ReloadConfigResponse: 重載結果和詳細資訊
+    """
+    logger.info(f"收到配置重載請求: {request.reload_configs}")
+    
+    # 簡單的 API Key 驗證
+    expected_api_key = os.getenv('ADMIN_API_KEY', 'admin123')  # 生產環境應使用強密碼
+    if request.api_key != expected_api_key:
+        logger.warning("配置重載請求 - API Key 驗證失敗")
+        raise HTTPException(status_code=401, detail="無效的 API Key")
+    
+    reloaded_configs = []
+    errors = []
+    
+    try:
+        # 重載設備配置
+        if "devices" in request.reload_configs:
+            try:
+                config_manager.load_devices_config()
+                reloaded_configs.append("devices")
+                logger.info("設備配置已重新載入")
+            except Exception as e:
+                error_msg = f"設備配置重載失敗: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
+        # 重載群組配置
+        if "groups" in request.reload_configs:
+            try:
+                config_manager.load_groups_config()
+                reloaded_configs.append("groups")
+                logger.info("群組配置已重新載入")
+            except Exception as e:
+                error_msg = f"群組配置重載失敗: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
+        # 重載安全配置
+        if "security" in request.reload_configs:
+            try:
+                config_manager.load_security_config()
+                # 清除 CommandValidator 的快取配置
+                from core.network_tools import CommandValidator
+                CommandValidator.reload_security_config()
+                reloaded_configs.append("security")
+                logger.info("安全配置已重新載入")
+            except Exception as e:
+                error_msg = f"安全配置重載失敗: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
+        # 判斷整體成功狀態
+        success = len(reloaded_configs) > 0 and len(errors) == 0
+        
+        response = ReloadConfigResponse(
+            success=success,
+            message="配置重載完成" if success else "配置重載部分失敗",
+            reloaded_configs=reloaded_configs,
+            timestamp=datetime.now().isoformat(),
+            errors=errors if errors else None
+        )
+        
+        if success:
+            logger.info(f"配置重載成功: {reloaded_configs}")
+        else:
+            logger.warning(f"配置重載部分失敗: 成功={reloaded_configs}, 錯誤={errors}")
+        
+        return response
+        
+    except Exception as e:
+        error_msg = f"配置重載過程發生未預期錯誤: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 # 對話歷史 API 已移除以提升性能
 

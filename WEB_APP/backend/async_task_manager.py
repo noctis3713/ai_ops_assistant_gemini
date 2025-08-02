@@ -127,6 +127,7 @@ class AsyncTaskManager:
         self._cleanup_task: Optional[asyncio.Task] = None
         self.cleanup_interval = cleanup_interval
         self.task_ttl = timedelta(seconds=task_ttl)
+        self.start_time = datetime.now()  # 記錄任務管理器啟動時間
         
         # 統計資訊
         self._stats = {
@@ -466,7 +467,7 @@ class AsyncTaskManager:
                 "finished_tasks": finished_tasks,
                 "cleanup_interval": self.cleanup_interval,
                 "task_ttl_hours": self.task_ttl.total_seconds() / 3600,
-                "uptime_seconds": (datetime.now() - datetime.now()).total_seconds()  # 這裡可以改為實際啟動時間
+                "uptime_seconds": (datetime.now() - self.start_time).total_seconds()
             }
         
         return stats

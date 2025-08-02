@@ -28,6 +28,7 @@ class ConfigManager:
         self.config_dir = Path(config_dir)
         self._devices_config = None
         self._groups_config = None
+        self._security_config = None
         
         # 確保配置目錄存在
         self.config_dir.mkdir(exist_ok=True)
@@ -291,13 +292,111 @@ class ConfigManager:
         logger.warning(f"使用回退設備名稱: {device_ip} -> {fallback_name}")
         return fallback_name
     
+    def load_security_config(self) -> Dict[str, Any]:
+        """載入安全配置檔案
+        
+        Returns:
+            安全配置字典
+            
+        Raises:
+            HTTPException: 當配置檔案格式錯誤時
+        """
+        config_path = self.config_dir / "security.json"
+        
+        try:
+            if not config_path.exists():
+                logger.warning(f"安全配置檔案不存在: {config_path}，使用預設安全配置")
+                return self._get_default_security_config()
+            
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            # 驗證配置檔案結構
+            self._validate_security_config(config_data)
+            
+            # 快取配置資料
+            self._security_config = config_data
+            
+            logger.info("成功載入安全配置檔案")
+            return config_data
+            
+        except HTTPException:
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"安全配置檔案JSON格式錯誤: {e}")
+            raise HTTPException(status_code=500, detail=f"安全配置檔案JSON格式錯誤: {str(e)}")
+        except PermissionError:
+            logger.error(f"沒有權限讀取安全配置檔案: {config_path}")
+            raise HTTPException(status_code=500, detail="沒有權限讀取安全配置檔案")
+        except Exception as e:
+            logger.error(f"讀取安全配置檔案時發生未知錯誤: {e}")
+            raise HTTPException(status_code=500, detail=f"讀取安全配置檔案失敗: {str(e)}")
+    
+    def _validate_security_config(self, config_data: Dict[str, Any]):
+        """驗證安全配置檔案結構
+        
+        Args:
+            config_data: 配置資料字典
+            
+        Raises:
+            HTTPException: 當配置格式不正確時
+        """
+        if not isinstance(config_data, dict):
+            logger.error("安全配置檔案必須是JSON物件格式")
+            raise HTTPException(status_code=500, detail="安全配置檔案格式錯誤：必須是JSON物件")
+        
+        if "command_validation" not in config_data:
+            logger.error("安全配置檔案缺少 'command_validation' 欄位")
+            raise HTTPException(status_code=500, detail="安全配置檔案格式錯誤：缺少 'command_validation' 欄位")
+        
+        cmd_validation = config_data["command_validation"]
+        required_fields = ["allowed_command_prefixes", "dangerous_keywords"]
+        
+        for field in required_fields:
+            if field not in cmd_validation:
+                logger.error(f"安全配置檔案 command_validation 缺少必要欄位: {field}")
+                raise HTTPException(status_code=500, detail=f"安全配置檔案格式錯誤：command_validation 缺少欄位 '{field}'")
+            
+            if not isinstance(cmd_validation[field], list):
+                logger.error(f"安全配置檔案 command_validation.{field} 必須是陣列")
+                raise HTTPException(status_code=500, detail=f"安全配置檔案格式錯誤：command_validation.{field} 必須是陣列")
+    
+    def _get_default_security_config(self) -> Dict[str, Any]:
+        """取得預設安全配置（當配置檔案不存在時使用）"""
+        return {
+            "version": "1.0.0",
+            "command_validation": {
+                "allowed_command_prefixes": ["show", "ping", "traceroute"],
+                "dangerous_keywords": ["configure", "write", "delete", "shutdown"],
+                "max_command_length": 200,
+                "enable_strict_validation": True
+            },
+            "audit": {
+                "log_all_validations": True,
+                "log_blocked_commands": True,
+                "alert_on_security_violations": True
+            }
+        }
+    
+    def get_security_config(self) -> Dict[str, Any]:
+        """取得安全配置（使用快取機制）
+        
+        Returns:
+            安全配置字典
+        """
+        if self._security_config is None:
+            return self.load_security_config()
+        return self._security_config
+    
     def refresh_config(self):
         """重新載入所有配置檔案"""
         logger.info("重新載入配置檔案")
         self._devices_config = None
         self._groups_config = None
+        self._security_config = None
         self.load_devices_config()
         self.load_groups_config()
+        self.load_security_config()
 
 # 全域配置管理器實例
 _config_manager = None

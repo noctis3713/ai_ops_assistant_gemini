@@ -10,7 +10,7 @@ import os
 import logging
 import threading
 import time
-from typing import Tuple, Optional, Dict, Callable
+from typing import Tuple, Optional, Dict, Callable, Any
 from functools import lru_cache
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
@@ -185,8 +185,56 @@ def get_device_credentials(device_config=None):
     return {"device_type": device_type, "username": username, "password": password}
 
 class CommandValidator:
-    """指令安全性驗證器 - 只允許 show、ping 和 traceroute 開頭的指令"""
-    ALLOWED_COMMAND_PREFIXES = ['show', 'ping', 'traceroute']
+    """指令安全性驗證器 - 支援配置檔案動態載入安全規則"""
+    # 預設安全配置（備用）
+    DEFAULT_ALLOWED_PREFIXES = ['show', 'ping', 'traceroute']
+    DEFAULT_DANGEROUS_KEYWORDS = ['configure', 'write', 'delete', 'shutdown']
+    
+    # 快取配置以提升效能
+    _cached_config = None
+    _config_last_loaded = None
+
+    @classmethod
+    def _load_security_config(cls) -> Dict[str, Any]:
+        """載入安全配置檔案"""
+        try:
+            from config_manager import get_config_manager
+            config_manager = get_config_manager()
+            return config_manager.get_security_config()
+        except Exception as e:
+            logger.warning(f"無法載入安全配置檔案，使用預設配置: {e}")
+            return {
+                "command_validation": {
+                    "allowed_command_prefixes": cls.DEFAULT_ALLOWED_PREFIXES,
+                    "dangerous_keywords": cls.DEFAULT_DANGEROUS_KEYWORDS,
+                    "max_command_length": 200,
+                    "enable_strict_validation": True
+                }
+            }
+    
+    @classmethod
+    def _get_validation_config(cls) -> Dict[str, Any]:
+        """取得驗證配置（使用快取）"""
+        import time
+        current_time = time.time()
+        
+        # 快取 30 秒，避免頻繁讀取配置檔案
+        if (cls._cached_config is None or 
+            cls._config_last_loaded is None or 
+            current_time - cls._config_last_loaded > 30):
+            
+            cls._cached_config = cls._load_security_config()
+            cls._config_last_loaded = current_time
+            logger.debug("安全配置已重新載入")
+        
+        return cls._cached_config.get("command_validation", {})
+    
+    @classmethod
+    def reload_security_config(cls):
+        """強制重新載入安全配置（用於熱重載）"""
+        cls._cached_config = None
+        cls._config_last_loaded = None
+        logger.info("安全配置快取已清除，下次驗證時將重新載入")
 
     @classmethod
     def validate_commands(cls, commands: list) -> Tuple[bool, Optional[str]]:
@@ -199,46 +247,89 @@ class CommandValidator:
     
     @classmethod
     def validate_command(cls, command: str) -> Tuple[bool, Optional[str]]:
-        """驗證指令安全性 - 只允許 show、ping 和 traceroute 開頭的指令"""
+        """驗證指令安全性 - 從配置檔案載入安全規則"""
         command_lower = command.lower().strip()
         
         # 檢查指令是否為空
         if not command_lower:
             return False, cls._generate_security_alert(command, "指令不能為空")
         
-        # 只允許 show、ping 或 traceroute 開頭的指令
-        for prefix in cls.ALLOWED_COMMAND_PREFIXES:
+        # 載入安全配置
+        validation_config = cls._get_validation_config()
+        allowed_prefixes = validation_config.get("allowed_command_prefixes", cls.DEFAULT_ALLOWED_PREFIXES)
+        dangerous_keywords = validation_config.get("dangerous_keywords", cls.DEFAULT_DANGEROUS_KEYWORDS)
+        max_length = validation_config.get("max_command_length", 200)
+        strict_validation = validation_config.get("enable_strict_validation", True)
+        
+        # 檢查指令長度
+        if len(command) > max_length:
+            return False, cls._generate_security_alert(command, f"指令長度超過 {max_length} 字元限制")
+        
+        # 檢查危險關鍵字
+        if strict_validation:
+            for keyword in dangerous_keywords:
+                if keyword in command_lower:
+                    return False, cls._generate_security_alert(command, f"指令包含危險關鍵字: {keyword}")
+        
+        # 檢查允許的指令前綴
+        for prefix in allowed_prefixes:
             if command_lower.startswith(prefix + ' ') or command_lower == prefix:
                 logger.info(f"允許指令: {command}")
                 return True, None
         
-        return False, cls._generate_security_alert(command, "只允許 show、ping 或 traceroute 開頭的指令")
+        allowed_prefixes_str = "、".join(allowed_prefixes)
+        return False, cls._generate_security_alert(command, f"只允許 {allowed_prefixes_str} 開頭的指令")
     
     @classmethod
     def _generate_security_alert(cls, command: str, reason: str) -> str:
-        """生成安全警告訊息"""
+        """生成安全警告訊息（動態顯示允許的指令）"""
+        try:
+            validation_config = cls._get_validation_config()
+            allowed_prefixes = validation_config.get("allowed_command_prefixes", cls.DEFAULT_ALLOWED_PREFIXES)
+        except:
+            allowed_prefixes = cls.DEFAULT_ALLOWED_PREFIXES
+        
+        # 動態生成允許的指令格式說明
+        allowed_formats = []
+        command_examples = []
+        
+        for prefix in allowed_prefixes:
+            if prefix == 'show':
+                allowed_formats.append("• show [參數] - 查看設備資訊")
+                command_examples.extend(["• show version", "• show interface", "• show environment"])
+            elif prefix == 'ping':
+                allowed_formats.append("• ping [參數] - 網路連通性測試")
+                command_examples.extend(["• ping 8.8.8.8", "• ping 192.168.1.1 -c 3"])
+            elif prefix == 'traceroute':
+                allowed_formats.append("• traceroute [參數] - 網路路由追蹤")
+                command_examples.extend(["• traceroute 8.8.8.8", "• traceroute google.com"])
+            elif prefix == 'display':
+                allowed_formats.append("• display [參數] - 顯示設備資訊")
+                command_examples.extend(["• display version", "• display interface"])
+            elif prefix == 'get':
+                allowed_formats.append("• get [參數] - 獲取設備狀態")
+                command_examples.extend(["• get system status", "• get config"])
+            else:
+                allowed_formats.append(f"• {prefix} [參數] - {prefix} 相關指令")
+                command_examples.append(f"• {prefix} <參數>")
+        
+        allowed_formats_str = "\n".join(allowed_formats)
+        command_examples_str = "\n".join(command_examples[:6])  # 最多顯示6個範例
+        
         return f"""🚨 安全警告：指令被拒絕
 
 指令: {command}
 原因: {reason}
 
-⚠️ 系統僅允許使用以下三種指令：
+⚠️ 系統僅允許使用以下指令：
 
 允許的指令格式:
-• show [參數] - 查看設備資訊
-• ping [參數] - 網路連通性測試  
-• traceroute [參數] - 網路路由追蹤
+{allowed_formats_str}
 
 使用範例:
-• show version
-• show interface
-• show environment
-• ping 8.8.8.8
-• ping 192.168.1.1 -c 3
-• traceroute 8.8.8.8
-• traceroute google.com
+{command_examples_str}
 
-請只使用這三種指令進行網路設備操作。"""
+請只使用這些安全的指令進行網路設備操作。"""
 
 class ConnectionPool:
     """SSH 連線池管理器 - 提供連線重用和健康檢查"""
