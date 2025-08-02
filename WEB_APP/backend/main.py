@@ -274,9 +274,11 @@ async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
     
     try:
         # 直接傳入用戶查詢，讓 AIService 內部處理所有提示詞工程
+        # 如果指定了設備 IP，傳遞設備限制
         ai_response = await ai_service.query_ai(
             prompt=query, 
-            timeout=40.0
+            timeout=40.0,
+            device_ips=device_ips
         )
         return ai_response
         

@@ -31,10 +31,76 @@ try:
 except ImportError:
     SEARCH_AVAILABLE = False
 
-from core.nornir_integration import batch_command_wrapper
+from core.nornir_integration import batch_command_wrapper, set_device_scope_restriction
 from models.ai_response import NetworkAnalysisResponse
 
 logger = logging.getLogger(__name__)
+
+def build_ai_system_prompt_for_pydantic(search_enabled: bool = False) -> str:
+    """建立結構化、適用於 PydanticOutputParser 的 AI 系統提示詞
+    
+    專為 PydanticOutputParser 設計的提示詞，要求 AI 輸出結構化的 JSON 格式
+    
+    Args:
+        search_enabled: 搜尋功能是否啟用（用於動態調整工具說明）
+        
+    Returns:
+        str: 適用於 PydanticOutputParser 的結構化提示詞
+    """
+    base_prompt = """<role>
+你是一名專業的網路工程師和 AI 助理，專精於 Cisco 設備診斷和網路分析。
+你具備 CCIE 級別的專業知識，能夠準確分析設備狀態並提供專業建議。
+</role>
+
+<security_rules>
+**絕對安全限制**：
+1. 只能執行 show 類指令（如 show version, show interface, show environment 等）
+2. 禁止執行任何配置變更指令（configure, write, delete, shutdown 等）
+3. 所有指令都會被安全驗證，危險指令將被自動阻止
+4. 專注於分析和診斷，絕不進行配置修改
+</security_rules>
+
+<tools_guide>
+你有一個強大的工具：**BatchCommandRunner**
+
+**BatchCommandRunner** 用途：
+- 在指定的網路設備上執行安全的 show 指令
+- 自動驗證指令安全性
+- 支援單設備或多設備批次執行
+- 返回結構化的執行結果和錯誤分析
+
+**使用格式**：
+- 單設備: "device_ip: command"
+- 多設備: "device_ip1,device_ip2: command"  
+- 所有設備: "command"
+
+**重要**：工具會返回 JSON 格式結果，包含 successful_results 和 failed_results 兩個關鍵陣列。
+</tools_guide>
+
+<workflow>
+**標準工作流程**：
+1. **理解需求**：分析用戶查詢，確定需要執行的指令
+2. **選擇工具**：使用 BatchCommandRunner 執行相關 show 指令
+3. **分析結果**：深入分析設備輸出，識別關鍵資訊和異常
+4. **結構化回應**：將分析結果組織成結構化的 JSON 格式
+   - **特別是**在處理多設備時，你**必須**從 BatchCommandRunner 回傳結果的 `summary` 物件中，提取 `successful_devices` 和 `failed_devices` 的數值，並填入到最終 JSON 回應的 `successful_device_count` 和 `failed_device_count` 欄位中
+   - 不可猜測或計算這些數值，必須從工具回傳的確切數據中提取
+</workflow>
+
+<output_format>
+**關鍵要求**：你的最終回答必須是有效的 JSON 物件，嚴格遵循以下格式規範。
+
+{{format_instructions}}
+
+**注意事項**：
+- 不要在 JSON 前後添加 Markdown 標記（如 ```json）
+- 確保 JSON 格式完全有效
+- analysis_type 根據設備數量自動判斷：1台設備="single_device"，多台="multi_device"
+- 如果沒有異常，anomalies 欄位應為空陣列 []
+- 所有建議都應該具體可操作
+</output_format>"""
+
+    return base_prompt
 
 # 內部思考鏈範例函數
 def _get_react_examples() -> str:
@@ -449,9 +515,6 @@ class AIService:
         Returns:
             PromptTemplate: 整合結構化輸出格式的提示詞模板
         """
-        # 延遲導入以避免循環導入
-        from utils import build_ai_system_prompt_for_pydantic
-        
         # 獲取基礎系統提示詞
         base_prompt = build_ai_system_prompt_for_pydantic(search_enabled=self.search_enabled)
         
@@ -554,13 +617,14 @@ Question: {{input}}
 
 建議聯繫系統管理員檢查搜尋服務配置。"""
     
-    async def query_ai(self, prompt: str, timeout: float = 30.0, include_examples: bool = True) -> str:
+    async def query_ai(self, prompt: str, timeout: float = 30.0, include_examples: bool = True, device_ips: List[str] = None) -> str:
         """執行 AI 查詢，使用 PydanticOutputParser 異化輸出格式
         
         Args:
             prompt: AI 查詢提示詞
             timeout: 查詢超時時間（秒）
             include_examples: 是否自動包含思考鏈範例（預設True）
+            device_ips: 限制執行的設備 IP 列表（可選）
             
         Returns:
             str: 格式化的 Markdown 結果
@@ -580,6 +644,20 @@ Question: {{input}}
                     enhanced_prompt = prompt.replace("<user_query>", f"{few_shot_examples}\n\n<user_query>")
                 else:
                     enhanced_prompt = f"{prompt}\n\n{few_shot_examples}"
+        
+        # 添加設備範圍限制上下文
+        if device_ips:
+            device_context = f"\n\n<device_scope_restriction>\n**重要限制**: 只能在以下指定設備上執行指令，不可擴展到其他設備:\n"
+            for ip in device_ips:
+                device_context += f"- {ip}\n"
+            device_context += "</device_scope_restriction>"
+            enhanced_prompt = enhanced_prompt + device_context
+            
+            # 設置全局設備範圍限制，供 batch_command_wrapper 使用
+            set_device_scope_restriction(device_ips)
+        else:
+            # 清除設備範圍限制
+            set_device_scope_restriction(None)
         
         try:
             # 執行 AI 查詢
@@ -646,6 +724,9 @@ Question: {{input}}
                 raise Exception("AI API 認證失敗，請檢查 API Key 設定")
             else:
                 raise Exception(f"AI 查詢執行失敗: {error_str}")
+        finally:
+            # 清除設備範圍限制，確保不會影響後續查詢
+            set_device_scope_restriction(None)
     
     def classify_ai_error(self, error_str: str) -> Tuple[str, int]:
         """分類 AI API 錯誤並返回錯誤訊息和狀態碼

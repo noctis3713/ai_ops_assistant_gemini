@@ -9,6 +9,7 @@ import os
 import json
 import logging
 import time
+import threading
 from typing import Dict, List, Optional, Union, Any
 from pathlib import Path
 from dataclasses import dataclass
@@ -32,6 +33,29 @@ from .network_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 全局設備範圍限制變量（使用線程本地存儲確保線程安全）
+_local_data = threading.local()
+
+def set_device_scope_restriction(device_ips: Optional[List[str]]):
+    """設置當前線程的設備範圍限制
+    
+    Args:
+        device_ips: 允許的設備 IP 列表，None 表示無限制
+    """
+    _local_data.device_scope_restriction = device_ips
+    if device_ips:
+        logger.debug(f"設置設備範圍限制: {device_ips}")
+    else:
+        logger.debug("清除設備範圍限制")
+
+def get_device_scope_restriction() -> Optional[List[str]]:
+    """獲取當前線程的設備範圍限制
+    
+    Returns:
+        允許的設備 IP 列表，None 表示無限制
+    """
+    return getattr(_local_data, 'device_scope_restriction', None)
 
 def get_network_logger():
     """取得網路操作專用日誌記錄器"""
@@ -846,6 +870,23 @@ def batch_command_wrapper(input_str: str) -> str:
         else:
             device_ips = None
             command = input_str.strip()
+        
+        # 檢查設備範圍限制
+        scope_restriction = get_device_scope_restriction()
+        if scope_restriction:
+            if device_ips is None:
+                # 如果沒有指定設備，但有範圍限制，則使用範圍限制內的設備
+                device_ips = scope_restriction
+                logger.info(f"應用設備範圍限制，將對以下設備執行指令: {device_ips}")
+            else:
+                # 如果指定了設備，檢查是否在允許範圍內
+                invalid_devices = [ip for ip in device_ips if ip not in scope_restriction]
+                if invalid_devices:
+                    error_msg = f"指令嘗試在限制範圍外的設備執行: {invalid_devices}。只允許在以下設備執行: {scope_restriction}"
+                    logger.warning(error_msg)
+                    return f"錯誤：{error_msg}"
+                
+                logger.info(f"設備範圍驗證通過，允許在設備 {device_ips} 上執行指令")
         
         manager = get_nornir_manager()
         result = manager.run_batch_command(command, device_ips)
