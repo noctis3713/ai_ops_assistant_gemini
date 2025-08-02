@@ -1,0 +1,65 @@
+# 提示詞基礎變數配置
+# 這些變數會被注入到所有 Jinja2 模板中
+
+# 設備和認證配置
+device_vendor: "Cisco"
+certification_level: "CCIE"
+max_devices: 50
+
+# 支援的指令類別
+supported_commands:
+  - "show version"
+  - "show interface"
+  - "show environment"
+  - "show inventory"
+  - "show processes"
+  - "show memory"
+  - "show ip route"
+  - "show ip interface brief"
+  - "show running-config"
+  - "show startup-config"
+  - "show logging"
+  - "show clock"
+  - "show uptime"
+
+# 危險指令（絕對禁止）
+dangerous_commands:
+  - "configure"
+  - "write"
+  - "delete"
+  - "shutdown"
+  - "reload"
+  - "erase"
+
+# 安全規則 - 用於動態生成安全限制說明
+security_rules:
+  - "只能執行 show 類指令（如 show version, show interface, show environment 等）"
+  - "禁止執行任何配置變更指令（configure, write, delete, shutdown 等）"
+  - "所有指令都會被安全驗證，危險指令將被自動阻止"
+  - "專注於分析和診斷，絕不進行配置修改"
+
+# 分析類型
+analysis_types:
+  single_device: "single_device"
+  multi_device: "multi_device"
+
+# 預設建議
+default_recommendations:
+  - "建議定期監控設備狀態"
+  - "建議檢查日誌檔案以發現潛在問題"
+  - "建議維護設備配置的備份"
+
+# 模板語言配置
+language: "zh_TW"
+
+# 模板路徑配置
+template_paths:
+  system_prompt: "system_prompt.j2"
+  react_examples: "react_examples.j2"
+  tool_descriptions_with_search: "tool_descriptions_with_search.j2"
+  tool_descriptions_no_search: "tool_descriptions_no_search.j2"
+
+# 版本資訊
+template_version: "1.1.0"
+last_updated: "2025-08-02"
+update_notes: "升級為動態模組化模板系統，支援用戶自定義範例設計"

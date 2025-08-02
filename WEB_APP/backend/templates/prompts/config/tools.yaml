@@ -1,0 +1,39 @@
+# 工具配置檔案
+# 定義 AI 可用的工具和它們的描述
+
+tools:
+  - name: "CiscoCommandSearch"
+    description: "搜尋 Cisco 指令語法和說明"
+    enabled_when: "search_enabled"
+    usage:
+      - "當你不確定具體指令語法時使用"
+      - "搜尋適合的 show 指令"
+      - "獲取指令說明和用法"
+    examples:
+      - "cisco device temperature monitoring command"
+      - "BGP status monitoring commands"
+      - "interface statistics commands"
+  
+  - name: "BatchCommandRunner"
+    description: "在指定的網路設備上執行安全的 show 指令"
+    always_enabled: true
+    usage:
+      - "在指定的網路設備上執行安全的 show 指令"
+      - "自動驗證指令安全性"
+      - "支援單設備或多設備批次執行"
+      - "返回結構化的執行結果和錯誤分析"
+    input_formats:
+      single_device: "device_ip: command"
+      multi_device: "device_ip1,device_ip2: command"
+      all_devices: "command"
+    return_format:
+      - "JSON 格式結果"
+      - "包含 successful_results 和 failed_results 兩個關鍵陣列"
+      - "包含 summary 物件，內含 successful_devices 和 failed_devices 數量"
+
+# 工具選擇策略
+tool_selection_strategy:
+  - "當不確定指令語法時，優先使用 CiscoCommandSearch"
+  - "當已知確切指令時，直接使用 BatchCommandRunner"
+  - "多設備查詢時，務必使用 BatchCommandRunner 的批次功能"
+  - "從 BatchCommandRunner 結果中準確提取設備統計數據"

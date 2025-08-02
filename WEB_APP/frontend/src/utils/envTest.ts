@@ -22,13 +22,8 @@ export function testEnvironmentVariables() {
     'VITE_MAX_LOCAL_STORAGE_ENTRIES': import.meta.env.VITE_MAX_LOCAL_STORAGE_ENTRIES,
     'VITE_REMOTE_LOG_ENDPOINT': import.meta.env.VITE_REMOTE_LOG_ENDPOINT,
     'VITE_LOG_CATEGORIES': import.meta.env.VITE_LOG_CATEGORIES,
-    'VITE_LOG_DEBUG_MODE': import.meta.env.VITE_LOG_DEBUG_MODE,
     'VITE_LOG_SHOW_STACK_TRACE': import.meta.env.VITE_LOG_SHOW_STACK_TRACE,
     'VITE_LOG_PERFORMANCE_THRESHOLD': import.meta.env.VITE_LOG_PERFORMANCE_THRESHOLD,
-    // 非同步任務相關環境變數
-    'VITE_ASYNC_TASK_POLL_INTERVAL': import.meta.env.VITE_ASYNC_TASK_POLL_INTERVAL,
-    'VITE_ASYNC_TASK_MAX_POLL_INTERVAL': import.meta.env.VITE_ASYNC_TASK_MAX_POLL_INTERVAL,
-    'VITE_ASYNC_TASK_TIMEOUT': import.meta.env.VITE_ASYNC_TASK_TIMEOUT,
   };
   
   console.table(logEnvVars);

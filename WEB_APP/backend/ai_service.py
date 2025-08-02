@@ -8,6 +8,7 @@ AI 服務模組 - 統一管理 AI 系統初始化、處理和工具整合
 import os
 import logging
 import asyncio
+import time
 from typing import Dict, Any, List, Optional, Tuple
 
 # AI 服務相關導入
@@ -33,6 +34,7 @@ except ImportError:
 
 from core.nornir_integration import batch_command_wrapper, set_device_scope_restriction
 from models.ai_response import NetworkAnalysisResponse
+from core.prompt_manager import get_prompt_manager
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +257,9 @@ class AIService:
         
         # 初始化 PydanticOutputParser
         self.parser = PydanticOutputParser(pydantic_object=NetworkAnalysisResponse)
+        
+        # 初始化提示詞管理器
+        self.prompt_manager = get_prompt_manager()
         
         # 初始化 AI 系統
         self._initialize_ai()
@@ -515,8 +520,16 @@ class AIService:
         Returns:
             PromptTemplate: 整合結構化輸出格式的提示詞模板
         """
-        # 獲取基礎系統提示詞
-        base_prompt = build_ai_system_prompt_for_pydantic(search_enabled=self.search_enabled)
+        # 獲取格式指令並處理特殊字符，避免 LangChain 變數衝突
+        format_instructions = self.parser.get_format_instructions()
+        # 將 format_instructions 中的花括號轉義，避免被當作 LangChain 變數
+        escaped_format_instructions = format_instructions.replace("{", "{{").replace("}", "}}")
+        
+        # 使用新的提示詞管理器獲取系統提示詞
+        base_prompt = self.prompt_manager.render_system_prompt(
+            search_enabled=self.search_enabled,
+            format_instructions=escaped_format_instructions
+        )
         
         # 建立 ReAct 工作流程模板
         template = f"""{base_prompt}
@@ -534,7 +547,7 @@ Action Input: the input to the action
 Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: {{format_instructions}}
+Final Answer: 請按照上面 output_format 部分指定的 JSON 格式回應
 
 Question: {{input}}
 {{agent_scratchpad}}"""
@@ -544,8 +557,7 @@ Question: {{input}}
             input_variables=["input", "agent_scratchpad"],
             partial_variables={
                 "tools": "\n".join([f"{tool.name}: {tool.description}" for tool in self._create_tools()]),
-                "tool_names": ", ".join([tool.name for tool in self._create_tools()]),
-                "format_instructions": self.parser.get_format_instructions()
+                "tool_names": ", ".join([tool.name for tool in self._create_tools()])
             }
         )
     
@@ -617,7 +629,7 @@ Question: {{input}}
 
 建議聯繫系統管理員檢查搜尋服務配置。"""
     
-    async def query_ai(self, prompt: str, timeout: float = 30.0, include_examples: bool = True, device_ips: List[str] = None) -> str:
+    async def query_ai(self, prompt: str, timeout: float = 60.0, include_examples: bool = True, device_ips: List[str] = None) -> str:
         """執行 AI 查詢，使用 PydanticOutputParser 異化輸出格式
         
         Args:
@@ -638,12 +650,20 @@ Question: {{input}}
         # 智能地整合思考鏈範例
         enhanced_prompt = prompt
         if include_examples and "<examples>" not in prompt:
-            few_shot_examples = _get_few_shot_examples()
+            few_shot_examples = self.prompt_manager.render_react_examples()
             if few_shot_examples:
                 if "<user_query>" in prompt:
                     enhanced_prompt = prompt.replace("<user_query>", f"{few_shot_examples}\n\n<user_query>")
                 else:
                     enhanced_prompt = f"{prompt}\n\n{few_shot_examples}"
+        
+        # 添加即時執行強制要求
+        real_time_enforcement = "\n\n🚨 **強制執行要求**：\n"
+        real_time_enforcement += "- 這是一個實時查詢，你必須執行實際的工具調用獲取當前設備資料\n"
+        real_time_enforcement += "- 絕對禁止使用上述範例的回答作為最終答案\n"
+        real_time_enforcement += "- 必須基於當前執行的 BatchCommandRunner 工具結果進行分析\n"
+        real_time_enforcement += f"- 當前時間戳記：{time.time()}\n"
+        enhanced_prompt = enhanced_prompt + real_time_enforcement
         
         # 添加設備範圍限制上下文
         if device_ips:

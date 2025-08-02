@@ -277,7 +277,7 @@ async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
         # 如果指定了設備 IP，傳遞設備限制
         ai_response = await ai_service.query_ai(
             prompt=query, 
-            timeout=40.0,
+            timeout=60.0,
             device_ips=device_ips
         )
         return ai_response
@@ -1059,6 +1059,48 @@ async def batch_execute(request: BatchExecuteRequest):
 async def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "API 服務運行正常"}
+
+@app.post("/api/admin/reload-prompts")
+async def reload_prompts():
+    """重載提示詞配置 - 管理員功能
+    
+    這個端點允許在不重啟服務的情況下重新載入提示詞模板和配置檔案
+    適用於生產環境的熱重載需求
+    
+    Returns:
+        dict: 重載結果和統計資訊
+        
+    Raises:
+        HTTPException: 當重載失敗時
+    """
+    try:
+        from core.prompt_manager import reload_prompt_manager
+        
+        # 重新載入提示詞管理器
+        new_manager = reload_prompt_manager()
+        
+        # 取得統計資訊
+        stats = new_manager.get_stats()
+        
+        return {
+            "message": "提示詞配置已重新載入",
+            "timestamp": time.time(),
+            "reload_time": stats.get("init_time"),
+            "stats": {
+                "language": stats.get("language"),
+                "available_languages": stats.get("available_languages", []),
+                "available_templates": stats.get("available_templates", []),
+                "config_loaded": stats.get("config_loaded", {}),
+                "cache_stats": stats.get("cache_stats", {})
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"提示詞重載失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"重載失敗: {str(e)}"
+        )
 
 @app.get("/api/devices/status")
 async def get_devices_status():
