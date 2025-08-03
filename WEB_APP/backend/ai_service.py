@@ -9,6 +9,7 @@ import os
 import logging
 import asyncio
 import time
+import uuid
 from typing import Dict, Any, List, Optional, Tuple
 
 # AI 服務相關導入
@@ -658,7 +659,9 @@ Question: {{input}}
                     enhanced_prompt = f"{prompt}\n\n{few_shot_examples}"
         
         # 添加即時執行強制要求
+        unique_id = uuid.uuid4()
         real_time_enforcement = "\n\n🚨 **強制執行要求**：\n"
+        real_time_enforcement += f"- 查詢唯一標識：{unique_id}\n"
         real_time_enforcement += "- 這是一個實時查詢，你必須執行實際的工具調用獲取當前設備資料\n"
         real_time_enforcement += "- 絕對禁止使用上述範例的回答作為最終答案\n"
         real_time_enforcement += "- 必須基於當前執行的 BatchCommandRunner 工具結果進行分析\n"
@@ -673,7 +676,7 @@ Question: {{input}}
             device_context += "</device_scope_restriction>"
             enhanced_prompt = enhanced_prompt + device_context
             
-            # 設置全局設備範圍限制，供 batch_command_wrapper 使用
+            # 設置線程本地設備範圍限制
             set_device_scope_restriction(device_ips)
         else:
             # 清除設備範圍限制
@@ -745,7 +748,7 @@ Question: {{input}}
             else:
                 raise Exception(f"AI 查詢執行失敗: {error_str}")
         finally:
-            # 清除設備範圍限制，確保不會影響後續查詢
+            # 清除線程本地設備範圍限制，確保不會影響後續查詢
             set_device_scope_restriction(None)
     
     def classify_ai_error(self, error_str: str) -> Tuple[str, int]:

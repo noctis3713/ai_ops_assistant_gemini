@@ -20,15 +20,7 @@ react_examples:
       - type: "observation"
         content: "指令執行成功，返回了設備的完整環境狀態資訊，包括溫度感測器讀數、風扇狀態等。"
       - type: "thought"
-        content: "我已經獲得了設備的環境資訊。根據 output_format，這是單一設備查詢，我需要使用單一設備格式來整理分析報告。"
-    final_answer: |
-      📋 **注意：這是範例模板，實際執行時必須基於工具回傳的真實資料**
-      ### 重點分析
-      - **狀態概況**: [基於實際 show environment all 輸出分析]
-      - **關鍵數據**: [從實際工具執行結果提取]
-      - **異常發現**: [基於實際檢測結果]
-      ### 專業建議
-      [根據實際設備狀況提供具體建議]
+        content: "我已經成功執行了 `show environment all` 指令並獲得了設備的環境資訊。根據觀察到的實際輸出，我現在將分析溫度狀態、風扇運行情況和電源狀態，然後按照 output_format 要求構建我的 JSON 格式回應。這是單一設備查詢，analysis_type 應設為 'single_device'。"
 
   - title: "直接執行示範 - 多設備狀態查詢類"
     query: "請幫我查看 {DEVICE_LIST} 這些設備的系統資訊"
@@ -41,24 +33,7 @@ react_examples:
       - type: "observation"
         content: "指令在設備上執行成功，返回了詳細的系統資訊，包括軟體版本、硬體型號、序號等。"
       - type: "thought"
-        content: "我已經獲得了設備的系統資訊。根據 output_format，我需要使用適當格式來整理分析報告。"
-    final_answer: |
-      📋 **注意：這是範例 JSON 模板，實際執行時必須基於工具回傳的真實資料填充**
-      {
-        "analysis_summary": "[基於實際 BatchCommandRunner 輸出的設備狀態摘要]",
-        "key_findings": [
-          "[從實際 show version 輸出提取的設備資訊]",
-          "[實際系統版本、硬體型號、序號資訊]"
-        ],
-        "anomalies": "[基於實際檢測的異常狀況]",
-        "recommendations": [
-          "[根據實際設備狀況的具體建議]"
-        ],
-        "device_count": "[實際設備數量]",
-        "successful_device_count": "[從 summary 物件取得]",
-        "failed_device_count": "[從 summary 物件取得]",
-        "analysis_type": "[根據實際設備數量判斷]"
-      }
+        content: "我已經成功執行了 `show version` 指令並獲得了多台設備的詳細輸出。現在我將分析每台設備的系統版本、硬體資訊和運行狀態，並從 BatchCommandRunner 回傳的 summary 物件中提取 successful_devices 和 failed_devices 數量。根據設備數量，analysis_type 應設為 'multi_device'。我將構建符合 JSON schema 的結構化回應。"
 
   - title: "錯誤處理示範 - 協定狀態查詢類"
     query: "檢查 {NETWORK_DEVICES} 的路由協定狀態"
@@ -78,23 +53,4 @@ react_examples:
       - type: "observation"
         content: "部分設備執行成功，但有設備返回錯誤，可能是因為該設備未配置該協定。"
       - type: "thought"
-        content: "執行過程中遇到了部分失敗，這是正常情況。我需要根據實際結果分析，並在報告中說明失敗原因。"
-    final_answer: |
-      📋 **注意：這是範例 JSON 模板，實際執行時必須基於工具回傳的真實資料填充**
-      {
-        "analysis_summary": "[基於實際執行結果的設備協定狀態摘要]",
-        "key_findings": [
-          "[從實際工具輸出提取的設備狀態資訊]",
-          "[實際協定配置和連接狀況]"
-        ],
-        "anomalies": [
-          "[基於實際檢測的異常或錯誤]"
-        ],
-        "recommendations": [
-          "[根據實際分析結果的具體建議]"
-        ],
-        "device_count": "[實際設備數量]",
-        "successful_device_count": "[從 summary 物件取得]",
-        "failed_device_count": "[從 summary 物件取得]",
-        "analysis_type": "[根據實際設備數量判斷]"
-      }
+        content: "我已經執行了 `show ip bgp summary` 指令，結果顯示部分設備執行成功，部分設備失敗。這種混合結果需要我仔細分析成功的設備輸出以了解 BGP 狀態，同時解釋失敗設備的原因（可能是未配置 BGP 或設備不支援）。我將從 summary 物件中提取確切的成功和失敗設備數量，並構建包含異常分析的 JSON 回應。"

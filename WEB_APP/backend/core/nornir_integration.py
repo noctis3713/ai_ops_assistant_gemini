@@ -873,6 +873,7 @@ def batch_command_wrapper(input_str: str) -> str:
         
         # 檢查設備範圍限制
         scope_restriction = get_device_scope_restriction()
+        logger.info(f"檢查設備範圍限制: {scope_restriction}")
         if scope_restriction:
             if device_ips is None:
                 # 如果沒有指定設備，但有範圍限制，則使用範圍限制內的設備
