@@ -29,7 +29,9 @@
       "Bash(npx eslint:*)",
       "Bash(npx tsc:*)",
       "Bash(sed:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(pip show:*)",
+      "Bash(isort:*)"
     ],
     "deny": []
   }
