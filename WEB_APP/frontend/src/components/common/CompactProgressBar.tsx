@@ -3,10 +3,11 @@
  * 專為放置在執行按鈕旁邊設計，高度匹配按鈕
  * 包含進度條和狀態顯示
  */
-import { type BatchProgressIndicatorProps, type StatusMessage } from '@/types';
+import { type StatusMessage, type BatchProgressState } from '@/types';
 import { PROGRESS_STAGE_TEXT } from '@/constants';
 
-interface CompactProgressBarProps extends BatchProgressIndicatorProps {
+interface CompactProgressBarProps {
+  progress: BatchProgressState;
   status?: StatusMessage;
 }
 

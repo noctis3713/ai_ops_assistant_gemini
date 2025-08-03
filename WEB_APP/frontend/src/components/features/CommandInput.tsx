@@ -156,7 +156,18 @@ const CommandInput: React.FC<CommandInputProps> = ({
         </Button>
         
         {/* 進度條 */}
-        {(progress || status) && <CompactProgressBar progress={progress || { isVisible: false, totalDevices: 0, completedDevices: 0 }} status={status} />}
+        {(progress?.isVisible || status?.message) && (
+          <CompactProgressBar 
+            progress={progress || { 
+              isVisible: false, 
+              totalDevices: 0, 
+              completedDevices: 0,
+              currentStage: undefined,
+              stageMessage: undefined
+            }} 
+            status={status} 
+          />
+        )}
       </div>
     </>
   );

@@ -28,7 +28,8 @@
       "Bash(npm:*)",
       "Bash(npx eslint:*)",
       "Bash(npx tsc:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   }

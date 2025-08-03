@@ -16,21 +16,9 @@ export const useAppStore = create<AppStore>()(
         get().setInputValue('');
       },
 
-      setSelectedDevice: (deviceIp) => {
-        set({ selectedDevice: deviceIp }, false, 'setSelectedDevice');
-      },
-
-      setDeviceSelectionMode: (mode) => {
-        set({ deviceSelectionMode: mode }, false, 'setDeviceSelectionMode');
-        // 目前只支援 multiple 模式，暫時保留空的處理邏輯
-      },
 
       setSelectedDevices: (deviceIps) => {
         set({ selectedDevices: deviceIps }, false, 'setSelectedDevices');
-      },
-
-      setSelectedGroup: (groupName) => {
-        set({ selectedGroup: groupName }, false, 'setSelectedGroup');
       },
 
       setInputValue: (value) => {
@@ -155,23 +143,6 @@ export const useAppStore = create<AppStore>()(
         );
       },
 
-      // 輸出動作
-      setOutput: (output, isError = false) => {
-        set(
-          { output, isOutputError: isError },
-          false,
-          'setOutput'
-        );
-      },
-
-      clearOutput: () => {
-        set(
-          { output: '等待指令執行...', isOutputError: false },
-          false,
-          'clearOutput'
-        );
-      },
-
       setBatchResults: (results) => {
         set({ batchResults: results }, false, 'setBatchResults');
       },
@@ -187,15 +158,6 @@ export const useAppStore = create<AppStore>()(
 
       clearExecutionStartTime: () => {
         set({ executionStartTime: null }, false, 'clearExecutionStartTime');
-      },
-
-      // 重置動作
-      reset: () => {
-        set(
-          initialAppState,
-          false,
-          'reset'
-        );
       },
 
       // =============================================================================

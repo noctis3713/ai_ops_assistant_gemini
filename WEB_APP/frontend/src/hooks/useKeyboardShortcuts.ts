@@ -11,7 +11,7 @@ export const useKeyboardShortcuts = ({
   onExecute, 
   isExecuting 
 }: UseKeyboardShortcutsProps) => {
-  const { clearOutput, setMode } = useAppStore();
+  const { clearBatchResults, setMode } = useAppStore();
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -33,7 +33,7 @@ export const useKeyboardShortcuts = ({
       // Ctrl+L: 清空輸出
       if (event.ctrlKey && event.key === 'l') {
         event.preventDefault();
-        clearOutput();
+        clearBatchResults();
       }
 
       // Ctrl+1: 切換到指令模式
@@ -63,5 +63,5 @@ export const useKeyboardShortcuts = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onExecute, isExecuting, clearOutput, setMode]);
+  }, [onExecute, isExecuting, clearBatchResults, setMode]);
 };

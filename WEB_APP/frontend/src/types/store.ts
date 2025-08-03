@@ -1,7 +1,6 @@
 // 狀態管理相關類型定義
 import { 
   type ExecutionMode, 
-  type DeviceSelectionMode,
   type StatusMessage, 
   type ProgressState,
   type BatchProgressState
@@ -15,10 +14,7 @@ import {
 export interface AppState {
   // UI 狀態
   mode: ExecutionMode;
-  deviceSelectionMode: DeviceSelectionMode;
-  selectedDevice: string;
   selectedDevices: string[];
-  selectedGroup: string;
   inputValue: string;
   
   // 執行狀態
@@ -32,9 +28,6 @@ export interface AppState {
   // 狀態訊息
   status: StatusMessage;
   
-  // 輸出狀態
-  output: string;
-  isOutputError: boolean;
   
   // 批次結果
   batchResults: BatchExecutionResult[];
@@ -52,10 +45,7 @@ export interface AppState {
 export interface AppActions {
   // UI 動作
   setMode: (mode: ExecutionMode) => void;
-  setDeviceSelectionMode: (mode: DeviceSelectionMode) => void;
-  setSelectedDevice: (deviceIp: string) => void;
   setSelectedDevices: (deviceIps: string[]) => void;
-  setSelectedGroup: (groupName: string) => void;
   setInputValue: (value: string) => void;
   
   // 執行狀態動作
@@ -75,18 +65,13 @@ export interface AppActions {
   setStatus: (message: string, type: StatusMessage['type']) => void;
   clearStatus: () => void;
   
-  // 輸出動作
-  setOutput: (output: string, isError?: boolean) => void;
-  clearOutput: () => void;
+  // 批次結果動作
   setBatchResults: (results: BatchExecutionResult[]) => void;
   clearBatchResults: () => void;
   
   // 執行時間戳動作
   setExecutionStartTime: (timestamp: number) => void;
   clearExecutionStartTime: () => void;
-  
-  // 重置動作
-  reset: () => void;
   
   // 非同步任務動作
   setCurrentTask: (task: TaskResponse | null) => void;
@@ -101,10 +86,7 @@ export type AppStore = AppState & AppActions;
 // 初始狀態
 export const initialAppState: AppState = {
   mode: 'command',
-  deviceSelectionMode: 'multiple',
-  selectedDevice: '',
   selectedDevices: [],
-  selectedGroup: '',
   inputValue: '',
   isExecuting: false,
   isBatchExecution: false,
@@ -125,8 +107,6 @@ export const initialAppState: AppState = {
     message: '',
     type: '',
   },
-  output: '等待指令執行...',
-  isOutputError: false,
   batchResults: [],
   executionStartTime: null,
   currentTask: null,

@@ -5,9 +5,6 @@ import { type ProgressStage } from '../constants';
 // 執行模式
 export type ExecutionMode = 'command' | 'ai';
 
-// 設備選擇模式
-export type DeviceSelectionMode = 'multiple';
-
 // 狀態訊息類型
 export type StatusType = 'loading' | 'success' | 'error' | 'warning' | '';
 
@@ -47,20 +44,6 @@ export interface BatchProgressState {
 }
 
 // 組件 Props 類型
-
-// 設備選擇模式切換器
-export interface DeviceSelectionModeSwitchProps {
-  mode: DeviceSelectionMode;
-  onModeChange: (mode: DeviceSelectionMode) => void;
-}
-
-// 單一設備選擇器（保持向後相容）
-export interface DeviceSelectorProps {
-  devices: Device[];
-  selectedDevice: string;
-  onDeviceChange: (deviceIp: string) => void;
-  isLoading?: boolean;
-}
 
 // 設備選擇器
 export interface MultiDeviceSelectorProps {
@@ -108,26 +91,6 @@ export interface CommandInputProps {
   currentTask?: TaskResponse | null;
   onCancelTask?: () => void;
   taskPollingActive?: boolean;
-}
-
-export interface ProgressIndicatorProps {
-  progress: ProgressState;
-}
-
-// 批次進度指示器
-export interface BatchProgressIndicatorProps {
-  progress: BatchProgressState;
-}
-
-export interface StatusDisplayProps {
-  status: StatusMessage;
-}
-
-// 單一設備輸出顯示（保持向後相容）
-export interface OutputDisplayProps {
-  output: string;
-  isError: boolean;
-  onClear: () => void;
 }
 
 // 批次結果顯示
