@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的完整專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-02  
+> 📅 **最後更新**: 2025-08-03  
 > 🔄 **維護頻率**: 隨專案重大更新同步修改
 
 ---
@@ -88,27 +88,41 @@ WEB_APP/backend/
 ├── main.py                    # FastAPI 應用程式入口
 ├── ai_service.py             # AI 服務核心模組
 ├── async_task_manager.py     # 非同步任務管理器
-├── config_manager.py         # 配置檔案管理器
+├── config_manager.py         # 統一配置檔案管理器 (新增)
 ├── utils.py                  # 工具函數和日誌配置
-├── formatters.py             # 資料格式化工具
+├── formatters.py             # 資料格式化工具 (新增)
 ├── models/                   # Pydantic 模型定義
 │   ├── ai_response.py        # AI 回應模型
-│   └── ...
+│   └── __init__.py
 ├── core/                     # 核心功能模組
 │   ├── network_tools.py      # 網路工具核心
 │   ├── nornir_integration.py # Nornir 整合層
-│   └── prompt_manager/       # 提示詞管理系統
-│       ├── manager.py        # 提示詞管理器
-│       ├── exceptions.py     # 例外處理
-│       └── ...
-├── templates/prompts/        # AI 提示詞模板
+│   ├── __init__.py
+│   └── prompt_manager/       # 企業級提示詞管理系統 (重構)
+│       ├── __init__.py       # 模組初始化和便利函數
+│       ├── manager.py        # 核心提示詞管理器
+│       └── exceptions.py     # 專用例外處理
+├── templates/prompts/        # Jinja2 提示詞模板系統 (全新架構)
 │   ├── config/              # YAML 配置檔案
-│   └── zh_TW/               # 繁體中文模板
+│   │   ├── examples.yaml     # ReAct 思考鏈範例配置
+│   │   ├── tools.yaml       # 工具描述配置
+│   │   └── variables.yaml   # 全域變數配置
+│   └── zh_TW/               # 繁體中文模板目錄
+│       ├── system_prompt.j2 # 系統主提示詞模板
+│       ├── react_examples.j2 # 思考鏈範例模板
+│       ├── tool_descriptions_with_search.j2    # 含搜尋工具說明
+│       └── tool_descriptions_no_search.j2      # 無搜尋工具說明
 ├── config/                  # 系統配置檔案
 │   ├── devices.json         # 設備清單配置
 │   ├── groups.json          # 設備群組配置
-│   └── security.json        # 安全規則配置
+│   └── security.json        # 安全規則配置 (新增)
 └── logs/                    # 日誌檔案目錄
+    ├── app.log              # 應用程式主日誌
+    ├── ai.log               # AI 服務專用日誌
+    ├── error.log            # 錯誤日誌
+    ├── network.log          # 網路操作日誌
+    ├── frontend.log         # 前端日誌收集
+    └── frontend_error.log   # 前端錯誤日誌
 ```
 
 ### 🤖 AI 服務系統 (`ai_service.py`)
@@ -163,39 +177,65 @@ class NornirManager:
 - 只允許 `show` 類唯讀指令
 - 自動阻止配置變更指令
 
-### 📝 提示詞管理系統 (`core/prompt_manager/`)
+### 📝 企業級提示詞管理系統 (`core/prompt_manager/`)
 
-**企業級特色**:
-- **Jinja2 模板引擎**: 支援變數注入和條件渲染
-- **多語言支援**: 目前支援繁體中文 (zh_TW)
-- **熱重載機制**: 不重啟服務即可更新提示詞
-- **快取優化**: LRU 快取減少檔案 I/O
+**🏢 企業級特色** (重大重構):
+- **Jinja2 模板引擎**: 完整的模板變數注入和條件渲染
+- **配置分離架構**: YAML 配置與模板分離，便於維護
+- **多語言支援**: 完整的國際化架構 (目前支援 zh_TW)
+- **熱重載機制**: 不重啟服務即可更新所有提示詞和配置
+- **LRU 快取優化**: 減少檔案 I/O，提升效能
+- **線程安全**: 支援並發訪問和更新
 
-**檔案結構**:
+**🗂️ 全新檔案組織架構**:
 ```
 templates/prompts/
-├── config/
-│   ├── examples.yaml         # ReAct 思考鏈範例
-│   ├── tools.yaml           # 工具描述配置
-│   └── variables.yaml       # 全域變數配置
-└── zh_TW/
-    ├── system_prompt.j2     # 系統主提示詞
-    ├── react_examples.j2    # 思考鏈範例模板
-    ├── tool_descriptions_with_search.j2    # 含搜尋功能的工具說明
-    └── tool_descriptions_no_search.j2      # 無搜尋功能的工具說明
+├── config/                        # 集中化 YAML 配置管理
+│   ├── examples.yaml             # ReAct 思考鏈範例和用例
+│   ├── tools.yaml               # 工具描述和使用說明
+│   └── variables.yaml           # 全域變數和安全規則
+└── zh_TW/                        # 語言特定模板目錄
+    ├── system_prompt.j2          # 動態系統主提示詞
+    ├── react_examples.j2         # 範例防洩漏機制模板
+    ├── tool_descriptions_with_search.j2    # 含搜尋工具說明
+    └── tool_descriptions_no_search.j2      # 無搜尋工具說明
 ```
 
-**關鍵類別**:
+**🔧 核心管理器實現**:
 ```python
 class PromptManager:
-    """統一的提示詞管理器"""
-    def render_system_prompt(self, search_enabled: bool = False, 
-                            format_instructions: str = "") -> str:
-        """渲染系統提示詞"""
+    """企業級提示詞管理器 - 線程安全實現"""
     
-    def render_react_examples(self) -> str:
-        """渲染 ReAct 思考鏈範例"""
+    def __init__(self, base_dir: Optional[Path] = None, language: str = None):
+        """支援自動路徑偵測和環境變數配置"""
+        
+    def render_system_prompt(self, search_enabled: bool = False, 
+                            format_instructions: str = "", **kwargs) -> str:
+        """動態渲染系統提示詞 - 取代舊的 build_ai_system_prompt"""
+        
+    def render_react_examples(self, **kwargs) -> str:
+        """渲染範例防洩漏機制 - 取代舊的 _get_react_examples"""
+        
+    def clear_cache(self):
+        """熱重載支援 - 清除快取並重新載入配置"""
+        
+    def get_stats(self) -> Dict[str, Any]:
+        """管理器統計和監控資訊"""
 ```
+
+**🚀 管理 API 端點**:
+```bash
+# 熱重載提示詞配置
+POST /api/admin/reload-prompts
+
+# 查看提示詞管理器狀態
+GET /api/admin/prompt-manager/stats
+```
+
+**⚡ 快取和效能優化**:
+- `@lru_cache(maxsize=32)` 快取 YAML 檔案載入
+- 線程安全的配置更新機制
+- 智能模板路徑解析和自動偵測
 
 ### ⚡ 非同步任務管理器 (`async_task_manager.py`)
 
@@ -220,10 +260,11 @@ class AsyncTaskManager:
 
 ### 🔌 API 端點設計 (`main.py`)
 
-**RESTful API 架構**:
+**RESTful API 架構** (最新版本):
 
 | 端點路徑 | 方法 | 功能描述 |
 |---------|------|----------|
+| `/health` | GET | 健康檢查 |
 | `/api/devices` | GET | 取得設備清單 |
 | `/api/device-groups` | GET | 取得設備群組 |
 | `/api/execute` | POST | 單一設備指令執行 |
@@ -232,7 +273,11 @@ class AsyncTaskManager:
 | `/api/batch-execute-async` | POST | 非同步批次執行 |
 | `/api/task/{task_id}` | GET | 查詢任務狀態 |
 | `/api/tasks` | GET | 列出所有任務 |
+| `/api/tasks/{task_id}/cancel` | POST | 取消指定任務 ✨ |
 | `/api/admin/reload-config` | POST | 重載配置檔案 |
+| `/api/admin/reload-prompts` | POST | 重載提示詞配置 ✨ |
+| `/api/admin/prompt-manager/stats` | GET | 提示詞管理器統計 ✨ |
+| `/api/frontend-logs` | POST | 前端日誌收集 ✨ |
 
 **統一錯誤處理**:
 ```python
@@ -259,50 +304,78 @@ async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
 **HTTP 客戶端**:
 - **Axios**: HTTP 請求處理
 
-### 📁 前端檔案結構
+### 📁 精簡化前端檔案結構 (重大重構)
+
+**🧹 簡化成果**: 移除約 800+ 行無用程式碼，提升維護性和效能
 
 ```
 WEB_APP/frontend/src/
-├── App.tsx                   # 主應用程式組件
+├── App.tsx                   # 主應用程式組件 (簡化邏輯)
 ├── main.tsx                  # 應用程式入口點
-├── components/               # React 組件庫
-│   ├── common/              # 通用組件
+├── components/               # 精簡 React 組件庫
+│   ├── common/              # 核心通用組件
 │   │   ├── Button.tsx       # 統一按鈕組件
-│   │   ├── ProgressBar.tsx  # 進度條組件
-│   │   └── StatusDisplay.tsx # 狀態顯示組件
-│   ├── features/            # 功能特定組件
+│   │   └── CompactProgressBar.tsx # 精簡進度條組件 (新增)
+│   ├── features/            # 核心功能組件 (精簡)
 │   │   ├── DeviceSelectionContainer.tsx  # 設備選擇容器
 │   │   ├── CommandInput.tsx              # 指令輸入介面
 │   │   ├── BatchOutputDisplay.tsx        # 批次結果顯示
-│   │   └── BatchProgressIndicator.tsx    # 批次進度指示器
+│   │   ├── BatchResultItem.tsx           # 結果項目組件 (新增)
+│   │   ├── GroupSelector.tsx             # 群組選擇器 (新增)
+│   │   ├── ModeSelector.tsx              # 模式選擇器 (新增)
+│   │   └── MultiDeviceSelector.tsx       # 多設備選擇器 (新增)
 │   ├── layout/              # 版面配置組件
 │   │   ├── Header.tsx       # 頁首組件
 │   │   └── Footer.tsx       # 頁尾組件
-│   └── debug/               # 除錯組件
-│       └── LoggerDashboard.tsx # 日誌控制台
-├── hooks/                   # 自定義 React Hooks
+│   └── index.ts             # 組件匯出 (精簡)
+├── hooks/                   # 自定義 React Hooks (優化)
 │   ├── useDevices.ts        # 設備資料管理
 │   ├── useBatchExecution.ts # 批次執行邏輯
-│   ├── useAsyncTasks.ts     # 非同步任務管理
-│   └── useKeyboardShortcuts.ts # 鍵盤快捷鍵
-├── store/                   # Zustand 狀態管理
-│   ├── appStore.ts          # 主應用程式狀態
-│   └── progressTimer.ts     # 進度計時器
-├── api/                     # API 客戶端
-│   ├── client.ts            # Axios 客戶端配置
+│   ├── useAsyncTasks.ts     # 非同步任務管理 (優化)
+│   ├── useDeviceGroups.ts   # 設備群組管理 (新增)
+│   ├── useKeyboardShortcuts.ts # 鍵盤快捷鍵
+│   └── index.ts             # Hook 匯出
+├── store/                   # 精簡 Zustand 狀態管理
+│   ├── appStore.ts          # 主應用程式狀態 (精簡)
+│   └── index.ts             # Store 匯出
+├── api/                     # API 客戶端 (優化)
+│   ├── client.ts            # Axios 客戶端配置 (增強錯誤處理)
 │   ├── services.ts          # API 服務函數
 │   └── index.ts             # API 匯出
-├── types/                   # TypeScript 型別定義
+├── types/                   # TypeScript 型別定義 (精簡)
 │   ├── api.ts               # API 相關型別
-│   ├── components.ts        # 組件 Props 型別
-│   └── store.ts             # 狀態型別定義
-├── utils/                   # 工具函數
-│   ├── LoggerService.ts     # 前端日誌服務
+│   ├── components.ts        # 組件 Props 型別 (精簡)
+│   ├── store.ts             # 狀態型別定義 (精簡)
+│   └── index.ts             # 型別匯出
+├── utils/                   # 工具函數 (大幅簡化)
+│   ├── SimpleLogger.ts      # 簡化日誌服務 (取代 LoggerService)
+│   ├── queryClient.ts       # React Query 配置 (新增)
 │   └── utils.ts             # 通用工具函數
+├── config/                  # 配置檔案 (新增)
+│   └── api.ts               # API 配置
+├── styles/                  # 樣式檔案
+│   └── index.css            # 主樣式檔案
 └── constants/               # 常數定義
     ├── app.ts               # 應用程式常數
-    └── keyboard.ts          # 鍵盤快捷鍵常數
+    ├── keyboard.ts          # 鍵盤快捷鍵常數
+    └── index.ts             # 常數匯出
 ```
+
+**🗑️ 已移除的冗餘組件**:
+- ~~`ProgressBar.tsx`~~ → 整合為 `CompactProgressBar.tsx`
+- ~~`StatusDisplay.tsx`~~ → 整合到其他組件
+- ~~`BatchProgressIndicator.tsx`~~ → 功能整合
+- ~~`DeviceSelectionModeSwitch.tsx`~~ → 簡化邏輯
+- ~~`DeviceSelector.tsx`~~ → 拆分為專用組件
+- ~~`OutputDisplay.tsx`~~ → 整合到 `BatchOutputDisplay.tsx`
+- ~~`LoggerDashboard.tsx`~~ → 移除除錯介面
+- ~~`LoggerExample.tsx`~~ → 移除範例組件
+
+**🗃️ 已移除的工具和狀態**:
+- ~~`LoggerService.ts`~~ → 簡化為 `SimpleLogger.ts`
+- ~~`useLogger.ts`~~ → 功能整合到其他 hooks
+- ~~`progressTimer.ts`~~ → 邏輯整合到 appStore
+- ~~`envTest.ts`~~ → 移除環境測試工具
 
 ### 🎮 核心組件說明
 
@@ -455,25 +528,86 @@ PROMPT_TEMPLATE_DIR=/path/to/templates/prompts
 }
 ```
 
-### 🔒 安全配置 (`config/security.json`)
+### 🔒 企業級安全配置 (`config/security.json`) ✨ 新增
+
+**🛡️ 完整的安全規則配置系統**:
 
 ```json
 {
-  "allowed_commands": [
-    "show version",
-    "show interface",
-    "show ip route",
-    "show environment"
-  ],
-  "blocked_patterns": [
-    "configure",
-    "write",
-    "delete",
-    "shutdown",
-    "reload"
-  ],
-  "security_level": "strict"
+  "version": "1.0.0",
+  "last_updated": "2025-08-02",
+  "command_validation": {
+    "allowed_command_prefixes": [
+      "show",
+      "ping", 
+      "traceroute",
+      "display",
+      "get"
+    ],
+    "dangerous_keywords": [
+      "configure",
+      "write",
+      "delete",
+      "shutdown",
+      "reload",
+      "copy",
+      "erase",
+      "format",
+      "reset",
+      "clear ip route",
+      "clear arp",
+      "no "
+    ],
+    "max_command_length": 200,
+    "enable_strict_validation": true
+  },
+  "description": {
+    "allowed_command_prefixes": "允許執行的指令前綴清單，只有以這些關鍵字開頭的指令才會被執行",
+    "dangerous_keywords": "危險關鍵字清單，包含這些關鍵字的指令將被阻擋",
+    "max_command_length": "指令最大長度限制，超過此長度的指令將被拒絕",
+    "enable_strict_validation": "是否啟用嚴格驗證模式"
+  },
+  "audit": {
+    "log_all_validations": true,
+    "log_blocked_commands": true,
+    "alert_on_security_violations": true
+  }
 }
+```
+
+**🔧 統一配置管理器 (`config_manager.py`)** ✨ 新增:
+
+```python
+class ConfigManager:
+    """統一的配置檔案管理器"""
+    
+    def __init__(self):
+        self.config_dir = Path(__file__).parent / "config"
+        self._configs = {}
+        self._load_all_configs()
+    
+    def get_security_config(self) -> Dict[str, Any]:
+        """取得安全配置"""
+        return self._configs.get("security", {})
+    
+    def get_devices_config(self) -> Dict[str, Any]:
+        """取得設備配置"""
+        return self._configs.get("devices", {})
+    
+    def reload_config(self, config_name: str):
+        """熱重載指定配置檔案"""
+        
+    def validate_command_security(self, command: str) -> Tuple[bool, str]:
+        """基於配置檔案驗證指令安全性"""
+```
+
+**🔄 熱重載 API**:
+```bash
+# 重載所有配置檔案
+POST /api/admin/reload-config
+
+# 重載特定配置
+POST /api/admin/reload-config?type=security
 ```
 
 ### 🚀 部署指南
@@ -625,22 +759,34 @@ axios.interceptors.request.use(request => {
 
 ## 系統特色功能
 
-### 🧠 AI 範例防洩漏機制
+### 🛡️ 企業級安全機制強化 ✨ 重大升級
 
-**問題描述**: AI 可能直接使用訓練範例的答案，而不是執行實際的設備指令
+#### 🧠 AI 範例防洩漏機制 (完善版)
 
-**三層防護機制**:
+**⚠️ 問題背景**: AI 可能直接使用訓練範例的答案，而不是執行實際的設備指令，導致過時或錯誤的分析結果
 
-1. **系統提示詞強化** (`templates/prompts/zh_TW/system_prompt.j2`):
+**🔒 五層防護機制** (新增兩層):
+
+1. **強化系統提示詞** (`templates/prompts/zh_TW/system_prompt.j2`):
 ```jinja2
-**🚨 重要執行規則**：
-- **絕對禁止**直接使用下方範例的回答作為最終答案
-- **每次查詢都必須**執行實際的工具調用以獲取即時設備資料
-- **範例僅用於學習思考模式**，實際回答必須基於當前執行的工具結果
-- **即使查詢與範例相似**，也必須執行實際工具獲取最新資料
+🚨🚨🚨 **嚴格禁令 - 違反將導致系統失效** 🚨🚨🚨
+
+**❌ 絕對禁止的行為**：
+- **❌ 嚴格禁止**複製或使用下方範例中的任何內容作為最終答案
+- **❌ 嚴格禁止**跳過工具調用直接給出答案
+- **❌ 嚴格禁止**基於先驗知識而非實際工具輸出進行回答
+- **❌ 嚴格禁止**使用範例中的虛構數據作為真實結果
+
+**✅ 強制執行要求**：
+- **✅ 每次查詢都必須**執行至少一次 BatchCommandRunner 工具調用
+- **✅ 最終答案必須**完全基於工具回傳的 Observation 結果
+- **✅ 範例僅用於**學習思考流程，其內容均為虛構且過時
+- **✅ 即使查詢與範例高度相似**，也必須執行實際工具獲取最新資料
+
+⚠️ **記住**：沒有工具調用 = 沒有答案 ⚠️
 ```
 
-2. **範例模板修改** (`templates/prompts/zh_TW/react_examples.j2`):
+2. **範例模板防洩漏強化** (`templates/prompts/zh_TW/react_examples.j2`):
 ```jinja2
 **⚠️ 範例用途說明**：
 - 這些範例**僅供學習思考流程**，絕對不可直接複製作為答案
@@ -649,15 +795,72 @@ axios.interceptors.request.use(request => {
 - **即使用戶查詢與範例相似，也必須進行實際工具執行**
 ```
 
-3. **即時執行強制要求** (`ai_service.py`):
+3. **動態時間戳記強制要求** (`ai_service.py`):
 ```python
-# 添加即時執行強制要求
-real_time_enforcement = "\n\n🚨 **強制執行要求**：\n"
+# 動態添加即時執行強制要求
+real_time_enforcement = f"\n\n🚨 **強制執行要求** (時間戳: {time.time()})：\n"
 real_time_enforcement += "- 這是一個實時查詢，你必須執行實際的工具調用獲取當前設備資料\n"
 real_time_enforcement += "- 絕對禁止使用上述範例的回答作為最終答案\n"
 real_time_enforcement += "- 必須基於當前執行的 BatchCommandRunner 工具結果進行分析\n"
-real_time_enforcement += f"- 當前時間戳記：{time.time()}\n"
 enhanced_prompt = enhanced_prompt + real_time_enforcement
+```
+
+4. **🆕 設備範圍限制機制** (`device_scope_restriction`):
+```python
+def restrict_device_scope(self, device_ips: List[str], user_selected: List[str]) -> List[str]:
+    """確保 AI 只能操作用戶選擇的設備，防止越權操作"""
+    if not user_selected:
+        raise SecurityError("未選擇任何設備，AI 無法執行操作")
+    
+    # 確保 AI 請求的設備都在用戶選擇範圍內
+    unauthorized_devices = set(device_ips) - set(user_selected)
+    if unauthorized_devices:
+        raise SecurityError(f"AI 嘗試訪問未授權設備: {unauthorized_devices}")
+    
+    return device_ips
+```
+
+5. **🆕 工具執行驗證機制**:
+```python
+class ToolExecutionValidator:
+    """驗證 AI 是否確實執行了工具調用"""
+    
+    @staticmethod
+    def validate_ai_response(response: str, tool_execution_count: int) -> bool:
+        """驗證 AI 回應是否基於實際工具執行"""
+        if tool_execution_count == 0:
+            raise SecurityError("AI 未執行任何工具調用，回應無效")
+        
+        # 檢查回應中是否包含工具執行的證據
+        evidence_keywords = ["Observation:", "Action:", "工具執行結果"]
+        has_evidence = any(keyword in response for keyword in evidence_keywords)
+        
+        if not has_evidence:
+            logger.warning("AI 回應缺乏工具執行證據")
+            
+        return has_evidence
+```
+
+#### 🔐 設備訪問權限控制
+
+**零信任安全模型**:
+```python
+def validate_device_access_permission(user_role: str, device_ip: str, operation: str) -> bool:
+    """設備訪問權限驗證"""
+    security_config = get_security_config()
+    
+    # 檢查用戶角色權限
+    if user_role not in security_config.get("allowed_roles", []):
+        return False
+    
+    # 檢查設備訪問權限
+    allowed_devices = security_config.get("user_device_access", {}).get(user_role, [])
+    if device_ip not in allowed_devices and "*" not in allowed_devices:
+        return False
+    
+    # 檢查操作權限
+    allowed_operations = security_config.get("role_operations", {}).get(user_role, [])
+    return operation in allowed_operations
 ```
 
 ### ⚡ 非同步任務系統
@@ -1166,6 +1369,36 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ---
 
-*📝 文件版本: v1.0.0*  
-*🔄 最後更新: 2025-08-02*  
+---
+
+## 📈 版本更新記錄
+
+### 🚀 v2.0.0 - 2025-08-03 (當前版本)
+
+**🔥 重大架構升級**:
+- ✅ **企業級提示詞管理系統**: 完整 Jinja2 + YAML 配置架構
+- ✅ **五層 AI 範例防洩漏機制**: 防止 AI 直接使用訓練範例
+- ✅ **前端架構大幅簡化**: 移除 800+ 行無用程式碼
+- ✅ **設備範圍限制機制**: 防止 AI 越權操作設備
+- ✅ **企業級安全配置**: 新增 security.json 配置系統
+- ✅ **統一配置管理器**: 支援熱重載的配置管理
+- ✅ **簡化日誌系統**: 從複雜 LoggerService 簡化為 SimpleLogger
+
+**📊 程式碼品質提升**:
+- 程式碼行數減少: -1,220 行
+- 新增功能: +1,745 行
+- 淨改善: 提升維護性和安全性
+
+### 📜 v1.0.0 - 2025-08-02
+
+**初始架構**:
+- FastAPI 後端 + React 前端基礎架構
+- AI 雙引擎支援 (Gemini + Claude)
+- 基礎網路設備自動化
+- 簡單提示詞管理
+
+---
+
+*📝 文件版本: v2.0.0*  
+*🔄 最後更新: 2025-08-03*  
 *👤 維護者: Claude AI Assistant*
