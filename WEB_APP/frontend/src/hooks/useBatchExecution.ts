@@ -37,7 +37,7 @@ export const useBatchExecution = () => {
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 創建進度回調處理器
-  const createProgressHandler = useCallback((totalDevices: number) => {
+  const createProgressHandler = useCallback(() => {
     return createProgressCallback((update) => {
       // 只更新階段和訊息，不重新計算 completedDevices
       // 這樣可以避免與 simulateProgress 的數值更新衝突
@@ -132,7 +132,7 @@ export const useBatchExecution = () => {
       showBatchProgress(variables.devices.length);
       
       // 創建進度處理器
-      const progress = createProgressHandler(variables.devices.length);
+      const progress = createProgressHandler();
       
       // 第一階段：提交任務
       progress.updateStage(PROGRESS_STAGE.SUBMITTING);
@@ -196,7 +196,7 @@ export const useBatchExecution = () => {
         updateBatchProgress(response.summary.total);
         
         // 創建進度處理器並顯示完成階段
-        const progress = createProgressHandler(response.summary.total);
+        const progress = createProgressHandler();
         progress.updateStage(PROGRESS_STAGE.COMPLETED);
         
         const { successful, failed, total } = response.summary;
@@ -221,7 +221,7 @@ export const useBatchExecution = () => {
         }
         
         // 創建進度處理器來顯示失敗狀態
-        const progress = createProgressHandler(1); // 使用 1 作為默認值
+        const progress = createProgressHandler();
         
         // 立即重置執行狀態，確保按鈕狀態恢復
         isExecutingRef.current = false;

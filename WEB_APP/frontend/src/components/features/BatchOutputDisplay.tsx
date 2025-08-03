@@ -9,9 +9,7 @@ import Button from '@/components/common/Button';
 
 const BatchOutputDisplay = ({ 
   results, 
-  onClear,
-  statusText,
-  statusClassName = 'status-hint'
+  onClear
 }: BatchOutputDisplayProps) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');

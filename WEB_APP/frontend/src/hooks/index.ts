@@ -4,4 +4,3 @@ export * from './useDeviceGroups';
 export * from './useBatchExecution';
 export * from './useKeyboardShortcuts';
 export * from './useAsyncTasks';
-export * from './useLogger';

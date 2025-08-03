@@ -13,7 +13,6 @@ import {
   CommandInput,
   BatchOutputDisplay,
 } from '@/components';
-import LoggerDashboard from '@/components/debug/LoggerDashboard';
 import { DEFAULT_TEXT } from '@/constants';
 
 function App() {
@@ -181,9 +180,6 @@ function App() {
 
         <Footer />
       </div>
-      
-      {/* 開發環境日誌監控面板 */}
-      <LoggerDashboard />
     </div>
   );
 }

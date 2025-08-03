@@ -461,6 +461,9 @@ class FrontendLogHandler:
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
                 frontend_logger.addHandler(console_handler)
+            
+            # 防止日誌向上傳播到根 logger，避免出現在主應用程式日誌中
+            frontend_logger.propagate = False
         
         return frontend_logger
     
@@ -488,6 +491,9 @@ class FrontendLogHandler:
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
                 error_logger.addHandler(console_handler)
+            
+            # 防止日誌向上傳播到根 logger，避免出現在主應用程式日誌中
+            error_logger.propagate = False
         
         return error_logger
     

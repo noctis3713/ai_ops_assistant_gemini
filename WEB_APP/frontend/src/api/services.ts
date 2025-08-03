@@ -25,7 +25,8 @@ import {
   type TaskType
 } from '@/types';
 
-import { type LogEntry } from '@/utils/LoggerService';
+// 匯入統一的日誌條目介面，取代原本的重複定義
+import type { LogEntry } from '@/utils/SimpleLogger';
 
 /**
  * 獲取設備列表

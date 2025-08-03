@@ -2,7 +2,7 @@
  * API 客戶端配置
  * 提供統一的 HTTP 客戶端和錯誤處理
  */
-import axios, { type AxiosResponse, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosResponse, type AxiosError } from 'axios';
 import { type APIError } from '@/types';
 
 // 擴展 axios 配置，添加 metadata 屬性
@@ -19,7 +19,7 @@ import {
   RETRYABLE_STATUS_CODES,
   REQUEST_HEADERS 
 } from '@/config/api';
-import { logInfo, logWarn, logError, logPerformance, LogCategory } from '@/utils/LoggerService';
+import { logApi, logError } from '@/utils/SimpleLogger';
 
 // 建立 axios 實例
 export const apiClient = axios.create({
@@ -34,36 +34,17 @@ export const apiClient = axios.create({
 // 請求攔截器
 apiClient.interceptors.request.use(
   (config) => {
-    // 記錄 API 請求日誌
-    const method = config.method?.toUpperCase() || 'UNKNOWN';
-    const url = config.url || 'unknown';
-    
-    logInfo(
-      LogCategory.API,
-      `API Request: ${method} ${url}`,
-      {
-        method,
-        url,
-        timeout: config.timeout,
-        baseURL: config.baseURL,
-      }
-    );
-    
     // 為請求添加時間戳用於計算響應時間
     config.metadata = { startTime: performance.now() };
     
     return config;
   },
   (error) => {
-    logError(
-      LogCategory.API,
-      'API Request Error',
-      {
-        message: error.message,
-        code: error.code,
-      },
-      error
-    );
+    // 記錄請求錯誤到後端
+    logError('API Request Error', {
+      message: error.message,
+      code: error.code,
+    });
     return Promise.reject(error);
   }
 );
@@ -71,51 +52,40 @@ apiClient.interceptors.request.use(
 // 回應攔截器
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // 計算響應時間
-    const startTime = response.config.metadata?.startTime;
-    const duration = startTime ? performance.now() - startTime : 0;
-    
+    // 記錄成功的 API 回應（僅錯誤或重要請求）
     const method = response.config.method?.toUpperCase() || 'UNKNOWN';
     const url = response.config.url || 'unknown';
     const status = response.status;
     
-    // 記錄成功響應
-    logInfo(
-      LogCategory.API,
-      `API Response: ${status} ${method} ${url} (${Math.round(duration)}ms)`,
-      {
+    // 只記錄特定的重要 API 或錯誤狀態
+    if (url.includes('/ai-') || url.includes('batch-execute') || status >= 400) {
+      const startTime = response.config.metadata?.startTime;
+      const duration = startTime ? Math.round(performance.now() - startTime) : 0;
+      
+      logApi(`API Response: ${status} ${method} ${url}`, {
         method,
         url,
         status,
-        duration: Math.round(duration),
-        dataSize: JSON.stringify(response.data).length,
-      }
-    );
-    
-    // 記錄響應時間性能
-    logPerformance(`API ${method} ${url}`, duration, {
-      status,
-      endpoint: url,
-    });
+        duration,
+      });
+    }
     
     return response;
   },
   (error: AxiosError) => {
-    // 計算響應時間（即使失敗也記錄）
-    const startTime = error.config?.metadata?.startTime;
-    const duration = startTime ? performance.now() - startTime : 0;
-    
+    // 記錄 API 錯誤到後端
     const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
     const url = error.config?.url || 'unknown';
     const status = error.response?.status || 0;
+    const startTime = error.config?.metadata?.startTime;
+    const duration = startTime ? Math.round(performance.now() - startTime) : 0;
     
-    // 詳細錯誤日誌記錄
     const errorDetails = {
       method,
       url,
       status,
       statusText: error.response?.statusText,
-      duration: Math.round(duration),
+      duration,
       errorCode: error.code,
       message: error.message,
     };
@@ -123,49 +93,21 @@ apiClient.interceptors.response.use(
     // 根據錯誤類型記錄不同級別的日誌
     if (status >= 500) {
       // 伺服器錯誤
-      logError(
-        LogCategory.API,
-        `API Server Error: ${status} ${method} ${url}`,
-        errorDetails,
-        error
-      );
+      logError(`API Server Error: ${status} ${method} ${url}`, errorDetails);
     } else if (status >= 400) {
       // 客戶端錯誤
-      logWarn(
-        LogCategory.API,
-        `API Client Error: ${status} ${method} ${url}`,
-        errorDetails
-      );
+      logError(`API Client Error: ${status} ${method} ${url}`, errorDetails);
     } else if (status === 0) {
       // 網路錯誤
-      logError(
-        LogCategory.NETWORK,
-        `Network Error: ${method} ${url}`,
-        errorDetails,
-        error
-      );
+      logError(`Network Error: ${method} ${url}`, errorDetails);
     }
     
     // 特別記錄 AI 相關錯誤
     if (url.includes('/ai-') || url.includes('ai-query') || status === 429) {
-      logError(
-        LogCategory.API,
-        `AI Service Error: ${status} ${url}`,
-        {
-          ...errorDetails,
-          isAiService: true,
-          rateLimited: status === 429,
-        },
-        error
-      );
-    }
-    
-    // 記錄失敗請求的性能（用於分析超時等問題）
-    if (duration > 0) {
-      logPerformance(`API ${method} ${url} (FAILED)`, duration, {
-        status,
-        endpoint: url,
-        error: true,
+      logError(`AI Service Error: ${status} ${url}`, {
+        ...errorDetails,
+        isAiService: true,
+        rateLimited: status === 429,
       });
     }
     
@@ -235,17 +177,7 @@ export const createRetryableRequest = <T>(
               API_CONFIG.RETRY.MAX_DELAY
             );
             
-            logWarn(
-              LogCategory.API,
-              `Request retry: ${retryCount + 1}/${maxRetries} in ${delay}ms`,
-              {
-                retryCount: retryCount + 1,
-                maxRetries,
-                delay,
-                status: error.status,
-                statusText: error.statusText,
-              }
-            );
+            // 重試延遲
             
             setTimeout(() => attempt(retryCount + 1), delay);
           } else {

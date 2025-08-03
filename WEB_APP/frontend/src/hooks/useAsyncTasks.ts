@@ -7,8 +7,7 @@ import {
   batchExecuteAsync, 
   getTaskStatus, 
   cancelTask,
-  TaskPoller,
-  type PollMeta
+  TaskPoller
 } from '@/api';
 import { useAppStore } from '@/store';
 import { 
@@ -16,7 +15,7 @@ import {
   type TaskResponse, 
   type BatchExecutionResponse 
 } from '@/types';
-import { useLogger } from './useLogger';
+import { logError, logSystem, logUser } from '@/utils/SimpleLogger';
 import { 
   PROGRESS_STAGE, 
   PROGRESS_STAGE_TEXT, 
@@ -101,11 +100,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     autoStartPolling = true,
   } = options;
 
-  // 日誌記錄
-  const logger = useLogger({ 
-    componentName: 'useAsyncTasks',
-    enablePerformanceTracking: true,
-  });
+  // 日誌記錄 - 已簡化，移除 useLogger
 
   // 狀態管理
   const [isExecuting, setIsExecuting] = useState(false);
@@ -213,7 +208,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       // 更新完成訊息
       progress.updateMessage(completionMessage);
       
-      logger.info('Task completed successfully', {
+      logSystem('Task completed successfully', {
         taskId: task.task_id,
         resultCount: results.length,
         successful,
@@ -227,7 +222,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       setStatus(failureMessage, 'error');
       progress.updateMessage(failureMessage);
       
-      logger.error('Task failed', {
+      logError('Task failed', {
         taskId: task.task_id,
         error: task.error,
       });
@@ -238,17 +233,12 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       const cancelMessage = '任務已被取消';
       setStatus(cancelMessage, 'warning');
       progress.updateMessage(cancelMessage);
-      
-      logger.warn('Task cancelled', {
-        taskId: task.task_id,
-      });
     }
   }, [
     createProgressHandler,
     setBatchResults,
     updateBatchProgress,
     setStatus,
-    logger,
   ]);
 
   /**
@@ -267,17 +257,13 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setStatus(errorMessage, 'error');
     
     // 使用日誌系統記錄錯誤
-    logger.error(
-      `${context} failed`,
-      {
-        errorMessage,
-        context,
-        isPolling: isPolling,
-        currentTaskId: currentTask?.task_id,
-      },
-      error instanceof Error ? error : undefined
-    );
-  }, [setStatus, logger, isPolling, currentTask?.task_id]);
+    logError(`${context} failed`, {
+      errorMessage,
+      context,
+      isPolling: isPolling,
+      currentTaskId: currentTask?.task_id,
+    });
+  }, [setStatus, isPolling, currentTask?.task_id]);
 
   /**
    * 輪詢任務狀態（重構版，使用服務層輪詢函數）
@@ -285,7 +271,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   const pollTask = useCallback(async (taskId: string) => {
     if (!taskId) return;
 
-    logger.info('Starting task polling using enhanced service layer', { taskId, options });
     
     setIsPolling(true);
     setTaskPollingActive(true);
@@ -298,17 +283,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       // 使用增強版輪詢函數
       await taskPoller.pollTask(taskId, {
         // 進度更新回調
-        onProgress: (task: TaskResponse, meta: PollMeta) => {
+        onProgress: (task: TaskResponse) => {
           setCurrentTask(task);
           updateTaskProgress(taskId, task.progress.percentage, task.progress.current_stage);
-          
-          logger.debug('Task progress update', {
-            taskId,
-            status: task.status,
-            progress: task.progress.percentage,
-            stage: task.progress.current_stage,
-            pollCount: meta.pollCount,
-          });
           
           // 更新批次進度
           if (task.params?.devices?.length) {
@@ -319,40 +296,27 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         },
         
         // 階段變化回調
-        onStageChange: (stage: ProgressStage, message: string, task: TaskResponse) => {
+        onStageChange: (stage: ProgressStage, _message: string, task: TaskResponse) => {
           const deviceCount = task.params?.devices?.length || 1;
           const progressHandler = createProgressHandler(deviceCount);
           
           // 直接使用服務層階段（現在類型統一）
           progressHandler.updateStage(stage);
-          
-          logger.debug('Task stage changed', {
-            taskId,
-            stage,
-            message,
-          });
         },
         
         // 錯誤處理回調
         onError: (error: Error, context: string) => {
-          logger.error('Task polling error', {
+          logError('Task polling error', {
             taskId,
             context,
             error: error.message,
-          }, error);
+          });
           
           handleError(error, `輪詢失敗: ${context}`);
         },
         
         // 任務完成回調
-        onComplete: (task: TaskResponse, meta: PollMeta) => {
-          logger.info('Task polling completed', {
-            taskId,
-            status: task.status,
-            totalDuration: meta.duration,
-            pollCount: meta.pollCount,
-            avgPollInterval: meta.duration / meta.pollCount,
-          });
+        onComplete: (task: TaskResponse) => {
           
           // 處理最終結果
           handleFinalTaskResult(task);
@@ -368,10 +332,10 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       });
       
     } catch (error) {
-      logger.error('Task polling failed', {
+      logError('Task polling failed', {
         taskId,
         error: error instanceof Error ? error.message : String(error),
-      }, error instanceof Error ? error : undefined);
+      });
       
       handleError(error, '輪詢任務狀態失敗');
       cleanup();
@@ -386,7 +350,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     updateBatchProgress,
     handleError,
     cleanup,
-    logger,
     createProgressHandler,
     handleFinalTaskResult,
     options,
@@ -396,11 +359,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
    * 建立並執行非同步批次任務
    */
   const executeAsync = useCallback(async (request: BatchExecuteRequest): Promise<string> => {
-    logger.info('Executing async task', {
-      deviceCount: request.devices.length,
-      mode: request.mode,
-      autoStartPolling,
-    });
 
     setError(null);
     setIsExecuting(true);
@@ -428,7 +386,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       // 第二階段：任務已提交
       progress.updateStage(PROGRESS_STAGE.SUBMITTED);
       
-      logger.info('Async task created', {
+      logSystem('Async task created', {
         taskId: response.task_id,
         devices: request.devices,
         mode: request.mode,
@@ -436,7 +394,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       // 如果啟用自動輪詢，開始輪詢
       if (autoStartPolling) {
-        logger.debug('Starting auto polling', { taskId: response.task_id });
         
         // 在開始輪詢前，先顯示連接階段
         setTimeout(() => {
@@ -448,22 +405,16 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         await pollTask(response.task_id);
       }
 
-      const duration = performance.now() - startTime;
-      logger.logPerformance('executeAsync', duration, {
-        taskId: response.task_id,
-        deviceCount: request.devices.length,
-      });
-
       return response.task_id;
 
     } catch (error) {
       const duration = performance.now() - startTime;
-      logger.error('Failed to execute async task', {
+      logError('Failed to execute async task', {
         duration,
         deviceCount: request.devices.length,
         mode: request.mode,
         error: error instanceof Error ? error.message : String(error),
-      }, error instanceof Error ? error : undefined);
+      });
 
       // 顯示失敗階段
       progress.updateStage(PROGRESS_STAGE.FAILED);
@@ -492,18 +443,12 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     pollTask,
     handleError,
     isExecuting,
-    logger,
   ]);
 
   /**
    * 建立非同步任務並等待完成
    */
   const executeAsyncAndWait = useCallback(async (request: BatchExecuteRequest): Promise<BatchExecutionResponse> => {
-    logger.info('Executing async task and waiting', {
-      deviceCount: request.devices.length,
-      mode: request.mode,
-      timeout,
-    });
 
     setError(null);
     setIsExecuting(true);
@@ -525,22 +470,11 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       // 先建立任務
       const taskCreation = await batchExecuteAsync(request);
-      logger.info('Async task created for executeAndWait', {
-        taskId: taskCreation.task_id,
-        devices: request.devices,
-        mode: request.mode,
-      });
       
       // 使用增強版輪詢器等待完成
       const completedTask = await taskPoller.pollTask(taskCreation.task_id, {
         // 進度更新回調
-        onProgress: (task: TaskResponse, meta: PollMeta) => {
-          logger.debug('Task progress update in executeAndWait', {
-            taskId: task.task_id,
-            progress: task.progress.percentage,
-            stage: task.progress.current_stage,
-            pollCount: meta.pollCount,
-          });
+        onProgress: (task: TaskResponse) => {
           
           setCurrentTask(task);
           updateTaskProgress(task.task_id, task.progress.percentage, task.progress.current_stage);
@@ -552,11 +486,11 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         
         // 錯誤處理回調
         onError: (error: Error, context: string) => {
-          logger.error('Task polling error in executeAndWait', {
+          logError('Task polling error in executeAndWait', {
             taskId: taskCreation.task_id,
             context,
             error: error.message,
-          }, error);
+          });
         },
         
         pollInterval,
@@ -592,29 +526,24 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         failed > 0 ? 'error' : 'success'
       );
       
-      logger.info('Async task completed successfully', {
+      logSystem('Async task completed successfully', {
         deviceCount: request.devices.length,
         resultCount: result.results.length,
         duration,
         avgTimePerDevice: duration / request.devices.length,
       });
 
-      logger.logPerformance('executeAsyncAndWait', duration, {
-        deviceCount: request.devices.length,
-        resultCount: result.results.length,
-      });
-      
       return result;
 
     } catch (error) {
       const duration = performance.now() - startTime;
       
-      logger.error('Failed to execute async task and wait', {
+      logError('Failed to execute async task and wait', {
         duration,
         deviceCount: request.devices.length,
         mode: request.mode,
         error: error instanceof Error ? error.message : String(error),
-      }, error instanceof Error ? error : undefined);
+      });
 
       handleError(error, '執行非同步任務失敗');
       throw error;
@@ -639,39 +568,33 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     maxPollInterval,
     timeout,
     handleError,
-    logger,
   ]);
 
   /**
    * 開始輪詢指定任務
    */
   const startPolling = useCallback((taskId: string) => {
-    logger.info('Manually starting polling', { taskId });
     cleanup(); // 先清理現有輪詢
     pollTask(taskId);
-  }, [cleanup, pollTask, logger]);
+  }, [cleanup, pollTask]);
 
   /**
    * 停止當前輪詢
    */
   const stopPolling = useCallback(() => {
-    logger.info('Manually stopping polling', { 
-      wasPolling: isPolling,
-      currentTaskId: currentTask?.task_id 
-    });
     cleanup();
-  }, [cleanup, logger, isPolling, currentTask?.task_id]);
+  }, [cleanup, isPolling, currentTask?.task_id]);
 
   /**
    * 取消當前任務
    */
   const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
     if (!currentTask) {
-      logger.warn('Attempted to cancel task but no current task found');
+      logError('Attempted to cancel task but no current task found');
       return false;
     }
 
-    logger.info('Cancelling current task', {
+    logUser('Cancelling current task', {
       taskId: currentTask.task_id,
       status: currentTask.status,
     });
@@ -681,49 +604,42 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       setStatus('任務已取消', 'warning');
       cleanup();
       
-      logger.info('Task cancelled successfully', {
+      logSystem('Task cancelled successfully', {
         taskId: currentTask.task_id,
       });
       
       return true;
     } catch (error) {
-      logger.error('Failed to cancel task', {
+      logError('Failed to cancel task', {
         taskId: currentTask.task_id,
         error: error instanceof Error ? error.message : String(error),
-      }, error instanceof Error ? error : undefined);
+      });
       
       handleError(error, '取消任務失敗');
       return false;
     }
-  }, [currentTask, setStatus, handleError, cleanup, logger]);
+  }, [currentTask, setStatus, handleError, cleanup]);
 
   /**
    * 手動查詢任務狀態
    */
   const queryTaskStatus = useCallback(async (taskId: string): Promise<TaskResponse> => {
-    logger.debug('Querying task status', { taskId });
 
     try {
       const task = await getTaskStatus(taskId);
       setCurrentTask(task);
       
-      logger.debug('Task status retrieved', {
-        taskId,
-        status: task.status,
-        progress: task.progress.percentage,
-      });
-      
       return task;
     } catch (error) {
-      logger.error('Failed to query task status', {
+      logError('Failed to query task status', {
         taskId,
         error: error instanceof Error ? error.message : String(error),
-      }, error instanceof Error ? error : undefined);
+      });
       
       handleError(error, '查詢任務狀態失敗');
       throw error;
     }
-  }, [setCurrentTask, handleError, logger]);
+  }, [setCurrentTask, handleError]);
 
   return {
     executeAsync,
