@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的完整專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-04 (v2.2.0 - 企業級架構優化核心完成)  
+> 📅 **最後更新**: 2025-08-04 (v2.2.0 - 企業級架構優化完全統一)  
 > 🔄 **維護頻率**: 隨專案重大更新同步修改
 
 ---
@@ -163,10 +163,11 @@ class AIService:
 - **Fail Fast 機制**: 啟動時即驗證配置，快速發現問題
 - **FastAPI 依賴注入**: 原生整合 FastAPI 的依賴注入系統
 
-**🔄 整合進度** (v2.2.0 狀態):
-- ✅ **已完成整合**: `main.py`, `ai_service.py`, `network_tools.py`
-- 🚧 **進行中**: `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py`
-- 📋 **混合模式**: 核心模組使用 Settings，工具模組仍使用 `os.getenv()` (Phase 1 後續任務)
+**🔄 整合進度** (v2.2.0 完整統一):
+- ✅ **完全整合完成**: 所有7個核心模組已完成 Pydantic Settings 整合
+  - `main.py`, `ai_service.py`, `network_tools.py` (核心模組)
+  - `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py` (工具模組)
+- 🎯 **統一架構**: 徹底移除 `os.getenv()` 調用，實現完全型別安全的配置管理
 
 **關鍵類別**:
 ```python
@@ -1522,32 +1523,31 @@ export AI_PROVIDER=gemini  # 允許的供應商值
 cat .env | grep -E "(MAX_CONNECTIONS|AI_PROVIDER|ENABLE_)"
 ```
 
-**5.1 混合架構狀態問題** ✨ v2.2.0 新增
+**5.1 統一架構完成驗證** ✨ v2.2.0 完成
 
-*症狀*: 部分配置使用 Settings，部分仍使用 os.getenv()，導致配置不一致
+*狀態*: 所有模組已完成 Pydantic Settings 整合，架構完全統一
 
-*根本原因*:
-- v2.2.0 處於混合架構狀態：核心模組使用 Settings，工具模組使用 os.getenv()
-- `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py` 尚未完成整合
-
-*診斷方案*:
+*驗證方案*:
 ```bash
-# 檢查哪些檔案仍使用 os.getenv()
-grep -r "os\.getenv" WEB_APP/backend/ --include="*.py"
+# 驗證所有檔案已使用 Settings（應該找到7個檔案）
+grep -r "from core\.settings import" WEB_APP/backend/ --include="*.py"
 
-# 檢查哪些檔案已使用 Settings
-grep -r "from core\.settings import\|settings\." WEB_APP/backend/ --include="*.py"
+# 確認已移除所有 os.getenv() 調用（除了向後相容輔助函數）
+grep -r "os\.getenv" WEB_APP/backend/ --include="*.py" --exclude="*settings.py"
 ```
 
-*混合模式運作策略*:
+*統一架構優勢*:
 ```python
-# 核心模組使用 Settings
+# 全部模組統一使用 Settings，享受型別安全和驗證
 from core.settings import settings
-max_connections = settings.MAX_CONNECTIONS  # 型別安全
 
-# 工具模組仍使用 os.getenv() (Phase 1 待完成)
-import os
-log_level = os.getenv("LOG_LEVEL", "INFO")  # 字串型別
+# 自動型別轉換和驗證
+max_connections = settings.MAX_CONNECTIONS  # int，已驗證
+log_level = settings.LOG_LEVEL  # str，已驗證格式
+api_key = settings.get_ai_api_key()  # Optional[str]，智能判斷
+
+# Fail Fast 機制：配置錯誤在啟動時即被發現
+# 例如：AI_PROVIDER=invalid 會在 Settings 載入時拋出 ValidationError
 ```
 
 **6. 全域異常處理系統問題** ✨ v2.2.0 新增
@@ -1754,25 +1754,26 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ### 🏢 v2.2.0 - 2025-08-04 (當前版本)
 
-**🎯 企業級架構優化 - 核心模組完成**：
-- ✅ **Pydantic Settings 配置管理系統**: 核心模組實施型別安全的環境變數管理，60+ 個完整配置項目
+**🎯 企業級架構優化 - 完全統一架構達成**：
+- ✅ **Pydantic Settings 配置管理系統**: 全部7個模組完成統一整合，60+ 個完整配置項目
 - ✅ **全域異常處理架構**: 新增 16 個服務層異常類別，三個全域異常處理器
 - ✅ **統一依賴注入機制**: 在 main.py 中完整整合 FastAPI 依賴注入模式
-- 🚧 **程式碼架構重構**: 核心模組完成 Settings 整合，工具模組進行中 (混合模式)
+- ✅ **程式碼架構重構**: 核心+工具模組全面完成 Settings 整合，徹底移除 os.getenv()
 - ✅ **錯誤處理標準化**: 自動異常到 HTTP 回應映射，提升 API 回應一致性
 
 **📊 技術改進統計**：
 - 新增核心模組: `core/settings.py`, `core/exceptions.py` 
 - 主要檔案重構: `main.py` (+126), `ai_service.py` (+33), `network_tools.py` (+53)
-- 總變更統計: +212 行新增功能, -64 行程式碼優化
-- 架構狀態: 核心模組達到企業級標準，工具模組整合進行中
+- 工具模組完成整合: `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py`
+- 總變更統計: +280 行新增功能, -95 行程式碼優化（含工具模組整合）
+- 架構狀態: 全部模組達到企業級標準，完全統一配置管理
 
 **🔧 核心改進項目**：
-- **型別安全**: 核心模組完整 Pydantic 模型驗證和自動型別轉換
-- **Fail Fast 機制**: 啟動時即驗證核心配置，快速發現問題
+- **型別安全**: 全部模組完整 Pydantic 模型驗證和自動型別轉換
+- **Fail Fast 機制**: 啟動時即驗證全域配置，快速發現問題
 - **統一異常處理**: BaseResponse + timestamp 格式，自動錯誤分類和建議
-- **依賴注入**: FastAPI 原生依賴注入，核心模組取代全域變數模式
-- **混合架構**: 核心功能使用 Settings，工具功能仍使用 os.getenv() (Phase 1 待完成)
+- **依賴注入**: FastAPI 原生依賴注入，全面取代全域變數模式
+- **完全統一架構**: 所有模組使用 Settings，徹底移除 os.getenv() 調用
 
 ### 🔧 v2.1.0 - 2025-08-04
 

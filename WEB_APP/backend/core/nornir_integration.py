@@ -24,6 +24,9 @@ from nornir.plugins.runners import ThreadedRunner
 from nornir_netmiko.tasks import netmiko_send_command
 from nornir_utils.plugins.functions import print_result
 
+# 統一配置管理系統
+from core.settings import settings
+
 from .network_tools import (
     CommandValidator,
     command_cache,
@@ -358,11 +361,11 @@ class NornirManager:
                 hosts_data, groups_data, defaults_data
             )
 
-            # 建構 Nornir 配置
+            # 建構 Nornir 配置（使用 Settings）
             config = Config(
                 runner={
                     "plugin": "threaded",
-                    "options": {"num_workers": int(os.getenv("NORNIR_WORKERS", "5"))},
+                    "options": {"num_workers": settings.NORNIR_WORKERS},
                 },
                 logging={
                     "enabled": True,
@@ -379,7 +382,7 @@ class NornirManager:
                 inventory=inventory,
                 config=config,
                 runner=ThreadedRunner(
-                    num_workers=int(os.getenv("NORNIR_WORKERS", "5"))
+                    num_workers=settings.NORNIR_WORKERS
                 ),
             )
             logger.info(
@@ -443,9 +446,9 @@ class NornirManager:
         Returns:
             預設配置字典
         """
-        # 嘗試從環境變數獲取憑證，如果沒有則使用第一個設備的憑證作為預設
-        default_username = os.getenv("DEVICE_USERNAME")
-        default_password = os.getenv("DEVICE_PASSWORD")
+        # 嘗試從 Settings 獲取憑證，如果沒有則使用第一個設備的憑證作為預設
+        default_username = settings.DEVICE_USERNAME
+        default_password = settings.DEVICE_PASSWORD
 
         # 如果環境變數沒有設定，使用第一個設備的憑證作為預設
         if not default_username or not default_password:
@@ -462,7 +465,7 @@ class NornirManager:
             "password": default_password,
             "platform": "cisco_xe",
             "extras": {
-                "netmiko_timeout": int(os.getenv("COMMAND_TIMEOUT", "20")),
+                "netmiko_timeout": settings.COMMAND_TIMEOUT,
                 "netmiko_banner_timeout": 15,
             },
         }

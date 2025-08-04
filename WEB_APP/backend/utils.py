@@ -13,15 +13,18 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# 統一配置管理系統
+from core.settings import settings
+
 # 已移除 LangChain Memory 相關導入，優化性能
 
 logger = logging.getLogger(__name__)
 
-# 日誌輪轉配置參數
+# 日誌輪轉配置參數（使用 Pydantic Settings）
 LOG_CONFIG = {
-    "MAX_SIZE": int(os.getenv("LOG_MAX_SIZE", "10485760")),  # 10MB
-    "BACKUP_COUNT": int(os.getenv("LOG_BACKUP_COUNT", "5")),  # 保留5個備份
-    "LOG_LEVEL": os.getenv("LOG_LEVEL", "INFO"),
+    "MAX_SIZE": settings.LOG_MAX_SIZE,
+    "BACKUP_COUNT": settings.LOG_BACKUP_COUNT,
+    "LOG_LEVEL": settings.LOG_LEVEL,
     "LOG_DIR": Path(__file__).parent / "logs",
 }
 
@@ -484,11 +487,8 @@ class FrontendLogHandler:
             frontend_handler.setFormatter(formatter)
             frontend_logger.addHandler(frontend_handler)
 
-            # 控制台處理器（根據環境變數控制）
-            enable_console = (
-                os.getenv("BACKEND_ENABLE_FRONTEND_CONSOLE_LOG", "false").lower()
-                == "true"
-            )
+            # 控制台處理器（根據 Settings 控制）
+            enable_console = settings.BACKEND_ENABLE_FRONTEND_CONSOLE_LOG
             if enable_console:
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
@@ -517,11 +517,8 @@ class FrontendLogHandler:
             error_handler.setFormatter(formatter)
             error_logger.addHandler(error_handler)
 
-            # 錯誤日誌控制台處理器（根據環境變數控制）
-            enable_console = (
-                os.getenv("BACKEND_ENABLE_FRONTEND_CONSOLE_LOG", "false").lower()
-                == "true"
-            )
+            # 錯誤日誌控制台處理器（根據 Settings 控制）
+            enable_console = settings.BACKEND_ENABLE_FRONTEND_CONSOLE_LOG
             if enable_console:
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
@@ -848,7 +845,7 @@ def get_frontend_log_handler() -> FrontendLogHandler:
 
 
 def get_frontend_log_config():
-    """獲取前端日誌配置
+    """獲取前端日誌配置（使用 Pydantic Settings）
 
     Returns:
         前端日誌配置物件
@@ -856,18 +853,16 @@ def get_frontend_log_config():
     # 導入在函數內部避免循環導入
     from main import FrontendLogConfig
 
+    # 使用 Settings 的統一前端日誌配置方法
+    config_dict = settings.get_frontend_log_config()
+    
     return FrontendLogConfig(
-        enableRemoteLogging=True,
-        logLevel=os.getenv("FRONTEND_LOG_LEVEL", "INFO"),
-        batchSize=int(os.getenv("FRONTEND_LOG_BATCH_SIZE", "10")),
-        batchInterval=int(os.getenv("FRONTEND_LOG_BATCH_INTERVAL", "30000")),
-        maxLocalStorageEntries=int(
-            os.getenv("FRONTEND_MAX_LOCAL_STORAGE_ENTRIES", "100")
-        ),
-        enabledCategories=os.getenv(
-            "FRONTEND_LOG_CATEGORIES", "api,error,user,performance"
-        ).split(","),
-        maxMessageLength=int(os.getenv("FRONTEND_LOG_MAX_MESSAGE_LENGTH", "1000")),
-        enableStackTrace=os.getenv("FRONTEND_LOG_ENABLE_STACK_TRACE", "false").lower()
-        == "true",
+        enableRemoteLogging=config_dict["enableRemoteLogging"],
+        logLevel=config_dict["logLevel"],
+        batchSize=config_dict["batchSize"],
+        batchInterval=config_dict["batchInterval"],
+        maxLocalStorageEntries=config_dict["maxLocalStorageEntries"],
+        enabledCategories=config_dict["enabledCategories"],
+        maxMessageLength=config_dict["maxMessageLength"],
+        enableStackTrace=config_dict["enableStackTrace"],
     )

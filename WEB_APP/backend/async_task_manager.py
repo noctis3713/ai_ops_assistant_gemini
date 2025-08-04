@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
+# 統一配置管理系統
+from core.settings import settings
 # 使用統一的日誌系統
 from utils import LoggerConfig
 
@@ -135,14 +137,13 @@ class AsyncTaskManager:
         初始化任務管理器
 
         Args:
-            cleanup_interval: 清理檢查的間隔時間（秒），None 時從環境變數載入
-            task_ttl: 任務過期時間（秒），None 時從環境變數載入
+            cleanup_interval: 清理檢查的間隔時間（秒），None 時從 Settings 載入
+            task_ttl: 任務過期時間（秒），None 時從 Settings 載入
         """
-        # 從環境變數載入配置，提供預設值作為備用
-        self.cleanup_interval = cleanup_interval or int(
-            os.getenv("ASYNC_TASK_CLEANUP_INTERVAL", "3600")
-        )
-        task_ttl_seconds = task_ttl or int(os.getenv("ASYNC_TASK_TTL", "86400"))
+        # 從統一 Settings 配置載入參數
+        config = settings.get_task_manager_config()
+        self.cleanup_interval = cleanup_interval or config["cleanup_interval"]
+        task_ttl_seconds = task_ttl or config["task_ttl"]
 
         self.tasks: Dict[str, AsyncTask] = {}
         self._lock = asyncio.Lock()
@@ -165,13 +166,9 @@ class AsyncTaskManager:
             extra={
                 "cleanup_interval": self.cleanup_interval,
                 "task_ttl": task_ttl_seconds,
-                "env_loaded": {
-                    "ASYNC_TASK_CLEANUP_INTERVAL": os.getenv(
-                        "ASYNC_TASK_CLEANUP_INTERVAL", "未設定（使用預設值 3600）"
-                    ),
-                    "ASYNC_TASK_TTL": os.getenv(
-                        "ASYNC_TASK_TTL", "未設定（使用預設值 86400）"
-                    ),
+                "settings_config": {
+                    "ASYNC_TASK_CLEANUP_INTERVAL": settings.ASYNC_TASK_CLEANUP_INTERVAL,
+                    "ASYNC_TASK_TTL": settings.ASYNC_TASK_TTL,
                 },
             },
         )

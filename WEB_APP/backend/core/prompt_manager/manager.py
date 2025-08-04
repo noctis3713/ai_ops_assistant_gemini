@@ -25,6 +25,9 @@ try:
 except ImportError as e:
     raise ImportError(f"必要依賴缺失: {e}. 請執行: pip install Jinja2 PyYAML") from e
 
+# 統一配置管理系統
+from core.settings import settings
+
 from .exceptions import PromptConfigError, PromptLanguageError, PromptTemplateError
 
 # 設置日誌
@@ -55,21 +58,20 @@ class PromptManager:
             base_dir: 模板基礎目錄，None 時自動偵測或從環境變數載入
             language: 語言代碼，None 時從環境變數載入
         """
-        # 配置基礎設定
+        # 配置基礎設定（使用 Pydantic Settings）
         if base_dir:
             self.base_dir = base_dir
         else:
             # 自動偵測模板目錄路徑
-            env_path = os.getenv("PROMPT_TEMPLATE_DIR")
-            if env_path:
-                self.base_dir = Path(env_path)
+            if settings.PROMPT_TEMPLATE_DIR:
+                self.base_dir = Path(settings.PROMPT_TEMPLATE_DIR)
             else:
                 # 自動偵測：從當前檔案位置推算模板目錄
                 current_file = Path(__file__)
                 backend_dir = current_file.parent.parent.parent  # 回到 backend 目錄
                 self.base_dir = backend_dir / "templates" / "prompts"
 
-        self.language = language or os.getenv("PROMPT_LANGUAGE", "zh_TW")
+        self.language = language or settings.PROMPT_LANGUAGE
 
         # 線程安全鎖
         self._lock = RLock()
