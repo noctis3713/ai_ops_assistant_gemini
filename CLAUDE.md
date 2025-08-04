@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的完整專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-04 (v2.1.0 - 後端 API 架構強化)  
+> 📅 **最後更新**: 2025-08-04 (v2.2.0 - 企業級架構優化核心完成)  
 > 🔄 **維護頻率**: 隨專案重大更新同步修改
 
 ---
@@ -95,7 +95,9 @@ WEB_APP/backend/
 │   ├── ai_response.py        # AI 回應模型
 │   └── __init__.py
 ├── core/                     # 核心功能模組
-│   ├── network_tools.py      # 網路工具核心
+│   ├── settings.py          # 企業級 Pydantic Settings 配置管理 ✨ v2.2.0
+│   ├── exceptions.py        # 服務層自訂異常系統 ✨ v2.2.0  
+│   ├── network_tools.py      # 網路工具核心 (重構整合 Settings)
 │   ├── nornir_integration.py # Nornir 整合層
 │   ├── __init__.py
 │   └── prompt_manager/       # 企業級提示詞管理系統 (重構)
@@ -152,6 +154,185 @@ class AIService:
 **AI 工具整合**:
 - `BatchCommandRunner`: 網路設備指令執行工具
 - `CiscoCommandSearch`: Cisco 文檔搜尋工具 (可選)
+
+### 🏢 企業級配置管理系統 (`core/settings.py`) ✨ v2.2.0
+
+**核心特色**:
+- **Pydantic Settings**: 型別安全的環境變數管理
+- **集中化配置**: 60+ 個完整配置項目，涵蓋所有系統模組
+- **Fail Fast 機制**: 啟動時即驗證配置，快速發現問題
+- **FastAPI 依賴注入**: 原生整合 FastAPI 的依賴注入系統
+
+**🔄 整合進度** (v2.2.0 狀態):
+- ✅ **已完成整合**: `main.py`, `ai_service.py`, `network_tools.py`
+- 🚧 **進行中**: `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py`
+- 📋 **混合模式**: 核心模組使用 Settings，工具模組仍使用 `os.getenv()` (Phase 1 後續任務)
+
+**關鍵類別**:
+```python
+class Settings(BaseSettings):
+    """應用程式全域設定類別 - 型別安全的環境變數管理"""
+    
+    # Pydantic Settings 配置
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8", 
+        case_sensitive=True,
+        extra="allow"
+    )
+    
+    # AI 服務配置 (15+ 項目)
+    AI_PROVIDER: str = Field(default="gemini", description="AI 服務供應商")
+    GOOGLE_API_KEY: Optional[str] = Field(default=None)
+    ANTHROPIC_API_KEY: Optional[str] = Field(default=None)
+    
+    # 網路連線配置 (10+ 項目)
+    MAX_CONNECTIONS: int = Field(default=5, description="最大 SSH 連線數")
+    CONNECTION_TIMEOUT: int = Field(default=300, description="連線逾時時間")
+    
+    # 日誌系統配置 (12+ 項目)
+    LOG_LEVEL: str = Field(default="INFO", description="日誌級別")
+    FRONTEND_LOG_BATCH_SIZE: int = Field(default=10)
+    
+    # 非同步任務配置 (6+ 項目)
+    ASYNC_TASK_CLEANUP_INTERVAL: int = Field(default=3600)
+    
+    @validator('AI_PROVIDER')
+    def validate_ai_provider(cls, v):
+        """AI 供應商驗證器"""
+        allowed_providers = ['gemini', 'claude']
+        if v.lower() not in allowed_providers:
+            raise ValueError(f'AI_PROVIDER 必須是 {allowed_providers} 之一')
+        return v.lower()
+```
+
+**依賴注入整合**:
+```python
+# 全域實例和依賴注入
+settings = Settings()
+
+def get_settings() -> Settings:
+    """FastAPI 依賴注入提供者"""
+    return settings
+
+# 在 FastAPI 路由中使用
+@app.get("/api/config-status")
+async def get_config_status(settings: Settings = Depends(get_settings)):
+    return {
+        "ai_configured": settings.is_ai_configured(),
+        "provider": settings.AI_PROVIDER,
+        "max_connections": settings.MAX_CONNECTIONS
+    }
+```
+
+**配置分類體系**:
+- **AI 服務配置** (15 項目): API 金鑰、模型設定、功能開關
+- **網路連線配置** (10 項目): 連線池、超時、設備認證
+- **日誌系統配置** (12 項目): 後端、前端日誌分別管理
+- **快取配置** (6 項目): 指令快取、輸出處理
+- **非同步任務配置** (6 項目): 任務管理、清理機制
+- **提示詞配置** (4 項目): 語言、模板路徑
+- **安全管理配置** (3 項目): 管理金鑰、驗證機制
+
+### 🚨 全域異常處理系統 (`core/exceptions.py`) ✨ v2.2.0
+
+**設計理念**: 建立層次化的服務層異常系統，自動映射為標準化 HTTP 回應
+
+**關鍵特色**:
+- **16 個專業異常類別**: 涵蓋配置、設備、指令、AI、任務、認證等所有業務領域
+- **三個全域異常處理器**: ServiceError、HTTPException、通用 Exception
+- **自動 HTTP 映射**: 異常自動轉換為標準化 JSON 回應
+- **BaseResponse 格式**: 統一的 API 回應結構
+
+**核心異常層次**:
+```python
+class ServiceError(Exception):
+    """服務層基礎異常 - 所有自訂異常的基類"""
+    def __init__(self, detail: str, error_code: Optional[str] = None, status_code: int = 400):
+        self.detail = detail
+        self.error_code = error_code or self.__class__.__name__
+        self.status_code = status_code
+
+# 配置相關異常 (4 個)
+class ConfigError(ServiceError): ...
+class ConfigNotFoundError(ConfigError): ...
+class ConfigValidationError(ConfigError): ...
+
+# 設備連線異常 (5 個)  
+class DeviceError(ServiceError): ...
+class DeviceConnectionError(DeviceError): ...
+class DeviceAuthenticationError(DeviceError): ...
+
+# AI 服務異常 (6 個)
+class AIServiceError(ServiceError): ...
+class AINotAvailableError(AIServiceError): ...
+class AIQuotaExceededError(AIServiceError): ...
+```
+
+**全域異常處理器** (在 `main.py` 中註冊):
+```python
+@app.exception_handler(ServiceError)
+async def service_exception_handler(request: Request, exc: ServiceError):
+    """服務層異常處理器 - 自動映射為標準化回應"""
+    logger.warning(f"服務層發生錯誤: {exc.detail} (路徑: {request.url.path})")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=BaseResponse(
+            success=False,
+            message=exc.detail,
+            error_code=exc.error_code,
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """HTTP 異常處理器"""
+    logger.warning(f"HTTP 異常: {exc.detail} (狀態碼: {exc.status_code}, 路徑: {request.url.path})")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=BaseResponse(
+            success=False,
+            message=exc.detail,
+            error_code=f"HTTP_{exc.status_code}",
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+
+@app.exception_handler(Exception)  
+async def general_exception_handler(request: Request, exc: Exception):
+    """通用異常處理器 - 捕獲所有未處理的異常"""
+    logger.exception(f"系統發生未處理異常 (路徑: {request.url.path}): {str(exc)}")
+    
+    return JSONResponse(
+        status_code=500,
+        content=BaseResponse(
+            success=False,
+            message="內部伺服器錯誤，請稍後再試",
+            error_code="INTERNAL_SERVER_ERROR",
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+```
+
+**智能異常映射**:
+```python
+def map_exception_to_service_error(exc: Exception, context: str = "") -> ServiceError:
+    """將通用異常映射為服務層異常"""
+    exc_str = str(exc).lower()
+    
+    # 自動識別異常類型並映射
+    if 'timeout' in exc_str:
+        return DeviceTimeoutError("unknown", context, 30)
+    elif 'authentication' in exc_str:
+        return DeviceAuthenticationError("unknown")
+    elif 'quota' in exc_str:
+        return AIQuotaExceededError("unknown")
+    else:
+        return ServiceError(f"未預期的錯誤: {str(exc)}", "UNEXPECTED_ERROR", 500)
+```
 
 ### 🌐 網路自動化核心 (`core/network_tools.py` + `core/nornir_integration.py`)
 
@@ -260,20 +441,25 @@ class AsyncTaskManager:
 
 ### 🔌 API 端點設計 (`main.py`)
 
-**RESTful API 架構** (最新版本):
+**RESTful API 架構** (v2.2.0 完整版):
 
 | 端點路徑 | 方法 | 功能描述 |
 |---------|------|----------|
 | `/health` | GET | 健康檢查 |
+| `/` | GET | 根路徑重定向 |
 | `/api/devices` | GET | 取得設備清單 |
+| `/api/devices/status` | GET | 設備健康檢查 ✨ v2.2.0 |
+| `/api/devices/{device_ip}/status` | GET | 單一設備狀態查詢 ✨ v2.2.0 |
 | `/api/device-groups` | GET | 取得設備群組 |
 | `/api/execute` | POST | 單一設備指令執行 |
 | `/api/ai-query` | POST | AI 智能查詢 |
+| `/api/ai-status` | GET | AI 服務狀態查詢 ✨ v2.2.0 |
 | `/api/batch-execute` | POST | 同步批次執行 |
 | `/api/batch-execute-async` | POST | 非同步批次執行 |
 | `/api/task/{task_id}` | GET | 查詢任務狀態 |
 | `/api/tasks` | GET | 列出所有任務 |
-| `/api/tasks/{task_id}/cancel` | POST | 取消指定任務 ✨ |
+| `/api/task/{task_id}` | DELETE | 刪除指定任務 ✨ v2.2.0 |
+| `/api/task-manager/stats` | GET | 任務管理器統計 ✨ v2.2.0 |
 | `/api/admin/reload-config` | POST | 重載配置檔案 |
 | `/api/admin/reload-prompts` | POST | 重載提示詞配置 ✨ |
 | `/api/admin/prompt-manager/stats` | GET | 提示詞管理器統計 ✨ |
@@ -1158,16 +1344,18 @@ apiClient.interceptors.response.use(
 
 ### 🔐 安全考量
 
-**API 金鑰保護**:
+**API 金鑰保護** (v2.2.0 使用 Settings):
 ```python
-# 環境變數載入和驗證
-google_api_key = os.getenv("GOOGLE_API_KEY")
-if not google_api_key:
-    logger.error("GOOGLE_API_KEY 未設定")
+# 使用 Pydantic Settings 進行環境變數載入和驗證
+from core.settings import settings
+
+if not settings.is_ai_configured():
+    logger.error("AI API 金鑰未設定")
     raise ValueError("必須設定 AI API 金鑰")
 
 # 日誌中隱藏敏感資訊
-logger.info(f"API Key 已載入: {google_api_key[:10]}...")
+api_key = settings.get_ai_api_key()
+logger.info(f"API Key 已載入: {api_key[:10]}...")
 ```
 
 **設備憑證管理**:
@@ -1298,7 +1486,118 @@ curl -X POST http://localhost:8000/api/batch-execute \
 # 預期結果：正常回傳 AI 分析結果，而非 500 錯誤
 ```
 
-**5. 前端 API 呼叫失敗**
+**5. 企業級配置系統問題** ✨ v2.2.0 新增
+
+*症狀*: `Settings validation error` 或 `Pydantic validation failed`
+
+*根本原因*:
+- 環境變數型別不匹配：如 `MAX_CONNECTIONS` 設為字串而非整數
+- 必要配置缺失：AI API 金鑰未設定
+- 配置驗證器失敗：AI_PROVIDER 設為不支援的值
+
+*v2.2.0 診斷方案*:
+```python
+# 檢查 Pydantic Settings 配置狀態
+from core.settings import settings
+
+# 驗證設定是否正確載入
+print(f"AI Provider: {settings.AI_PROVIDER}")
+print(f"AI Configured: {settings.is_ai_configured()}")
+print(f"Max Connections: {settings.MAX_CONNECTIONS}")
+
+# 檢查環境變數型別
+import os
+print(f"ENV MAX_CONNECTIONS type: {type(os.getenv('MAX_CONNECTIONS'))}")
+print(f"Settings MAX_CONNECTIONS type: {type(settings.MAX_CONNECTIONS)}")
+```
+
+*解決方法*:
+```bash
+# 確保環境變數型別正確
+export MAX_CONNECTIONS=5  # 整數型別
+export ENABLE_DOCUMENT_SEARCH=false  # 布林型別
+export AI_PROVIDER=gemini  # 允許的供應商值
+
+# 檢查 .env 檔案格式
+cat .env | grep -E "(MAX_CONNECTIONS|AI_PROVIDER|ENABLE_)"
+```
+
+**5.1 混合架構狀態問題** ✨ v2.2.0 新增
+
+*症狀*: 部分配置使用 Settings，部分仍使用 os.getenv()，導致配置不一致
+
+*根本原因*:
+- v2.2.0 處於混合架構狀態：核心模組使用 Settings，工具模組使用 os.getenv()
+- `utils.py`, `async_task_manager.py`, `nornir_integration.py`, `prompt_manager.py` 尚未完成整合
+
+*診斷方案*:
+```bash
+# 檢查哪些檔案仍使用 os.getenv()
+grep -r "os\.getenv" WEB_APP/backend/ --include="*.py"
+
+# 檢查哪些檔案已使用 Settings
+grep -r "from core\.settings import\|settings\." WEB_APP/backend/ --include="*.py"
+```
+
+*混合模式運作策略*:
+```python
+# 核心模組使用 Settings
+from core.settings import settings
+max_connections = settings.MAX_CONNECTIONS  # 型別安全
+
+# 工具模組仍使用 os.getenv() (Phase 1 待完成)
+import os
+log_level = os.getenv("LOG_LEVEL", "INFO")  # 字串型別
+```
+
+**6. 全域異常處理系統問題** ✨ v2.2.0 新增
+
+*症狀*: API 回應格式不一致，或異常未被正確捕獲
+
+*根本原因*:
+- 服務層異常未正確繼承 ServiceError 基類
+- 全域異常處理器未正確註冊
+- BaseResponse 格式不一致
+
+*v2.2.0 診斷方案*:
+```python
+# 測試異常處理系統
+from core.exceptions import *
+
+# 檢查異常處理器是否正確註冊
+async def test_exception_handling():
+    # 測試 ServiceError 處理
+    raise DeviceConnectionError("192.168.1.1", "連線超時")
+    
+    # 測試 HTTP 異常處理
+    raise HTTPException(status_code=404, detail="設備未找到")
+    
+    # 測試通用異常處理
+    raise ValueError("測試未處理異常")
+
+# 檢查 BaseResponse 格式
+from models.ai_response import BaseResponse
+response = BaseResponse(success=False, message="測試錯誤", error_code="TEST_ERROR")
+print(response.model_dump(exclude_unset=True))
+```
+
+*驗證修復*:
+```bash
+# 測試標準化異常回應
+curl -X POST http://localhost:8000/api/batch-execute \
+  -H "Content-Type: application/json" \
+  -d '{"devices": ["invalid_ip"], "command": "show version", "mode": "command"}'
+
+# 預期結果：統一的 BaseResponse 格式 (含時間戳)
+{
+    "success": false,
+    "message": "設備 invalid_ip: 無法連線到設備: 連線超時",
+    "error_code": "DEVICE_CONNECTION_ERROR",
+    "timestamp": "2025-08-04T10:30:15.123456+00:00"
+}
+```
+
+**7. 前端 API 呼叫失敗**
 
 *症狀*: 前端無法與後端通信
 
@@ -1345,6 +1644,15 @@ curl http://localhost:8000/api/ai-status
 
 # 設備健康檢查
 curl http://localhost:8000/api/devices/status
+
+# 企業級配置狀態監控 ✨ v2.2.0 (實作中)
+# curl http://localhost:8000/api/config-status
+
+# 全域異常處理統計 ✨ v2.2.0 (實作中)
+# curl http://localhost:8000/api/exception-stats
+
+# Settings 配置驗證狀態 ✨ v2.2.0 (實作中)
+# curl http://localhost:8000/api/settings/validation-status
 ```
 
 **前端效能優化**:
@@ -1444,7 +1752,29 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ## 📈 版本更新記錄
 
-### 🔧 v2.1.0 - 2025-08-04 (當前版本)
+### 🏢 v2.2.0 - 2025-08-04 (當前版本)
+
+**🎯 企業級架構優化 - 核心模組完成**：
+- ✅ **Pydantic Settings 配置管理系統**: 核心模組實施型別安全的環境變數管理，60+ 個完整配置項目
+- ✅ **全域異常處理架構**: 新增 16 個服務層異常類別，三個全域異常處理器
+- ✅ **統一依賴注入機制**: 在 main.py 中完整整合 FastAPI 依賴注入模式
+- 🚧 **程式碼架構重構**: 核心模組完成 Settings 整合，工具模組進行中 (混合模式)
+- ✅ **錯誤處理標準化**: 自動異常到 HTTP 回應映射，提升 API 回應一致性
+
+**📊 技術改進統計**：
+- 新增核心模組: `core/settings.py`, `core/exceptions.py` 
+- 主要檔案重構: `main.py` (+126), `ai_service.py` (+33), `network_tools.py` (+53)
+- 總變更統計: +212 行新增功能, -64 行程式碼優化
+- 架構狀態: 核心模組達到企業級標準，工具模組整合進行中
+
+**🔧 核心改進項目**：
+- **型別安全**: 核心模組完整 Pydantic 模型驗證和自動型別轉換
+- **Fail Fast 機制**: 啟動時即驗證核心配置，快速發現問題
+- **統一異常處理**: BaseResponse + timestamp 格式，自動錯誤分類和建議
+- **依賴注入**: FastAPI 原生依賴注入，核心模組取代全域變數模式
+- **混合架構**: 核心功能使用 Settings，工具功能仍使用 os.getenv() (Phase 1 待完成)
+
+### 🔧 v2.1.0 - 2025-08-04
 
 **🎯 後端 API 架構強化和關鍵問題修復**:
 - ✅ **AI 服務依賴注入修復**: 解決 `_handle_ai_request()` 缺少 `ai_service` 參數的嚴重 bug
@@ -1486,6 +1816,6 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ---
 
-*📝 文件版本: v2.1.0*  
+*📝 文件版本: v2.2.0*  
 *🔄 最後更新: 2025-08-04*  
 *👤 維護者: Claude AI Assistant*

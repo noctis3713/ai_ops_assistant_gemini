@@ -20,18 +20,19 @@ from dotenv import load_dotenv
 env_loaded = load_dotenv("config/.env")
 print(f"環境變數載入狀態: {'成功' if env_loaded else '失敗'}")
 
-# 檢查關鍵環境變數
-google_api_key = os.getenv("GOOGLE_API_KEY")
-ai_provider = os.getenv("AI_PROVIDER", "gemini")
-if google_api_key:
-    print(f"Google API Key 載入成功: {google_api_key[:10]}...")
+# 先導入 settings 才能使用
+from core.settings import Settings, get_settings, settings
+
+# 檢查關鍵環境變數 (使用統一 Settings)
+if settings.GOOGLE_API_KEY:
+    print(f"Google API Key 載入成功: {settings.GOOGLE_API_KEY[:10]}...")
 else:
     print("WARNING - Google API Key 未載入")
-print(f"AI Provider: {ai_provider}")
+print(f"AI Provider: {settings.AI_PROVIDER}")
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from starlette import status
 
@@ -52,6 +53,18 @@ from core.nornir_integration import (
     BatchResult,
     classify_error,
     get_nornir_manager,
+)
+from core.exceptions import (
+    ServiceError,
+    ConfigError,
+    DeviceError,
+    CommandError,
+    AIServiceError,
+    TaskError,
+    AuthenticationError,
+    AuthorizationError,
+    ValidationError,
+    ExternalServiceError,
 )
 from utils import (
     LoggerConfig,
@@ -96,6 +109,64 @@ app.add_middleware(
 )
 
 # =============================================================================
+# 全域異常處理器 - 企業級錯誤處理機制
+# =============================================================================
+
+@app.exception_handler(ServiceError)
+async def service_exception_handler(request: Request, exc: ServiceError):
+    """
+    捕獲所有自訂的 ServiceError 異常
+    提供統一的服務層錯誤回應格式
+    """
+    logger.warning(f"服務層發生錯誤: {exc.detail} (路徑: {request.url.path})")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=BaseResponse(
+            success=False,
+            message=exc.detail,
+            error_code=exc.error_code,
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    捕獲 FastAPI HTTPException 異常
+    保持與現有錯誤格式的一致性
+    """
+    logger.warning(f"HTTP 異常: {exc.detail} (狀態碼: {exc.status_code}, 路徑: {request.url.path})")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=BaseResponse(
+            success=False,
+            message=exc.detail,
+            error_code=f"HTTP_{exc.status_code}",
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """
+    捕獲所有未被處理的通用 Exception 異常
+    最後的防線，確保不會有未處理的異常
+    """
+    logger.error(f"發生未預期的全域錯誤: {exc} (路徑: {request.url.path})", exc_info=True)
+    
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=BaseResponse(
+            success=False,
+            message="內部伺服器發生未預期錯誤，請聯繫管理員",
+            error_code="INTERNAL_SERVER_ERROR",
+            timestamp=datetime.now().isoformat()
+        ).model_dump(exclude_unset=True),
+    )
+
+# =============================================================================
 # 非同步任務管理器生命週期事件
 # =============================================================================
 
@@ -105,6 +176,7 @@ async def startup_event():
     """應用程式啟動時執行的事件 - 初始化所有服務實例"""
     try:
         # 初始化並掛載所有服務到 app.state
+        app.state.settings = settings  # 新增：掛載全域 Settings 實例
         app.state.config_manager = get_config_manager()
         app.state.ai_service = get_ai_service()
         app.state.ai_logger = create_ai_logger()
@@ -114,6 +186,10 @@ async def startup_event():
         # 啟動任務管理器清理循環
         await app.state.task_manager.start_cleanup_loop()
 
+        # 驗證 Settings 配置並輸出關鍵配置資訊
+        logger.info(f"Settings 配置驗證完成 - AI Provider: {settings.AI_PROVIDER}")
+        logger.info(f"AI 服務配置狀態 - Gemini: {settings.get_gemini_configured()}, Claude: {settings.get_claude_configured()}")
+        
         logger.info("應用程式啟動完成，所有服務已初始化並注入 app.state")
     except Exception as e:
         logger.error(f"啟動事件處理失敗: {e}", exc_info=True)
@@ -168,6 +244,18 @@ def get_task_manager_dep(request: Request):
         TaskManager: 任務管理器實例
     """
     return request.app.state.task_manager
+
+
+def get_settings_dep(request: Request) -> Settings:
+    """獲取 Settings 配置依賴
+
+    Args:
+        request: FastAPI 請求物件
+
+    Returns:
+        Settings: 全域 Settings 實例
+    """
+    return request.app.state.settings
 
 
 # =============================================================================
@@ -1243,9 +1331,9 @@ async def get_frontend_log_config_endpoint():
 
 
 @app.get("/")
-async def root():
+async def root(app_settings: Settings = Depends(get_settings_dep)):
     """根路徑，提供API資訊"""
-    ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+    ai_provider = app_settings.AI_PROVIDER
     return {
         "message": "Web CLI API 服務運行中",
         "version": "1.0.0",
@@ -1271,7 +1359,7 @@ async def root():
 
 
 @app.get("/api/ai-status")
-async def get_ai_status():
+async def get_ai_status(app_settings: Settings = Depends(get_settings_dep)):
     """獲取 AI 服務狀態和配額資訊"""
     logger.info("收到 AI 狀態檢查請求")
 
@@ -1279,11 +1367,11 @@ async def get_ai_status():
         # 獲取 AI 服務詳細狀態
         ai_status = ai_service.get_ai_status()
 
-        # 檢查 API 金鑰狀態
+        # 檢查 API 金鑰狀態 (使用 Settings)
         api_key_status = {
-            "gemini_configured": bool(os.getenv("GOOGLE_API_KEY")),
-            "claude_configured": bool(os.getenv("ANTHROPIC_API_KEY")),
-            "current_provider": os.getenv("AI_PROVIDER", "gemini").lower(),
+            "gemini_configured": app_settings.get_gemini_configured(),
+            "claude_configured": app_settings.get_claude_configured(),
+            "current_provider": app_settings.AI_PROVIDER,
         }
 
         # 結合所有資訊
@@ -1665,7 +1753,10 @@ async def get_device_status(device_ip: str):
     response_model=ReloadConfigResponse,
     response_model_exclude_unset=True,
 )
-async def reload_config_endpoint(request: ReloadConfigRequest):
+async def reload_config_endpoint(
+    request: ReloadConfigRequest,
+    app_settings: Settings = Depends(get_settings_dep),
+):
     """
     重載配置檔案（管理員功能）
 
@@ -1680,9 +1771,8 @@ async def reload_config_endpoint(request: ReloadConfigRequest):
     """
     logger.info(f"收到配置重載請求: {request.reload_configs}")
 
-    # 簡單的 API Key 驗證
-    expected_api_key = os.getenv("ADMIN_API_KEY", "admin123")  # 生產環境應使用強密碼
-    if request.api_key != expected_api_key:
+    # 簡單的 API Key 驗證 (使用 Settings)
+    if request.api_key != app_settings.ADMIN_API_KEY:
         logger.warning("配置重載請求 - API Key 驗證失敗")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="無效的 API Key"

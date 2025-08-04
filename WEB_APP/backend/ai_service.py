@@ -39,6 +39,7 @@ except ImportError:
 
 from core.nornir_integration import batch_command_wrapper, set_device_scope_restriction
 from core.prompt_manager import get_prompt_manager
+from core.settings import settings
 from models.ai_response import NetworkAnalysisResponse
 
 logger = logging.getLogger(__name__)
@@ -264,9 +265,7 @@ class AIService:
 
     def __init__(self):
         self.agent_executor = None
-        self.search_enabled = (
-            os.getenv("ENABLE_DOCUMENT_SEARCH", "false").lower() == "true"
-        )
+        self.search_enabled = settings.ENABLE_DOCUMENT_SEARCH
         self.ai_initialized = False
 
         # 初始化 PydanticOutputParser
@@ -290,10 +289,10 @@ class AIService:
             return False
 
         try:
-            # 檢查環境變數載入狀態
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-            ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+            # 檢查環境變數載入狀態 (使用 Settings)
+            google_api_key = settings.GOOGLE_API_KEY
+            anthropic_api_key = settings.ANTHROPIC_API_KEY
+            ai_provider = settings.AI_PROVIDER
 
             # 輸出調試資訊
             debug_msg = f"AI 初始化開始 - 提供者: {ai_provider}"
@@ -367,14 +366,14 @@ class AIService:
 
     def _initialize_claude(self):
         """初始化 Claude AI"""
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = settings.ANTHROPIC_API_KEY
         if not api_key:
             logger.warning("ANTHROPIC_API_KEY not set, Claude AI features unavailable")
             return None
 
         try:
-            # 從環境變數讀取 Claude 模型，預設為 claude-3-haiku-20240307
-            claude_model = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+            # 從 Settings 讀取 Claude 模型
+            claude_model = settings.CLAUDE_MODEL
             llm = ChatAnthropic(
                 model=claude_model, temperature=0, anthropic_api_key=api_key
             )
@@ -389,7 +388,7 @@ class AIService:
 
     def _initialize_gemini(self):
         """初始化 Gemini AI"""
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = settings.GOOGLE_API_KEY
         if not api_key:
             error_msg = "GOOGLE_API_KEY 未設定，Gemini AI 功能不可用"
             logger.warning(error_msg)
@@ -397,8 +396,8 @@ class AIService:
             return None
 
         try:
-            # 從環境變數讀取 Gemini 模型，預設為 gemini-1.5-flash-latest
-            gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
+            # 從 Settings 讀取 Gemini 模型
+            gemini_model = settings.GEMINI_MODEL
 
             # 輸出詳細初始化資訊
             init_start_msg = f"開始初始化 Gemini AI - 模型: {gemini_model}"
@@ -816,7 +815,7 @@ Question: {{input}}
         Returns:
             (錯誤訊息, HTTP狀態碼)
         """
-        ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+        ai_provider = settings.AI_PROVIDER
 
         error_lower = error_str.lower()
 
@@ -877,7 +876,7 @@ Question: {{input}}
         Returns:
             AI 服務狀態字典
         """
-        ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+        ai_provider = settings.AI_PROVIDER
 
         # 詳細的搜尋功能狀態分析
         search_status_detail = {
@@ -906,8 +905,8 @@ Question: {{input}}
             "search_available": SEARCH_AVAILABLE,
             "search_detail": search_status_detail,
             "environment_config": {
-                "ENABLE_DOCUMENT_SEARCH": os.getenv("ENABLE_DOCUMENT_SEARCH", "false"),
-                "PARSER_VERSION": os.getenv("PARSER_VERSION", "original"),
+                "ENABLE_DOCUMENT_SEARCH": str(settings.ENABLE_DOCUMENT_SEARCH).lower(),
+                "PARSER_VERSION": settings.PARSER_VERSION,
             },
         }
 

@@ -16,6 +16,9 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 
+# 導入統一的 Settings 配置
+from core.settings import settings
+
 # AI 服務相關導入
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -50,19 +53,15 @@ class OutputSummarizer:
     """AI 輸出摘要器 - 處理超長指令輸出"""
 
     def __init__(self, ai_provider: str = None, model_name: str = None):
-        self.ai_provider = ai_provider or os.getenv("AI_PROVIDER", "gemini")
+        self.ai_provider = ai_provider or settings.AI_PROVIDER
         self.max_tokens = 2048  # 摘要用較少的 token
         self.llm = None
 
-        # 根據提供者設定預設模型，優先使用環境變數
+        # 根據提供者設定預設模型，優先使用 Settings
         if self.ai_provider == "claude":
-            self.model_name = model_name or os.getenv(
-                "CLAUDE_MODEL", "claude-3-haiku-20240307"
-            )
+            self.model_name = model_name or settings.CLAUDE_MODEL
         else:
-            self.model_name = model_name or os.getenv(
-                "GEMINI_MODEL", "gemini-1.5-flash-latest"
-            )
+            self.model_name = model_name or settings.GEMINI_MODEL
 
         # 初始化對應的 AI 服務
         self._initialize_ai_service()
@@ -80,7 +79,7 @@ class OutputSummarizer:
             logger.warning("未安裝 langchain_anthropic")
             return
 
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = settings.ANTHROPIC_API_KEY
         if not api_key:
             logger.warning("未設定 ANTHROPIC_API_KEY")
             return
@@ -104,7 +103,7 @@ class OutputSummarizer:
             logger.warning("未安裝 langchain_google_genai")
             return
 
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = settings.GOOGLE_API_KEY
         if not api_key:
             logger.warning("未設定 GOOGLE_API_KEY")
             return
@@ -194,9 +193,9 @@ def get_device_credentials(device_config=None):
             "password": device_config.password,
         }
 
-    device_type = os.getenv("DEVICE_TYPE", "cisco_xe")
-    username = os.getenv("DEVICE_USERNAME")
-    password = os.getenv("DEVICE_PASSWORD")
+    device_type = settings.DEVICE_TYPE
+    username = settings.DEVICE_USERNAME
+    password = settings.DEVICE_PASSWORD
 
     if not username or not password:
         raise ValueError("設備憑證未設定！請設定環境變數或 devices.json 中的認證資訊")
@@ -395,13 +394,13 @@ class ConnectionPool:
 
     def __init__(self, max_connections: int = None):
         if max_connections is None:
-            max_connections = int(os.getenv("MAX_CONNECTIONS", "5"))
+            max_connections = settings.MAX_CONNECTIONS
         self.max_connections = max_connections
         self.connections: Dict[str, ConnectHandler] = {}
         self.connection_times: Dict[str, float] = {}
         self.lock = threading.Lock()
-        self.timeout = int(os.getenv("CONNECTION_TIMEOUT", "300"))
-        self.health_check_interval = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
+        self.timeout = settings.CONNECTION_TIMEOUT
+        self.health_check_interval = settings.HEALTH_CHECK_INTERVAL
         self.last_health_check = 0
 
     def get_connection(
@@ -484,10 +483,8 @@ class CommandCache:
     def __init__(self, max_size: int = None, ttl: int = None):
         self.cache = {}
         self.timestamps = {}
-        self.max_size = (
-            int(os.getenv("CACHE_MAX_SIZE", "512")) if max_size is None else max_size
-        )
-        self.ttl = int(os.getenv("CACHE_TTL", "300")) if ttl is None else ttl
+        self.max_size = settings.CACHE_MAX_SIZE if max_size is None else max_size
+        self.ttl = settings.CACHE_TTL if ttl is None else ttl
         self.lock = threading.Lock()
 
     def get(self, device_ip: str, command: str) -> Optional[str]:
@@ -539,12 +536,10 @@ def _process_long_output(
     Returns:
         處理後的輸出內容
     """
-    # 從環境變數讀取配置，提供預設值
-    ai_threshold = int(os.getenv("AI_SUMMARY_THRESHOLD", "10000"))
-    max_chars = int(os.getenv("DEVICE_OUTPUT_MAX_LENGTH", "50000"))
-    global_ai_summary_enabled = (
-        os.getenv("ENABLE_AI_SUMMARIZATION", "false").lower() == "true"
-    )
+    # 從 Settings 讀取配置
+    ai_threshold = settings.AI_SUMMARY_THRESHOLD
+    max_chars = settings.DEVICE_OUTPUT_MAX_LENGTH
+    global_ai_summary_enabled = settings.ENABLE_AI_SUMMARIZATION
 
     # 如果輸出長度小於等於門檻值，直接返回完整輸出
     if len(output) <= ai_threshold:
@@ -605,7 +600,7 @@ def run_readonly_show_command(device_ip: str, command: str, device_config=None) 
 
     if connection:
         try:
-            read_timeout = int(os.getenv("COMMAND_TIMEOUT", "20"))
+            read_timeout = settings.COMMAND_TIMEOUT
             output = connection.send_command(command, read_timeout=read_timeout)
             logger.info(f"指令執行成功: {command}")
 
@@ -618,7 +613,7 @@ def run_readonly_show_command(device_ip: str, command: str, device_config=None) 
             if any(keyword in command.lower() for keyword in cacheable_commands):
                 output_to_cache = processed_output
                 # 對於超長輸出進行截斷處理（使用環境變數控制）
-                output_max_size = int(os.getenv("OUTPUT_MAX_SIZE", "50000"))
+                output_max_size = settings.OUTPUT_MAX_SIZE
                 if len(processed_output) > output_max_size:
                     output_to_cache = (
                         processed_output[:output_max_size]
@@ -647,7 +642,7 @@ def _direct_connection_fallback(
         device = {"host": device_ip, **device_credentials}
 
         with ConnectHandler(**device) as net_connect:
-            read_timeout = int(os.getenv("COMMAND_TIMEOUT", "20"))
+            read_timeout = settings.COMMAND_TIMEOUT
             output = net_connect.send_command(command, read_timeout=read_timeout)
             logger.info(f"直接連線執行成功: {command}")
             # 使用智能輸出處理 - 設備指令模式不啟用 AI 摘要
