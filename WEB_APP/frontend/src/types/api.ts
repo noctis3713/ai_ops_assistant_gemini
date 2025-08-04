@@ -20,7 +20,11 @@ export interface DeviceGroup {
 
 // 設備列表回應介面
 export interface DevicesResponse {
-  devices: Device[];
+  success: boolean;
+  data: Device[];
+  message: string;
+  error_code: string | null;
+  timestamp: string;
 }
 
 // 設備群組列表回應介面

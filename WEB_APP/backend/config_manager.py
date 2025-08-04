@@ -7,12 +7,117 @@
 
 import json
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
+from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# 配置型別模型 - 提供型別安全和自動驗證
+# =============================================================================
+
+
+class DeviceConfig(BaseModel):
+    """設備配置模型
+
+    定義單一設備的配置結構和驗證規則
+    """
+
+    ip: str
+    model: str
+    os: str
+    name: str
+    description: str
+    username: str
+    password: str
+    device_type: str
+
+
+class DevicesConfig(BaseModel):
+    """設備配置檔案模型
+
+    定義整個 devices.json 檔案的結構
+    """
+
+    devices: List[DeviceConfig]
+
+
+class GroupData(BaseModel):
+    """群組資料模型"""
+
+    device_type: str
+    scope: str
+
+
+class GroupConfig(BaseModel):
+    """群組配置模型"""
+
+    name: str
+    description: str
+    platform: str
+    data: GroupData
+
+
+class GroupsMetadata(BaseModel):
+    """群組元資料模型"""
+
+    version: str
+    created_date: str
+    description: str
+
+
+class GroupsConfig(BaseModel):
+    """群組配置檔案模型
+
+    定義整個 groups.json 檔案的結構
+    """
+
+    groups: List[GroupConfig]
+    metadata: GroupsMetadata
+
+
+class CommandValidation(BaseModel):
+    """指令驗證配置模型"""
+
+    allowed_command_prefixes: List[str]
+    dangerous_keywords: List[str]
+    max_command_length: int
+    enable_strict_validation: bool
+
+
+class SecurityDescription(BaseModel):
+    """安全配置說明模型"""
+
+    allowed_command_prefixes: str
+    dangerous_keywords: str
+    max_command_length: str
+    enable_strict_validation: str
+
+
+class SecurityAudit(BaseModel):
+    """安全稽核配置模型"""
+
+    log_all_validations: bool
+    log_blocked_commands: bool
+    alert_on_security_violations: bool
+
+
+class SecurityConfig(BaseModel):
+    """安全配置檔案模型
+
+    定義整個 security.json 檔案的結構
+    """
+
+    version: str
+    last_updated: str
+    command_validation: CommandValidation
+    description: SecurityDescription
+    audit: SecurityAudit
 
 
 class ConfigManager:
@@ -35,11 +140,11 @@ class ConfigManager:
         # 確保配置目錄存在
         self.config_dir.mkdir(exist_ok=True)
 
-    def load_devices_config(self) -> Dict[str, Any]:
+    def load_devices_config(self) -> DevicesConfig:
         """載入設備配置檔案
 
         Returns:
-            設備配置字典
+            DevicesConfig: 型別安全的設備配置物件
 
         Raises:
             HTTPException: 當配置檔案不存在或格式錯誤時
@@ -54,21 +159,24 @@ class ConfigManager:
                 )
 
             with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
+                raw_data = json.load(f)
 
-            # 驗證配置檔案結構
-            self._validate_devices_config(config_data)
+            # 使用 Pydantic 進行型別驗證和轉換
+            config_data = DevicesConfig(**raw_data)
 
-            # 快取配置資料
-            self._devices_config = config_data
+            # 快取配置資料（保持向後相容性）
+            self._devices_config = config_data.model_dump()
 
-            logger.info(
-                f"成功載入設備配置檔案，包含 {len(config_data['devices'])} 台設備"
-            )
+            logger.info(f"成功載入設備配置檔案，包含 {len(config_data.devices)} 台設備")
             return config_data
 
         except HTTPException:
             raise
+        except ValidationError as e:
+            logger.error(f"設備配置檔案格式驗證失敗: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"設備配置檔案格式驗證失敗: {str(e)}"
+            )
         except json.JSONDecodeError as e:
             logger.error(f"設備配置檔案JSON格式錯誤: {e}")
             raise HTTPException(
@@ -128,11 +236,11 @@ class ConfigManager:
                         detail=f"設備配置檔案格式錯誤：第 {i+1} 個設備缺少欄位 '{field}'",
                     )
 
-    def load_groups_config(self) -> Dict[str, Any]:
+    def load_groups_config(self) -> GroupsConfig:
         """載入群組配置檔案
 
         Returns:
-            群組配置字典
+            GroupsConfig: 型別安全的群組配置物件
 
         Raises:
             HTTPException: 當配置檔案格式錯誤時
@@ -142,24 +250,33 @@ class ConfigManager:
         try:
             if not config_path.exists():
                 logger.warning(f"群組配置檔案不存在: {config_path}，回傳空群組列表")
-                return {"groups": []}
+                empty_config = GroupsConfig(
+                    groups=[],
+                    metadata=GroupsMetadata(
+                        version="1.0", created_date="", description="空的群組配置"
+                    ),
+                )
+                return empty_config
 
             with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
+                raw_data = json.load(f)
 
-            # 驗證配置檔案結構
-            self._validate_groups_config(config_data)
+            # 使用 Pydantic 進行型別驗證和轉換
+            config_data = GroupsConfig(**raw_data)
 
-            # 快取配置資料
-            self._groups_config = config_data
+            # 快取配置資料（保持向後相容性）
+            self._groups_config = config_data.model_dump()
 
-            logger.info(
-                f"成功載入群組配置檔案，包含 {len(config_data['groups'])} 個群組"
-            )
+            logger.info(f"成功載入群組配置檔案，包含 {len(config_data.groups)} 個群組")
             return config_data
 
         except HTTPException:
             raise
+        except ValidationError as e:
+            logger.error(f"群組配置檔案格式驗證失敗: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"群組配置檔案格式驗證失敗: {str(e)}"
+            )
         except json.JSONDecodeError as e:
             logger.error(f"群組配置檔案JSON格式錯誤: {e}")
             raise HTTPException(
@@ -334,11 +451,11 @@ class ConfigManager:
         logger.warning(f"使用回退設備名稱: {device_ip} -> {fallback_name}")
         return fallback_name
 
-    def load_security_config(self) -> Dict[str, Any]:
+    def load_security_config(self) -> SecurityConfig:
         """載入安全配置檔案
 
         Returns:
-            安全配置字典
+            SecurityConfig: 型別安全的安全配置物件
 
         Raises:
             HTTPException: 當配置檔案格式錯誤時
@@ -351,19 +468,24 @@ class ConfigManager:
                 return self._get_default_security_config()
 
             with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
+                raw_data = json.load(f)
 
-            # 驗證配置檔案結構
-            self._validate_security_config(config_data)
+            # 使用 Pydantic 進行型別驗證和轉換
+            config_data = SecurityConfig(**raw_data)
 
-            # 快取配置資料
-            self._security_config = config_data
+            # 快取配置資料（保持向後相容性）
+            self._security_config = config_data.model_dump()
 
             logger.info("成功載入安全配置檔案")
             return config_data
 
         except HTTPException:
             raise
+        except ValidationError as e:
+            logger.error(f"安全配置檔案格式驗證失敗: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"安全配置檔案格式驗證失敗: {str(e)}"
+            )
         except json.JSONDecodeError as e:
             logger.error(f"安全配置檔案JSON格式錯誤: {e}")
             raise HTTPException(
@@ -418,32 +540,40 @@ class ConfigManager:
                     detail=f"安全配置檔案格式錯誤：command_validation.{field} 必須是陣列",
                 )
 
-    def _get_default_security_config(self) -> Dict[str, Any]:
+    def _get_default_security_config(self) -> SecurityConfig:
         """取得預設安全配置（當配置檔案不存在時使用）"""
-        return {
-            "version": "1.0.0",
-            "command_validation": {
-                "allowed_command_prefixes": ["show", "ping", "traceroute"],
-                "dangerous_keywords": ["configure", "write", "delete", "shutdown"],
-                "max_command_length": 200,
-                "enable_strict_validation": True,
-            },
-            "audit": {
-                "log_all_validations": True,
-                "log_blocked_commands": True,
-                "alert_on_security_violations": True,
-            },
-        }
+        return SecurityConfig(
+            version="1.0.0",
+            last_updated="",
+            command_validation=CommandValidation(
+                allowed_command_prefixes=["show", "ping", "traceroute"],
+                dangerous_keywords=["configure", "write", "delete", "shutdown"],
+                max_command_length=200,
+                enable_strict_validation=True,
+            ),
+            description=SecurityDescription(
+                allowed_command_prefixes="允許執行的指令前綴清單",
+                dangerous_keywords="危險關鍵字清單",
+                max_command_length="指令最大長度限制",
+                enable_strict_validation="是否啟用嚴格驗證模式",
+            ),
+            audit=SecurityAudit(
+                log_all_validations=True,
+                log_blocked_commands=True,
+                alert_on_security_violations=True,
+            ),
+        )
 
-    def get_security_config(self) -> Dict[str, Any]:
+    def get_security_config(self) -> SecurityConfig:
         """取得安全配置（使用快取機制）
 
         Returns:
-            安全配置字典
+            SecurityConfig: 型別安全的安全配置物件
         """
         if self._security_config is None:
             return self.load_security_config()
-        return self._security_config
+        # 從快取重建 SecurityConfig 物件
+        return SecurityConfig(**self._security_config)
 
     def refresh_config(self):
         """重新載入所有配置檔案"""
@@ -456,17 +586,11 @@ class ConfigManager:
         self.load_security_config()
 
 
-# 全域配置管理器實例
-_config_manager = None
-
-
+@lru_cache(maxsize=1)
 def get_config_manager() -> ConfigManager:
-    """取得全域配置管理器實例
+    """取得全域配置管理器實例（使用快取確保單例）
 
     Returns:
         ConfigManager: 配置管理器實例
     """
-    global _config_manager
-    if _config_manager is None:
-        _config_manager = ConfigManager()
-    return _config_manager
+    return ConfigManager()

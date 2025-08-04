@@ -31,7 +31,8 @@
       "Bash(sed:*)",
       "Bash(cat:*)",
       "Bash(pip show:*)",
-      "Bash(isort:*)"
+      "Bash(isort:*)",
+      "Bash(ruff check:*)"
     ],
     "deny": []
   }

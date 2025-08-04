@@ -35,7 +35,7 @@ import type { LogEntry } from '@/utils/SimpleLogger';
 export const getDevices = async (): Promise<Device[]> => {
   return createRetryableRequest(async () => {
     const response = await apiClient.get<DevicesResponse>(API_ENDPOINTS.DEVICES);
-    return response.data.devices;
+    return response.data.data || [];
   });
 };
 

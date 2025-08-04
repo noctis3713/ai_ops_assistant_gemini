@@ -252,7 +252,24 @@ class CommandValidator:
             cls._config_last_loaded = current_time
             logger.debug("安全配置已重新載入")
 
-        return cls._cached_config.get("command_validation", {})
+        # 正確處理 SecurityConfig Pydantic 模型物件
+        if hasattr(cls._cached_config, 'command_validation'):
+            # 如果是 SecurityConfig 物件，取得 command_validation 屬性並轉為字典
+            command_validation = cls._cached_config.command_validation
+            if hasattr(command_validation, 'model_dump'):
+                return command_validation.model_dump()
+            elif hasattr(command_validation, 'dict'):
+                return command_validation.dict()
+            else:
+                # 如果是字典類型，直接返回
+                return command_validation if isinstance(command_validation, dict) else {}
+        elif isinstance(cls._cached_config, dict):
+            # 向後兼容：如果是字典格式，使用原來的方式
+            return cls._cached_config.get("command_validation", {})
+        else:
+            # 其他情況返回空字典
+            logger.warning("無法解析安全配置，使用空字典")
+            return {}
 
     @classmethod
     def reload_security_config(cls):

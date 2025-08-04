@@ -10,6 +10,7 @@ import logging
 import os
 import time
 import uuid
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 # AI 服務相關導入
@@ -911,17 +912,11 @@ Question: {{input}}
         }
 
 
-# 全域 AI 服務實例
-_ai_service = None
-
-
+@lru_cache(maxsize=1)
 def get_ai_service() -> AIService:
-    """取得全域 AI 服務實例
+    """取得全域 AI 服務實例（使用快取確保單例）
 
     Returns:
         AIService: AI 服務實例
     """
-    global _ai_service
-    if _ai_service is None:
-        _ai_service = AIService()
-    return _ai_service
+    return AIService()

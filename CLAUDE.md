@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的完整專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-03  
+> 📅 **最後更新**: 2025-08-04 (v2.1.0 - 後端 API 架構強化)  
 > 🔄 **維護頻率**: 隨專案重大更新同步修改
 
 ---
@@ -279,10 +279,20 @@ class AsyncTaskManager:
 | `/api/admin/prompt-manager/stats` | GET | 提示詞管理器統計 ✨ |
 | `/api/frontend-logs` | POST | 前端日誌收集 ✨ |
 
-**統一錯誤處理**:
+**統一錯誤處理與依賴注入** (v2.1.0 強化):
 ```python
-async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
-    """統一處理所有 AI 相關請求的輔助函數"""
+async def _handle_ai_request(ai_service, query: str, device_ips: List[str] = None) -> str:
+    """統一處理所有 AI 相關請求的輔助函數
+    
+    重要更新 (v2.1.0):
+    - 修復依賴注入問題：正確傳入 ai_service 參數
+    - 支援 batch_execute 和 run_batch_task_worker 統一調用
+    - 增強錯誤分類和回應格式標準化
+    """
+
+# 正確的調用方式 (v2.1.0 修復):
+ai_service = get_ai_service()  # 獲取 AI 服務實例
+result = await _handle_ai_request(ai_service, query=command, device_ips=devices)
 ```
 
 ---
@@ -575,30 +585,55 @@ PROMPT_TEMPLATE_DIR=/path/to/templates/prompts
 }
 ```
 
-**🔧 統一配置管理器 (`config_manager.py`)** ✨ 新增:
+**🔧 統一配置管理器 (`config_manager.py`)** ✨ v2.1.0 強化:
 
 ```python
 class ConfigManager:
-    """統一的配置檔案管理器"""
+    """統一的配置檔案管理器 - 完整 Pydantic 模型支援"""
     
-    def __init__(self):
-        self.config_dir = Path(__file__).parent / "config"
-        self._configs = {}
-        self._load_all_configs()
+    def __init__(self, config_dir: str = None):
+        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "config"
+        self._devices_config = None
+        self._groups_config = None  
+        self._security_config = None
     
-    def get_security_config(self) -> Dict[str, Any]:
-        """取得安全配置"""
-        return self._configs.get("security", {})
+    def load_security_config(self) -> SecurityConfig:
+        """載入型別安全的安全配置 (v2.1.0 新增)"""
+        # 使用 Pydantic 進行型別驗證和轉換
+        config_data = SecurityConfig(**raw_data)
+        return config_data
     
-    def get_devices_config(self) -> Dict[str, Any]:
-        """取得設備配置"""
-        return self._configs.get("devices", {})
-    
-    def reload_config(self, config_name: str):
-        """熱重載指定配置檔案"""
+    def load_devices_config(self) -> DevicesConfig:
+        """載入型別安全的設備配置 (v2.1.0 新增)"""
+        config_data = DevicesConfig(**raw_data)
+        return config_data
         
-    def validate_command_security(self, command: str) -> Tuple[bool, str]:
-        """基於配置檔案驗證指令安全性"""
+    def get_security_config(self) -> SecurityConfig:
+        """取得型別安全的安全配置物件"""
+        if self._security_config is None:
+            return self.load_security_config()
+        return SecurityConfig(**self._security_config)  # 從快取重建物件
+    
+    def refresh_config(self):
+        """重新載入所有配置檔案 (v2.1.0 優化)"""
+        self._devices_config = None
+        self._groups_config = None
+        self._security_config = None
+```
+
+**🔍 Pydantic 模型定義** (v2.1.0 完整型別安全):
+```python
+class SecurityConfig(BaseModel):
+    """安全配置檔案模型 - 定義整個 security.json 檔案的結構"""
+    version: str
+    last_updated: str
+    command_validation: CommandValidation
+    description: SecurityDescription
+    audit: SecurityAudit
+
+class DevicesConfig(BaseModel):
+    """設備配置檔案模型 - 定義整個 devices.json 檔案的結構"""
+    devices: List[DeviceConfig]
 ```
 
 **🔄 熱重載 API**:
@@ -1227,7 +1262,43 @@ for device_ip, error_detail in batch_result.error_details.items():
     print(f"建議: {error_detail['suggestion']}")
 ```
 
-**4. 前端 API 呼叫失敗**
+**4. AI 查詢執行失敗** ✨ v2.1.0 修復案例
+
+*症狀*: `執行失敗：伺服器內部錯誤` 或 `_handle_ai_request() missing 1 required positional argument: 'ai_service'`
+
+*根本原因*: 
+- AI 服務依賴注入問題：`_handle_ai_request()` 函數缺少必要的 `ai_service` 參數
+- 影響範圍：`batch_execute` 和 `run_batch_task_worker` 函數調用失敗
+
+*v2.1.0 修復方案*:
+```python
+# 修復前 (錯誤):
+ai_response = await _handle_ai_request(
+    query=request.command, device_ips=request.devices
+)
+
+# 修復後 (正確):
+ai_service = get_ai_service()  # 正確獲取 AI 服務實例
+ai_response = await _handle_ai_request(
+    ai_service, query=request.command, device_ips=request.devices  
+)
+```
+
+*驗證修復*:
+```bash
+# 測試 AI 查詢功能
+curl -X POST http://localhost:8000/api/batch-execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "devices": ["202.3.182.202"],
+    "command": "分析設備狀態",
+    "mode": "ai"
+  }'
+
+# 預期結果：正常回傳 AI 分析結果，而非 500 錯誤
+```
+
+**5. 前端 API 呼叫失敗**
 
 *症狀*: 前端無法與後端通信
 
@@ -1373,7 +1444,23 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ## 📈 版本更新記錄
 
-### 🚀 v2.0.0 - 2025-08-03 (當前版本)
+### 🔧 v2.1.0 - 2025-08-04 (當前版本)
+
+**🎯 後端 API 架構強化和關鍵問題修復**:
+- ✅ **AI 服務依賴注入修復**: 解決 `_handle_ai_request()` 缺少 `ai_service` 參數的嚴重 bug
+- ✅ **配置管理器型別安全強化**: 完善 Pydantic 模型支援和 SecurityConfig 物件處理
+- ✅ **API 端點架構優化**: 統一錯誤處理機制，`main.py` 大幅重構 (+536 行)
+- ✅ **前端 API 整合改進**: 增強 TypeScript 型別定義和 API 客戶端錯誤處理
+- ✅ **非同步任務系統完善**: 優化任務狀態管理和輪詢機制
+- ✅ **指令安全驗證增強**: 網路工具模組中的 CommandValidator 功能擴展
+
+**📊 技術改進統計**:
+- 後端 API 程式碼: +654 行新增功能，-161 行程式碼優化
+- 主要影響檔案: `main.py` (+536), `config_manager.py` (+236), `network_tools.py` (+19)
+- 修復關鍵 bug: AI 查詢功能從 500 錯誤恢復至正常運作
+- 型別安全性: 全面強化 Pydantic 模型和 API 介面一致性
+
+### 🚀 v2.0.0 - 2025-08-03
 
 **🔥 重大架構升級**:
 - ✅ **企業級提示詞管理系統**: 完整 Jinja2 + YAML 配置架構
@@ -1399,6 +1486,6 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ---
 
-*📝 文件版本: v2.0.0*  
-*🔄 最後更新: 2025-08-03*  
+*📝 文件版本: v2.1.0*  
+*🔄 最後更新: 2025-08-04*  
 *👤 維護者: Claude AI Assistant*

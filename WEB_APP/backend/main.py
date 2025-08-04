@@ -1,13 +1,15 @@
 """Web CLI API for network device commands and AI analysis - 重構版本"""
 
 import asyncio
+import inspect
 import logging
 import os
 import sys
 import time
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -27,16 +29,16 @@ else:
     print("WARNING - Google API Key 未載入")
 print(f"AI Provider: {ai_provider}")
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
+from starlette import status
 
 from ai_service import get_ai_service
 
 # 導入非同步任務管理器
 from async_task_manager import (
-    AsyncTask,
     TaskStatus,
     TaskType,
     get_task_manager,
@@ -49,15 +51,12 @@ from core.network_tools import CommandValidator, run_readonly_show_command
 from core.nornir_integration import (
     BatchResult,
     classify_error,
-    format_batch_result,
     get_nornir_manager,
 )
 from utils import (
     LoggerConfig,
     create_ai_logger,
     create_stream_handler,
-    format_device_execution_result,
-    get_frontend_log_config,
     get_frontend_log_handler,
 )
 
@@ -68,13 +67,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-# 初始化服務實例
-config_manager = get_config_manager()
-ai_service = get_ai_service()
-ai_logger = create_ai_logger()
-
-# 設定統一日誌系統
-app_logger = LoggerConfig.setup_logger("web_app", "app.log")
+# 服務實例將在 startup_event 中初始化並掛載到 app.state
 
 # 設定根日誌系統（包含控制台輸出）
 logging.basicConfig(
@@ -109,11 +102,19 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """應用程式啟動時執行的事件"""
+    """應用程式啟動時執行的事件 - 初始化所有服務實例"""
     try:
-        task_manager = get_task_manager()
-        await task_manager.start_cleanup_loop()
-        logger.info("應用程式啟動完成，任務管理器已啟動")
+        # 初始化並掛載所有服務到 app.state
+        app.state.config_manager = get_config_manager()
+        app.state.ai_service = get_ai_service()
+        app.state.ai_logger = create_ai_logger()
+        app.state.app_logger = LoggerConfig.setup_logger("web_app", "app.log")
+        app.state.task_manager = get_task_manager()
+
+        # 啟動任務管理器清理循環
+        await app.state.task_manager.start_cleanup_loop()
+
+        logger.info("應用程式啟動完成，所有服務已初始化並注入 app.state")
     except Exception as e:
         logger.error(f"啟動事件處理失敗: {e}", exc_info=True)
 
@@ -128,7 +129,114 @@ async def shutdown_event():
         logger.error(f"關閉事件處理失敗: {e}", exc_info=True)
 
 
+# =============================================================================
+# FastAPI 依賴注入提供者函數
+# =============================================================================
+
+
+def get_config_manager_dep(request: Request):
+    """獲取配置管理器依賴
+
+    Args:
+        request: FastAPI 請求物件
+
+    Returns:
+        ConfigManager: 配置管理器實例
+    """
+    return request.app.state.config_manager
+
+
+def get_ai_service_dep(request: Request):
+    """獲取 AI 服務依賴
+
+    Args:
+        request: FastAPI 請求物件
+
+    Returns:
+        AIService: AI 服務實例
+    """
+    return request.app.state.ai_service
+
+
+def get_task_manager_dep(request: Request):
+    """獲取任務管理器依賴
+
+    Args:
+        request: FastAPI 請求物件
+
+    Returns:
+        TaskManager: 任務管理器實例
+    """
+    return request.app.state.task_manager
+
+
+# =============================================================================
+# 統一錯誤處理函數
+# =============================================================================
+
+
+async def handle_api_errors(func: Callable, *args, **kwargs) -> Any:
+    """統一處理 API 錯誤的輔助函數
+
+    支援同步和異步函數的統一錯誤處理，減少重複的 try/except 程式碼
+
+    Args:
+        func: 要執行的函數
+        *args: 位置參數
+        **kwargs: 關鍵字參數
+
+    Returns:
+        Any: 函數執行結果
+
+    Raises:
+        HTTPException: 包裝後的 HTTP 異常
+    """
+    try:
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+    except HTTPException:
+        # 如果已經是 HTTP 異常，直接拋出
+        raise
+    except Exception as e:
+        logger.error(f"執行 {func.__name__} 時發生未預期錯誤: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"內部伺服器錯誤: {e}",
+        )
+
+
+# =============================================================================
+# 統一回應格式模型
+# =============================================================================
+
+T = TypeVar("T")
+
+
+class BaseResponse(BaseModel, Generic[T]):
+    """統一的 API 回應格式
+
+    提供一致的回應結構，支援泛型資料類型
+    """
+
+    success: bool = True
+    data: Optional[T] = None
+    message: Optional[str] = None
+    error_code: Optional[str] = None
+    timestamp: Optional[str] = None
+
+    def __init__(self, **data):
+        if "timestamp" not in data:
+            data["timestamp"] = datetime.now().isoformat()
+        super().__init__(**data)
+
+
+# =============================================================================
 # API 請求和回應模型
+# =============================================================================
+
+
 class ExecuteRequest(BaseModel):
     """設備指令執行請求模型"""
 
@@ -300,13 +408,16 @@ class ReloadConfigResponse(BaseModel):
 # =============================================================================
 
 
-async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
+async def _handle_ai_request(
+    ai_service, query: str, device_ips: List[str] = None
+) -> str:
     """統一處理所有 AI 相關請求的輔助函數
 
     這個函數封裝了與 AIService 的互動、錯誤處理和回應格式化。
     AIService 內部會自動處理所有提示詞工程，不需要手動建構。
 
     Args:
+        ai_service: AI 服務實例
         query: 用戶的純粹查詢內容
         device_ips: 相關的設備 IP 列表（可選）
 
@@ -317,7 +428,10 @@ async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
         HTTPException: 當 AI 服務未初始化或查詢失敗時
     """
     if not ai_service.ai_initialized:
-        raise HTTPException(status_code=503, detail="AI 服務未啟用或初始化失敗")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI 服務未啟用或初始化失敗",
+        )
 
     try:
         # 直接傳入用戶查詢，讓 AIService 內部處理所有提示詞工程
@@ -334,36 +448,67 @@ async def _handle_ai_request(query: str, device_ips: List[str] = None) -> str:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
 
-@app.get("/api/devices")
-async def get_devices():
-    """取得所有設備列表"""
+@app.get(
+    "/api/devices",
+    response_model=BaseResponse[List[DeviceInfo]],
+    response_model_exclude_unset=True,
+)
+async def get_devices(
+    config_manager=Depends(get_config_manager_dep),
+) -> BaseResponse[List[DeviceInfo]]:
+    """取得所有設備列表
+
+    Args:
+        config_manager: 配置管理器實例（依賴注入）
+
+    Returns:
+        Dict[str, List[DeviceInfo]]: 包含設備列表的字典
+
+    Raises:
+        HTTPException: 當載入設備配置失敗時
+    """
     logger.info("收到獲取設備列表請求")
 
     try:
         config = config_manager.load_devices_config()
         devices = []
 
-        for device in config.get("devices", []):
+        for device_obj in config.devices:
             devices.append(
                 DeviceInfo(
-                    ip=device["ip"],
-                    name=device["name"],
-                    model=device["model"],
-                    description=device["description"],
+                    ip=device_obj.ip,
+                    name=device_obj.name,
+                    model=device_obj.model,
+                    description=device_obj.description,
                 )
             )
 
         logger.info(f"成功回傳 {len(devices)} 個設備")
-        return {"devices": devices}
+        return BaseResponse(data=devices, message=f"成功載入 {len(devices)} 個設備")
 
     except Exception as e:
         logger.error(f"獲取設備列表失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取設備列表失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"獲取設備列表失敗: {str(e)}",
+        )
 
 
 @app.get("/api/device-groups")
-async def get_device_groups():
-    """取得所有設備群組列表"""
+async def get_device_groups(
+    config_manager=Depends(get_config_manager_dep),
+) -> Dict[str, List[DeviceGroupInfo]]:
+    """取得所有設備群組列表
+
+    Args:
+        config_manager: 配置管理器實例（依賴注入）
+
+    Returns:
+        Dict[str, List[DeviceGroupInfo]]: 包含設備群組列表的字典
+
+    Raises:
+        HTTPException: 當載入群組配置失敗時
+    """
     logger.info("收到獲取設備群組列表請求")
 
     try:
@@ -372,16 +517,15 @@ async def get_device_groups():
 
         groups = []
 
-        for group in groups_config.get("groups", []):
+        for group_obj in groups_config.groups:
             # 計算群組中的設備數量
-            if group.get("name") == "cisco_xe_devices":
+            if group_obj.name == "cisco_xe_devices":
                 # cisco_xe_devices 群組包含所有 Cisco IOS-XE 設備
                 device_count = len(
                     [
                         device
-                        for device in devices_config.get("devices", [])
-                        if device.get("device_type") == "cisco_xe"
-                        or device.get("os") == "cisco_xe"
+                        for device in devices_config.devices
+                        if device.device_type == "cisco_xe" or device.os == "cisco_xe"
                     ]
                 )
             else:
@@ -390,10 +534,10 @@ async def get_device_groups():
 
             groups.append(
                 DeviceGroupInfo(
-                    name=group["name"],
-                    description=group.get("description", ""),
+                    name=group_obj.name,
+                    description=group_obj.description,
                     device_count=device_count,
-                    platform=group.get("platform", "cisco_xe"),
+                    platform=group_obj.platform,
                 )
             )
 
@@ -402,19 +546,37 @@ async def get_device_groups():
 
     except Exception as e:
         logger.error(f"獲取設備群組列表失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取設備群組列表失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"獲取設備群組列表失敗: {str(e)}",
+        )
 
 
 @app.post("/api/execute", response_class=PlainTextResponse)
-async def execute_command(request: ExecuteRequest):
-    """執行網路設備指令"""
+async def execute_command(
+    request: ExecuteRequest, config_manager=Depends(get_config_manager_dep)
+) -> str:
+    """執行網路設備指令
+
+    Args:
+        request: 包含設備 IP 和指令的請求
+        config_manager: 配置管理器實例（依賴注入）
+
+    Returns:
+        str: 指令執行結果（純文字格式）
+
+    Raises:
+        HTTPException: 當指令不安全、設備不存在或執行失敗時
+    """
     logger.info(f"收到指令執行請求: {request.device_ip} -> {request.command}")
 
     # 指令安全性驗證
     is_safe, error_message = CommandValidator.validate_command(request.command)
     if not is_safe:
         logger.warning(f"拒絕執行不安全指令: {request.command}, 原因: {error_message}")
-        raise HTTPException(status_code=400, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
 
     # 驗證設備IP
     try:
@@ -423,13 +585,15 @@ async def execute_command(request: ExecuteRequest):
         if not device_config:
             error_msg = f"設備 {request.device_ip} 不在配置列表中"
             logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
-        raise HTTPException(status_code=500, detail="驗證設備配置失敗")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="驗證設備配置失敗"
+        )
 
     # 執行指令
     try:
@@ -453,14 +617,16 @@ async def execute_command(request: ExecuteRequest):
 
         # 根據錯誤分類提供對應的 HTTP 狀態碼
         status_code_map = {
-            "connection_timeout": 408,
-            "authentication_failed": 401,
-            "connection_refused": 503,
-            "security_violation": 400,
-            "unknown_error": 500,
+            "connection_timeout": status.HTTP_408_REQUEST_TIMEOUT,
+            "authentication_failed": status.HTTP_401_UNAUTHORIZED,
+            "connection_refused": status.HTTP_503_SERVICE_UNAVAILABLE,
+            "security_violation": status.HTTP_400_BAD_REQUEST,
+            "unknown_error": status.HTTP_500_INTERNAL_SERVER_ERROR,
         }
 
-        status_code = status_code_map.get(error_detail["type"], 500)
+        status_code = status_code_map.get(
+            error_detail["type"], status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
         # 構建詳細的錯誤訊息
         error_msg = f"設備 {request.device_ip} 執行失敗: {error_str}\n"
@@ -472,8 +638,24 @@ async def execute_command(request: ExecuteRequest):
 
 
 @app.post("/api/ai-query", response_class=PlainTextResponse)
-async def ai_query(request: AIQueryRequest):
-    """AI 查詢端點（重構版）"""
+async def ai_query(
+    request: AIQueryRequest,
+    config_manager=Depends(get_config_manager_dep),
+    ai_service=Depends(get_ai_service_dep),
+) -> str:
+    """AI 查詢端點（重構版）
+
+    Args:
+        request: 包含設備 IP 和查詢內容的請求
+        config_manager: 配置管理器實例（依賴注入）
+        ai_service: AI 服務實例（依賴注入）
+
+    Returns:
+        str: AI 分析結果（Markdown 格式）
+
+    Raises:
+        HTTPException: 當設備不存在或 AI 查詢失敗時
+    """
     logger.info(f"收到 AI 查詢請求: {request.device_ip} -> {request.query}")
 
     # 驗證設備IP
@@ -483,21 +665,126 @@ async def ai_query(request: AIQueryRequest):
         if not device_config:
             error_msg = f"設備 {request.device_ip} 不在配置列表中"
             logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
-        raise HTTPException(status_code=500, detail="驗證設備配置失敗")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="驗證設備配置失敗"
+        )
 
     # 直接呼叫統一的 AI 處理函數
-    return await _handle_ai_request(query=request.query, device_ips=[request.device_ip])
+    return await _handle_ai_request(
+        ai_service, query=request.query, device_ips=[request.device_ip]
+    )
+
+
+@app.post(
+    "/api/ai-query-async",
+    response_model=TaskCreationResponse,
+    response_model_exclude_unset=True,
+)
+async def ai_query_async(
+    request: AIQueryRequest,
+    background_tasks: BackgroundTasks,
+    config_manager=Depends(get_config_manager_dep),
+) -> TaskCreationResponse:
+    """非同步 AI 查詢端點
+
+    適用於可能需要較長時間的 AI 分析查詢，避免 HTTP 超時問題。
+    用戶可以通過返回的 task_id 查詢任務進度和結果。
+
+    Args:
+        request: 包含設備 IP 和查詢內容的請求
+        background_tasks: FastAPI 背景任務管理器
+        config_manager: 配置管理器實例（依賴注入）
+
+    Returns:
+        TaskCreationResponse: 包含任務 ID 的回應
+
+    Raises:
+        HTTPException: 當設備不存在時
+    """
+    logger.info(
+        f"收到非同步 AI 查詢請求: {request.device_ip} -> {request.query[:50]}..."
+    )
+
+    # 驗證設備IP
+    device_config = config_manager.get_device_by_ip(request.device_ip)
+    if not device_config:
+        error_msg = f"設備 {request.device_ip} 不在配置列表中"
+        logger.error(error_msg)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+
+    # 建立非同步任務
+    from async_task_manager import get_task_manager, TaskType
+
+    task_manager = get_task_manager()
+    task = await task_manager.create_task(
+        task_type=TaskType.AI_QUERY,
+        params={"device_ip": request.device_ip, "query": request.query, "mode": "ai"},
+    )
+
+    # 在背景啟動 AI 查詢工作函數
+    background_tasks.add_task(
+        run_ai_query_task_worker, task.task_id, request.device_ip, request.query
+    )
+
+    logger.info(f"已建立非同步 AI 查詢任務: {task.task_id}")
+
+    return TaskCreationResponse(
+        task_id=task.task_id, message=f"AI 查詢任務已建立，任務ID: {task.task_id}"
+    )
 
 
 # =============================================================================
 # 非同步任務背景工作函數
 # =============================================================================
+
+
+async def run_ai_query_task_worker(task_id: str, device_ip: str, query: str):
+    """
+    執行 AI 查詢任務的背景工作函數
+
+    Args:
+        task_id: 任務ID
+        device_ip: 設備IP
+        query: AI 查詢內容
+    """
+    from async_task_manager import get_task_manager, TaskStatus
+    from ai_service import get_ai_service
+
+    task_manager = get_task_manager()
+
+    try:
+        # 更新任務狀態為執行中
+        await task_manager.update_task_status(task_id, TaskStatus.RUNNING)
+        await task_manager.update_progress(task_id, 10.0, "正在初始化 AI 服務...")
+
+        # 取得 AI 服務實例
+        ai_service = get_ai_service()
+
+        await task_manager.update_progress(task_id, 30.0, "正在執行 AI 分析...")
+
+        # 執行 AI 查詢
+        result = await _handle_ai_request(
+            ai_service, query=query, device_ips=[device_ip]
+        )
+
+        await task_manager.update_progress(task_id, 90.0, "正在完成處理...")
+
+        # 完成任務
+        await task_manager.complete_task(task_id, result)
+
+        logger.info(f"非同步 AI 查詢任務完成: {task_id}")
+
+    except Exception as e:
+        # 任務失敗
+        error_msg = f"AI 查詢任務失敗: {str(e)}"
+        logger.error(f"任務 {task_id} 執行失敗: {e}", exc_info=True)
+        await task_manager.fail_task(task_id, error_msg)
 
 
 async def run_batch_task_worker(
@@ -535,7 +822,8 @@ async def run_batch_task_worker(
 
             try:
                 # 直接呼叫 _handle_ai_request，不再需要 execute_ai_mode
-                result = await _handle_ai_request(query=command, device_ips=devices)
+                ai_service = get_ai_service()
+                result = await _handle_ai_request(ai_service, query=command, device_ips=devices)
                 await task_manager.update_progress(task_id, 90.0, "AI 分析完成")
 
                 # 使用統一的格式化函數處理 AI 結果
@@ -600,9 +888,15 @@ async def run_batch_task_worker(
 # =============================================================================
 
 
-@app.post("/api/batch-execute-async", response_model=TaskCreationResponse)
+@app.post(
+    "/api/batch-execute-async",
+    response_model=TaskCreationResponse,
+    response_model_exclude_unset=True,
+)
 async def batch_execute_async(
-    request: BatchExecuteRequest, background_tasks: BackgroundTasks
+    request: BatchExecuteRequest, 
+    background_tasks: BackgroundTasks,
+    config_manager=Depends(get_config_manager_dep)
 ):
     """
     非同步批次執行指令，立即返回任務 ID
@@ -630,7 +924,9 @@ async def batch_execute_async(
             logger.warning(
                 f"拒絕執行不安全指令: {request.command}, 原因: {error_message}"
             )
-            raise HTTPException(status_code=400, detail=error_message)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+            )
 
     # 驗證所有設備IP是否在配置中
     try:
@@ -641,13 +937,15 @@ async def batch_execute_async(
         if invalid_devices:
             error_msg = f"以下設備不在配置列表中: {', '.join(invalid_devices)}"
             logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
-        raise HTTPException(status_code=500, detail="驗證設備配置失敗")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="驗證設備配置失敗"
+        )
 
     try:
         # 建立非同步任務
@@ -682,10 +980,16 @@ async def batch_execute_async(
     except Exception as e:
         error_msg = f"建立非同步任務失敗: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )
 
 
-@app.get("/api/task/{task_id}", response_model=TaskResponse)
+@app.get(
+    "/api/task/{task_id}",
+    response_model=TaskResponse,
+    response_model_exclude_unset=True,
+)
 async def get_task_status(task_id: str):
     """
     查詢特定任務的狀態和結果
@@ -701,7 +1005,9 @@ async def get_task_status(task_id: str):
 
     if not task:
         logger.warning(f"查詢不存在的任務: {task_id}")
-        raise HTTPException(status_code=404, detail="找不到該任務")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="找不到該任務"
+        )
 
     # 將 AsyncTask 轉換為 TaskResponse 格式
     task_dict = task.to_dict()
@@ -750,14 +1056,20 @@ async def list_tasks(
         try:
             status_filter = TaskStatus(status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"無效的狀態值: {status}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"無效的狀態值: {status}",
+            )
 
     task_type_filter = None
     if task_type:
         try:
             task_type_filter = TaskType(task_type)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"無效的任務類型: {task_type}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"無效的任務類型: {task_type}",
+            )
 
     # 查詢任務
     tasks = await task_manager.list_tasks(
@@ -812,7 +1124,8 @@ async def cancel_task(task_id: str):
 
     if not success:
         raise HTTPException(
-            status_code=400, detail="任務無法取消（可能已完成或不存在）"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="任務無法取消（可能已完成或不存在）",
         )
 
     logger.info(f"任務已被用戶取消: {task_id}")
@@ -845,7 +1158,11 @@ async def get_task_manager_stats():
 # ===================================================================
 
 
-@app.post("/api/frontend-logs", response_model=FrontendLogResponse)
+@app.post(
+    "/api/frontend-logs",
+    response_model=FrontendLogResponse,
+    response_model_exclude_unset=True,
+)
 async def receive_frontend_logs(request: FrontendLogRequest):
     """
     接收前端日誌資料
@@ -893,7 +1210,11 @@ async def receive_frontend_logs(request: FrontendLogRequest):
         )
 
 
-@app.get("/api/frontend-log-config", response_model=FrontendLogConfig)
+@app.get(
+    "/api/frontend-log-config",
+    response_model=FrontendLogConfig,
+    response_model_exclude_unset=True,
+)
 async def get_frontend_log_config_endpoint():
     """
     取得前端日誌系統配置
@@ -916,7 +1237,9 @@ async def get_frontend_log_config_endpoint():
     except Exception as e:
         error_msg = f"獲取前端日誌配置失敗: {str(e)}"
         logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )
 
 
 @app.get("/")
@@ -989,11 +1312,17 @@ async def get_ai_status():
 
     except Exception as e:
         logger.error(f"AI 狀態檢查失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"AI 狀態檢查失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI 狀態檢查失敗: {str(e)}",
+        )
 
 
 @app.post("/api/batch-execute")
-async def batch_execute(request: BatchExecuteRequest):
+async def batch_execute(
+    request: BatchExecuteRequest,
+    config_manager=Depends(get_config_manager_dep)
+):
     """批次執行指令"""
     logger.info(f"收到批次執行請求: {len(request.devices)} 個設備 -> {request.command}")
 
@@ -1004,7 +1333,9 @@ async def batch_execute(request: BatchExecuteRequest):
             logger.warning(
                 f"拒絕執行不安全指令: {request.command}, 原因: {error_message}"
             )
-            raise HTTPException(status_code=400, detail=error_message)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+            )
 
     # 驗證所有設備IP是否在配置中
     try:
@@ -1015,13 +1346,15 @@ async def batch_execute(request: BatchExecuteRequest):
         if invalid_devices:
             error_msg = f"以下設備不在配置列表中: {', '.join(invalid_devices)}"
             logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
-        raise HTTPException(status_code=500, detail="驗證設備配置失敗")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="驗證設備配置失敗"
+        )
 
     # 使用 Nornir 執行批次指令
     try:
@@ -1032,8 +1365,9 @@ async def batch_execute(request: BatchExecuteRequest):
             logger.info(f"AI 模式批次執行: {request.devices} -> {request.command}")
 
             # 直接呼叫 _handle_ai_request，不再需要 execute_ai_mode
+            ai_service = get_ai_service()
             ai_response = await _handle_ai_request(
-                query=request.command, device_ips=request.devices
+                ai_service, query=request.command, device_ips=request.devices
             )
 
             # 構建AI模式的回應格式 - 每個設備顯示相同的 AI 分析結果
@@ -1153,13 +1487,13 @@ async def batch_execute(request: BatchExecuteRequest):
         # 分析錯誤類型
         if "timeout" in error_str.lower():
             error_msg = f"批次執行超時 - 部分設備連接超時，請檢查網路狀況"
-            status_code = 408
+            status_code = status.HTTP_408_REQUEST_TIMEOUT
         elif "authentication" in error_str.lower():
             error_msg = f"批次執行認證失敗 - 請檢查設備憑證設定"
-            status_code = 401
+            status_code = status.HTTP_401_UNAUTHORIZED
         else:
             error_msg = f"批次執行失敗: {error_str}"
-            status_code = 500
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
         raise HTTPException(status_code=status_code, detail=error_msg)
 
@@ -1207,7 +1541,10 @@ async def reload_prompts():
 
     except Exception as e:
         logger.error(f"提示詞重載失敗: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"重載失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"重載失敗: {str(e)}",
+        )
 
 
 @app.get("/api/devices/status")
@@ -1223,7 +1560,7 @@ async def get_devices_status():
         from core.nornir_integration import get_nornir_manager
 
         manager = get_nornir_manager()
-        device_ips = [device["ip"] for device in config.get("devices", [])]
+        device_ips = [device.ip for device in config.devices]
 
         # 執行健康檢查
         health_results = await asyncio.to_thread(
@@ -1231,15 +1568,15 @@ async def get_devices_status():
         )
 
         # 構建回應
-        for device in config.get("devices", []):
-            device_ip = device["ip"]
+        for device in config.devices:
+            device_ip = device.ip
             is_healthy = health_results.get(device_ip, False)
 
             devices_status.append(
                 {
                     "ip": device_ip,
-                    "name": device["name"],
-                    "model": device["model"],
+                    "name": device.name,
+                    "model": device.model,
                     "status": "online" if is_healthy else "offline",
                     "last_checked": time.time(),
                 }
@@ -1264,7 +1601,10 @@ async def get_devices_status():
 
     except Exception as e:
         logger.error(f"設備狀態檢查失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"設備狀態檢查失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"設備狀態檢查失敗: {str(e)}",
+        )
 
 
 @app.get("/api/devices/{device_ip}/status")
@@ -1277,7 +1617,8 @@ async def get_device_status(device_ip: str):
         device_config = config_manager.get_device_by_ip(device_ip)
         if not device_config:
             raise HTTPException(
-                status_code=404, detail=f"設備 {device_ip} 不在配置列表中"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"設備 {device_ip} 不在配置列表中",
             )
 
         # 使用 Nornir 管理器進行健康檢查
@@ -1308,7 +1649,10 @@ async def get_device_status(device_ip: str):
         raise
     except Exception as e:
         logger.error(f"設備 {device_ip} 狀態檢查失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"設備狀態檢查失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"設備狀態檢查失敗: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -1316,7 +1660,11 @@ async def get_device_status(device_ip: str):
 # =============================================================================
 
 
-@app.post("/api/admin/reload-config", response_model=ReloadConfigResponse)
+@app.post(
+    "/api/admin/reload-config",
+    response_model=ReloadConfigResponse,
+    response_model_exclude_unset=True,
+)
 async def reload_config_endpoint(request: ReloadConfigRequest):
     """
     重載配置檔案（管理員功能）
@@ -1336,7 +1684,9 @@ async def reload_config_endpoint(request: ReloadConfigRequest):
     expected_api_key = os.getenv("ADMIN_API_KEY", "admin123")  # 生產環境應使用強密碼
     if request.api_key != expected_api_key:
         logger.warning("配置重載請求 - API Key 驗證失敗")
-        raise HTTPException(status_code=401, detail="無效的 API Key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="無效的 API Key"
+        )
 
     reloaded_configs = []
     errors = []
@@ -1400,7 +1750,9 @@ async def reload_config_endpoint(request: ReloadConfigRequest):
     except Exception as e:
         error_msg = f"配置重載過程發生未預期錯誤: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )
 
 
 # 對話歷史 API 已移除以提升性能
