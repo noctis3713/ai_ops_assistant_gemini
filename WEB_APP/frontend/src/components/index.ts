@@ -7,6 +7,7 @@ export { default as Footer } from './layout/Footer';
 // Common 組件
 export { default as Button } from './common/Button';
 export { default as CompactProgressBar } from './common/CompactProgressBar';
+export { default as ErrorBoundary } from './common/ErrorBoundary';
 
 // Feature 組件
 export { default as ModeSelector } from './features/ModeSelector';

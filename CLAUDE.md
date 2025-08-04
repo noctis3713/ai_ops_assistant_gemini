@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的完整專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-04 (v2.2.0 - 企業級架構優化完全統一)  
+> 📅 **最後更新**: 2025-08-04 (v2.3.0 - 後端模組化重構完成)  
 > 🔄 **維護頻率**: 隨專案重大更新同步修改
 
 ---
@@ -31,51 +31,107 @@
 - **自動化**: 基於 Netmiko 和 Nornir 的網路自動化框架
 - **用戶目標**: CCIE 級網路工程師的專業運維工具
 
-### 🏗️ 技術架構圖
+### 🏗️ 模組化技術架構圖 ✨ v2.3.0
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React 前端    │    │   FastAPI 後端  │    │   網路設備群   │
-│                 │    │                 │    │                 │
-│ • TypeScript    │◄──►│ • AI Service    │◄──►│ • Cisco IOS-XE │
-│ • Zustand狀態   │    │ • Network Tools │    │ • SSH/Netmiko  │
-│ • TailwindCSS   │    │ • Nornir整合    │    │ • 批次執行      │
-│ • React Query   │    │ • 非同步任務    │    │                 │
+│   React 前端    │    │ FastAPI 後端    │    │   網路設備群   │
+│                 │    │  (模組化架構)   │    │                 │
+│ • TypeScript    │◄──►│ • 路由模組系統  │◄──►│ • Cisco IOS-XE │
+│ • Zustand狀態   │    │ • BaseResponse  │    │ • SSH/Netmiko  │
+│ • ErrorBoundary │    │ • 依賴注入      │    │ • 批次執行      │
+│ • React Query   │    │ • 背景任務      │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   UI/UX 層      │    │   AI 分析層     │    │   設備管理層    │
+│   UI/UX 層      │    │ 模組化路由層    │    │   設備管理層    │
 │                 │    │                 │    │                 │
-│ • 設備選擇      │    │ • Gemini API    │    │ • 設備清單      │
-│ • 指令輸入      │    │ • Claude API    │    │ • 群組管理      │
-│ • 結果展示      │    │ • 提示詞工程    │    │ • 安全驗證      │
-│ • 進度監控      │    │ • ReAct 思考鏈  │    │ • 連線池        │
+│ • 設備選擇      │    │ 🖥️ device_routes │    │ • 設備清單      │
+│ • 指令輸入      │    │ ⚡ execution_*   │    │ • 群組管理      │
+│ • 結果展示      │    │ 📋 task_routes  │    │ • 安全驗證      │
+│ • 錯誤處理      │    │ 🔧 admin_routes │    │ • 連線池        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ API 整合層      │    │   AI 分析層     │    │   核心服務層    │
+│                 │    │                 │    │                 │
+│ • BaseResponse  │    │ • Gemini API    │    │ • Settings      │
+│ • 重試機制      │    │ • Claude API    │    │ • Exceptions    │
+│ • 類型安全      │    │ • 提示詞工程    │    │ • Network Tools │
+│ • 錯誤分類      │    │ • ReAct 思考鏈  │    │ • Async Tasks   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### 🎮 主要功能模組
+**🔄 模組化架構演進** (單體 → 模組化):
+```
+v2.2.0 單體架構          v2.3.0 模組化架構
+┌─────────────────┐  →  ┌─────────────────┐
+│    main.py      │  →  │    main.py      │ (51行)
+│    (1747行)     │  →  │   + routers/    │
+│                 │  →  │     - device_   │ (17.6KB)
+│   所有API端點   │  →  │     - execution │ (26.0KB)
+│   混合在一起    │  →  │     - task_     │ (15.7KB)
+│                 │  →  │     - admin_    │ (21.5KB)
+│   難以維護      │  →  │   + background_ │ (4.6KB)
+└─────────────────┘  →  └─────────────────┘
+    單一職責混亂            關注點完全分離
+```
 
-1. **設備管理系統**
-   - 支援 Cisco IOS-XE 設備
-   - 動態設備清單和群組配置
-   - SSH 連線池和健康檢查
+### 🎮 模組化功能架構 ✨ v2.3.0
 
-2. **AI 智能分析**
-   - 雙 AI 引擎支援 (Gemini/Claude)
-   - 自然語言問題理解
-   - 結構化分析報告輸出
+#### 🖥️ **設備管理模組** (`device_routes.py`)
+- **專業職責**: 設備清單、群組管理、健康檢查
+- **核心功能**: 
+  - 支援 Cisco IOS-XE 設備
+  - 動態設備清單和群組配置  
+  - SSH 連線池和健康檢查
+  - BaseResponse[List[Device]] 統一格式
+- **獨立性**: 無依賴其他業務模組，可獨立測試和部署
 
-3. **批次操作執行**
-   - 同步/非同步執行模式
-   - 多設備並行處理
-   - 實時進度追蹤
+#### ⚡ **執行管理模組** (`execution_routes.py`)
+- **專業職責**: 指令執行、AI查詢、批次操作
+- **核心功能**:
+  - 雙 AI 引擎支援 (Gemini/Claude)
+  - 自然語言問題理解
+  - 同步/非同步執行模式
+  - 結構化分析報告輸出
+- **依賴整合**: 整合 AI 服務、Nornir 網路工具
 
-4. **安全與驗證**
-   - 只允許唯讀指令執行
-   - 指令安全性自動驗證
-   - 設備憑證管理
+#### 📋 **任務管理模組** (`task_routes.py`)
+- **專業職責**: 非同步任務、進度追蹤、任務生命週期
+- **核心功能**:
+  - 非同步任務建立和管理
+  - 實時進度追蹤和更新
+  - 任務統計和監控
+  - 多設備並行處理協調
+- **任務編排**: 與背景任務模組協同工作
+
+#### 🔧 **管理功能模組** (`admin_routes.py`)
+- **專業職責**: 系統管理、配置重載、監控統計
+- **核心功能**:
+  - 熱重載功能支援
+  - AI 服務狀態監控
+  - 前端日誌集中收集
+  - 系統診斷和維護
+- **系統整合**: 跨模組的管理和監控功能
+
+#### 🔗 **共用服務層** (`dependencies.py` + `background_tasks.py`)
+- **專業職責**: 依賴注入、背景任務處理
+- **核心功能**:
+  - 統一依賴注入管理
+  - 服務實例生命週期管理
+  - 非同步背景任務執行
+  - 防止循環依賴的架構設計
+
+#### 🛡️ **安全與驗證系統** (跨模組整合)
+- **統一實現**: 每個模組享有相同的安全機制
+- **核心功能**:
+  - 只允許唯讀指令執行
+  - 指令安全性自動驗證
+  - 設備憑證管理
+  - 全域異常處理和錯誤分類
 
 ---
 
@@ -85,26 +141,34 @@
 
 ```
 WEB_APP/backend/
-├── main.py                    # FastAPI 應用程式入口
+├── main.py                    # FastAPI 應用程式入口 (精簡至51行) ✨ v2.3.0
+├── background_tasks.py        # 背景任務處理模組 ✨ v2.3.0
 ├── ai_service.py             # AI 服務核心模組
 ├── async_task_manager.py     # 非同步任務管理器
-├── config_manager.py         # 統一配置檔案管理器 (新增)
+├── config_manager.py         # 統一配置檔案管理器
 ├── utils.py                  # 工具函數和日誌配置
-├── formatters.py             # 資料格式化工具 (新增)
+├── formatters.py             # 資料格式化工具
+├── routers/                  # 模組化路由系統 ✨ v2.3.0
+│   ├── __init__.py          # 路由模組初始化
+│   ├── dependencies.py      # 共用依賴注入
+│   ├── device_routes.py     # 設備管理路由 (17.6KB)
+│   ├── execution_routes.py  # 執行相關路由 (26.0KB)
+│   ├── task_routes.py       # 任務管理路由 (15.7KB)
+│   └── admin_routes.py      # 管理功能路由 (21.5KB)
 ├── models/                   # Pydantic 模型定義
 │   ├── ai_response.py        # AI 回應模型
 │   └── __init__.py
 ├── core/                     # 核心功能模組
-│   ├── settings.py          # 企業級 Pydantic Settings 配置管理 ✨ v2.2.0
-│   ├── exceptions.py        # 服務層自訂異常系統 ✨ v2.2.0  
-│   ├── network_tools.py      # 網路工具核心 (重構整合 Settings)
+│   ├── settings.py          # 企業級 Pydantic Settings 配置管理
+│   ├── exceptions.py        # 服務層自訂異常系統  
+│   ├── network_tools.py      # 網路工具核心
 │   ├── nornir_integration.py # Nornir 整合層
 │   ├── __init__.py
-│   └── prompt_manager/       # 企業級提示詞管理系統 (重構)
+│   └── prompt_manager/       # 企業級提示詞管理系統
 │       ├── __init__.py       # 模組初始化和便利函數
 │       ├── manager.py        # 核心提示詞管理器
 │       └── exceptions.py     # 專用例外處理
-├── templates/prompts/        # Jinja2 提示詞模板系統 (全新架構)
+├── templates/prompts/        # Jinja2 提示詞模板系統
 │   ├── config/              # YAML 配置檔案
 │   │   ├── examples.yaml     # ReAct 思考鏈範例配置
 │   │   ├── tools.yaml       # 工具描述配置
@@ -117,7 +181,7 @@ WEB_APP/backend/
 ├── config/                  # 系統配置檔案
 │   ├── devices.json         # 設備清單配置
 │   ├── groups.json          # 設備群組配置
-│   └── security.json        # 安全規則配置 (新增)
+│   └── security.json        # 安全規則配置
 └── logs/                    # 日誌檔案目錄
     ├── app.log              # 應用程式主日誌
     ├── ai.log               # AI 服務專用日誌
@@ -154,6 +218,98 @@ class AIService:
 **AI 工具整合**:
 - `BatchCommandRunner`: 網路設備指令執行工具
 - `CiscoCommandSearch`: Cisco 文檔搜尋工具 (可選)
+
+### 🏗️ 模組化路由系統 (`routers/`) ✨ v2.3.0
+
+**設計理念**: 將單體 1747行 `main.py` 重構為專業路由模組，實現關注點分離和模組化架構
+
+**🗂️ 路由模組架構**:
+
+#### 1. **設備管理路由** (`device_routes.py` - 17.6KB)
+**業務範圍**: 設備清單、群組管理、健康檢查
+```python
+# 核心端點
+GET  /api/devices              # 設備清單查詢
+GET  /api/devices/status       # 批次健康檢查  
+GET  /api/devices/{device_ip}/status  # 單一設備狀態
+GET  /api/device-groups        # 設備群組清單
+
+# 關鍵特色
+- BaseResponse[List[Device]] 統一格式
+- 設備健康檢查並行處理
+- 設備群組動態計算和快取
+- 完整的錯誤分類和診斷
+```
+
+#### 2. **執行相關路由** (`execution_routes.py` - 26.0KB)  
+**業務範圍**: 指令執行、AI查詢、批次操作
+```python
+# 核心端點
+POST /api/execute              # 單一設備指令執行
+POST /api/ai-query            # AI 智能查詢  
+POST /api/batch-execute       # 同步批次執行
+POST /api/batch-execute-async # 非同步批次執行
+
+# 關鍵特色
+- 統一的 _handle_ai_request() 處理函數
+- 指令安全驗證和分類
+- 同步/非同步執行模式支援
+- AI 和指令模式統一介面
+```
+
+#### 3. **任務管理路由** (`task_routes.py` - 15.7KB)
+**業務範圍**: 非同步任務、進度追蹤、任務生命週期
+```python
+# 核心端點  
+GET    /api/task/{task_id}     # 查詢任務狀態
+GET    /api/tasks             # 列出所有任務
+DELETE /api/task/{task_id}     # 刪除指定任務
+GET    /api/task-manager/stats # 任務管理器統計
+
+# 關鍵特色
+- 完整的任務生命週期管理
+- 實時進度追蹤和更新
+- 任務篩選和分頁支援
+- 任務統計和監控資訊
+```
+
+#### 4. **管理功能路由** (`admin_routes.py` - 21.5KB)
+**業務範圍**: 系統管理、配置重載、監控統計
+```python
+# 核心端點
+POST /api/admin/reload-config    # 重載配置檔案
+POST /api/admin/reload-prompts   # 重載提示詞配置
+GET  /api/admin/prompt-manager/stats  # 提示詞管理器統計
+GET  /api/ai-status             # AI 服務狀態查詢
+POST /api/frontend-logs         # 前端日誌收集
+
+# 關鍵特色  
+- 熱重載功能支援
+- 系統監控和診斷
+- 前端日誌集中收集
+- AI 服務狀態監控
+```
+
+#### 5. **共用依賴注入** (`dependencies.py`)
+**業務範圍**: 統一的依賴注入和權限驗證
+```python
+# 核心依賴提供者
+get_ai_service()          # AI 服務實例
+get_task_manager()        # 任務管理器實例  
+get_nornir_manager()      # Nornir 管理器實例
+get_settings()            # 配置設定實例
+
+# 驗證和中間件
+verify_admin_key()        # 管理API金鑰驗證
+handle_api_errors()       # 統一錯誤處理
+```
+
+**🚀 模組化優勢**:
+- **程式碼組織**: 從1747行單體分解為5個專業模組
+- **關注點分離**: 每個模組專注特定業務領域
+- **並行開發**: 不同團隊可同時開發不同模組
+- **測試隔離**: 每個模組可獨立進行單元測試
+- **微服務準備**: 為未來微服務化奠定架構基礎
 
 ### 🏢 企業級配置管理系統 (`core/settings.py`) ✨ v2.2.0
 
@@ -440,31 +596,73 @@ class AsyncTaskManager:
         """更新任務進度"""
 ```
 
-### 🔌 API 端點設計 (`main.py`)
+### 🔌 模組化 API 端點設計 ✨ v2.3.0
 
-**RESTful API 架構** (v2.2.0 完整版):
+**模組化 RESTful API 架構**: 從單體 `main.py` 轉為專業路由模組管理
 
-| 端點路徑 | 方法 | 功能描述 |
-|---------|------|----------|
-| `/health` | GET | 健康檢查 |
-| `/` | GET | 根路徑重定向 |
-| `/api/devices` | GET | 取得設備清單 |
-| `/api/devices/status` | GET | 設備健康檢查 ✨ v2.2.0 |
-| `/api/devices/{device_ip}/status` | GET | 單一設備狀態查詢 ✨ v2.2.0 |
-| `/api/device-groups` | GET | 取得設備群組 |
-| `/api/execute` | POST | 單一設備指令執行 |
-| `/api/ai-query` | POST | AI 智能查詢 |
-| `/api/ai-status` | GET | AI 服務狀態查詢 ✨ v2.2.0 |
-| `/api/batch-execute` | POST | 同步批次執行 |
-| `/api/batch-execute-async` | POST | 非同步批次執行 |
-| `/api/task/{task_id}` | GET | 查詢任務狀態 |
-| `/api/tasks` | GET | 列出所有任務 |
-| `/api/task/{task_id}` | DELETE | 刪除指定任務 ✨ v2.2.0 |
-| `/api/task-manager/stats` | GET | 任務管理器統計 ✨ v2.2.0 |
-| `/api/admin/reload-config` | POST | 重載配置檔案 |
-| `/api/admin/reload-prompts` | POST | 重載提示詞配置 ✨ |
-| `/api/admin/prompt-manager/stats` | GET | 提示詞管理器統計 ✨ |
-| `/api/frontend-logs` | POST | 前端日誌收集 ✨ |
+#### 📋 **基礎路由** (`main.py` - 精簡至51行)
+| 端點路徑 | 方法 | 功能描述 | 路由模組 |
+|---------|------|----------|----------|
+| `/health` | GET | 健康檢查 | 內建 |
+| `/` | GET | 根路徑重定向 | 內建 |
+
+#### 🖥️ **設備管理路由** (`device_routes.py`)
+| 端點路徑 | 方法 | 功能描述 | BaseResponse格式 |
+|---------|------|----------|------------------|
+| `/api/devices` | GET | 設備清單查詢 | `BaseResponse[List[Device]]` |
+| `/api/devices/status` | GET | 批次設備健康檢查 | `BaseResponse[DeviceHealthSummary]` |
+| `/api/devices/{device_ip}/status` | GET | 單一設備狀態查詢 | `BaseResponse[DeviceHealth]` |
+| `/api/device-groups` | GET | 設備群組清單 | `BaseResponse[List[DeviceGroup]]` |
+
+#### ⚡ **執行相關路由** (`execution_routes.py`)
+| 端點路徑 | 方法 | 功能描述 | BaseResponse格式 |
+|---------|------|----------|------------------|
+| `/api/execute` | POST | 單一設備指令執行 | `BaseResponse[ExecutionResult]` |
+| `/api/ai-query` | POST | AI 智能查詢 | `BaseResponse[AIAnalysisResult]` |
+| `/api/batch-execute` | POST | 同步批次執行 | `BaseResponse[BatchExecutionResult]` |
+| `/api/batch-execute-async` | POST | 非同步批次執行 | `BaseResponse[TaskCreationResult]` |
+
+#### 📋 **任務管理路由** (`task_routes.py`)
+| 端點路徑 | 方法 | 功能描述 | BaseResponse格式 |
+|---------|------|----------|------------------|
+| `/api/task/{task_id}` | GET | 查詢任務狀態 | `BaseResponse[TaskResponse]` |
+| `/api/tasks` | GET | 列出所有任務 | `BaseResponse[TaskListResponse]` |
+| `/api/task/{task_id}` | DELETE | 刪除指定任務 | `BaseResponse[TaskDeletionResult]` |
+| `/api/task-manager/stats` | GET | 任務管理器統計 | `BaseResponse[TaskManagerStats]` |
+
+#### 🔧 **管理功能路由** (`admin_routes.py`)
+| 端點路徑 | 方法 | 功能描述 | BaseResponse格式 |
+|---------|------|----------|------------------|
+| `/api/admin/reload-config` | POST | 重載配置檔案 | `BaseResponse[ConfigReloadResult]` |
+| `/api/admin/reload-prompts` | POST | 重載提示詞配置 | `BaseResponse[PromptReloadResult]` |
+| `/api/admin/prompt-manager/stats` | GET | 提示詞管理器統計 | `BaseResponse[PromptManagerStats]` |
+| `/api/ai-status` | GET | AI 服務狀態查詢 | `BaseResponse[AIServiceStatus]` |
+| `/api/frontend-logs` | POST | 前端日誌收集 | `BaseResponse[LogCollectionResult]` |
+
+#### 🏗️ **模組化架構優勢**
+
+**從單體到模組化的重大進步**:
+- **程式碼組織**: 從1747行單體 `main.py` 分解為5個專業路由模組
+- **BaseResponse 統一**: 所有API端點完全統一 `BaseResponse[T]` 格式
+- **關注點分離**: 每個路由模組專注特定業務領域
+- **依賴注入**: 統一的 `dependencies.py` 管理所有依賴
+- **錯誤處理**: 每個模組享有統一的全域異常處理系統
+
+**路由註冊架構** (`main.py` 精簡版):
+```python
+# 模組化路由註冊 (v2.3.0)
+from routers import (
+    device_routes,
+    execution_routes,
+    task_routes,
+    admin_routes
+)
+
+app.include_router(device_routes.router, tags=["設備管理"])
+app.include_router(execution_routes.router, tags=["執行相關"])
+app.include_router(task_routes.router, tags=["任務管理"])
+app.include_router(admin_routes.router, tags=["管理功能"])
+```
 
 **統一錯誤處理與依賴注入** (v2.1.0 強化):
 ```python
@@ -509,10 +707,11 @@ result = await _handle_ai_request(ai_service, query=command, device_ips=devices)
 WEB_APP/frontend/src/
 ├── App.tsx                   # 主應用程式組件 (簡化邏輯)
 ├── main.tsx                  # 應用程式入口點
-├── components/               # 精簡 React 組件庫
+├── components/               # 精簡 React 組件庫 (v2.3.0 相容性強化)
 │   ├── common/              # 核心通用組件
 │   │   ├── Button.tsx       # 統一按鈕組件
-│   │   └── CompactProgressBar.tsx # 精簡進度條組件 (新增)
+│   │   ├── CompactProgressBar.tsx # 精簡進度條組件
+│   │   └── ErrorBoundary.tsx # React 錯誤邊界組件 ✨ v2.3.0
 │   ├── features/            # 核心功能組件 (精簡)
 │   │   ├── DeviceSelectionContainer.tsx  # 設備選擇容器
 │   │   ├── CommandInput.tsx              # 指令輸入介面
@@ -611,6 +810,45 @@ function App() {
 - 結果展開/收起控制
 - 複製功能和清空操作
 
+**React 錯誤邊界 (`ErrorBoundary.tsx`)** ✨ v2.3.0:
+- 捕獲子組件中的 JavaScript 錯誤
+- 防止整個應用程式崩潰
+- 提供友善的錯誤 UI 和重試機制
+- 自動記錄錯誤資訊到日誌系統
+- 支援錯誤恢復和頁面重載功能
+
+```typescript
+// 錯誤邊界核心功能
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // 捕獲渲染錯誤
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+  
+  // 記錄錯誤詳情
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    logError('React Error Boundary 捕獲錯誤', {
+      error: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack
+    });
+  }
+  
+  // 提供重試和重載功能
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-boundary-ui">
+          <button onClick={this.handleRetry}>重試</button>
+          <button onClick={this.handleReload}>重新載入</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+```
+
 ### 🔄 狀態管理架構 (`store/appStore.ts`)
 
 **Zustand Store 設計**:
@@ -639,26 +877,86 @@ interface AppStore {
 }
 ```
 
-### 🌐 API 整合層 (`api/services.ts`)
+### 🌐 API 整合層 (`api/services.ts`) ✨ v2.3.0 相容性強化
 
-**核心 API 服務**:
+**模組化後端整合**: 完全相容後端路由模組化，所有API調用統一BaseResponse格式
+
+**🖥️ 設備管理 API** (對應 `device_routes.py`):
 ```typescript
-// 設備管理
-export const fetchDevices = (): Promise<DevicesResponse> => 
-  apiClient.get('/api/devices');
+// 設備清單查詢 - BaseResponse[List[Device]]
+export const getDevices = async (): Promise<Device[]> => {
+  return createRetryableRequest(async () => {
+    const response = await apiClient.get<{ success: boolean; data?: Device[]; message?: string }>(API_ENDPOINTS.DEVICES);
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取設備列表失敗');
+    }
+    return response.data.data || [];
+  });
+};
 
-// 批次執行 (同步)
-export const executeBatchCommand = (request: BatchExecuteRequest): Promise<BatchResponse> => 
-  apiClient.post('/api/batch-execute', request);
-
-// 批次執行 (非同步)
-export const executeBatchAsync = (request: BatchExecuteRequest): Promise<TaskCreationResponse> => 
-  apiClient.post('/api/batch-execute-async', request);
-
-// 任務狀態查詢
-export const fetchTaskStatus = (taskId: string): Promise<TaskResponse> => 
-  apiClient.get(`/api/task/${taskId}`);
+// 設備群組查詢 - BaseResponse[List[DeviceGroup]]
+export const getDeviceGroups = async (): Promise<DeviceGroup[]> => {
+  return createRetryableRequest(async () => {
+    const response = await apiClient.get<{ success: boolean; data?: DeviceGroup[]; message?: string }>(API_ENDPOINTS.DEVICE_GROUPS);
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取設備群組失敗');
+    }
+    // 後端 BaseResponse.data 直接包含 DeviceGroup[] 陣列
+    return response.data.data || [];
+  });
+};
 ```
+
+**⚡ 執行相關 API** (對應 `execution_routes.py`):
+```typescript
+// 同步批次執行 - BaseResponse[BatchExecutionResult]
+export const batchExecuteCommand = async (request: BatchExecuteRequest): Promise<BatchExecutionResponse> => {
+  const response = await apiClient.post<{ success: boolean; data?: BatchExecutionResponse; message?: string }>(
+    API_ENDPOINTS.BATCH_EXECUTE, request, { timeout: API_CONFIG.TIMEOUT.BATCH_COMMAND }
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.message || '批次執行失敗');
+  }
+  return response.data.data!;
+};
+
+// 非同步批次執行 - BaseResponse[TaskCreationResult]
+export const batchExecuteAsync = async (request: BatchExecuteRequest): Promise<TaskCreationResponse> => {
+  const response = await apiClient.post<{ success: boolean; data?: TaskCreationResponse; message?: string }>(
+    API_ENDPOINTS.BATCH_EXECUTE_ASYNC, request, { timeout: API_CONFIG.TIMEOUT.DEFAULT }
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.message || '建立非同步任務失敗');
+  }
+  return response.data.data!;
+};
+```
+
+**📋 任務管理 API** (對應 `task_routes.py`):
+```typescript
+// 任務狀態查詢 - BaseResponse[TaskResponse]
+export const getTaskStatus = async (taskId: string): Promise<TaskResponse> => {
+  // 強化任務ID驗證，防止無效值
+  if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
+    throw new Error(`無效的任務 ID: '${taskId}'`);
+  }
+  
+  const response = await apiClient.get<{ success: boolean; data?: TaskResponse; message?: string }>(
+    `${API_ENDPOINTS.TASK_STATUS}/${encodeURIComponent(taskId)}`
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.message || '查詢任務狀態失敗');
+  }
+  return response.data.data!;
+};
+```
+
+**🔧 前端相容性優化** ✨ v2.3.0:
+- **BaseResponse 統一處理**: 所有API函數完全相容後端BaseResponse[T]格式
+- **錯誤處理增強**: 配合後端全域異常處理系統，提供更精確的錯誤分類
+- **類型安全強化**: TypeScript類型定義與後端模組化路由完全對齊
+- **請求驗證**: 強化API請求參數驗證，防止無效數據傳送到後端
+- **重試機制**: `createRetryableRequest()` 提供自動重試機制，提升穩定性
 
 ---
 
@@ -893,30 +1191,87 @@ npm install
 npm run dev
 ```
 
-### 🔍 API 測試指南
+### 🏗️ 模組化開發最佳實踐 ✨ v2.3.0
 
-**健康檢查**:
+**路由模組開發規範**:
+```python
+# 1. 路由模組結構標準 (以 device_routes.py 為例)
+from fastapi import APIRouter, Depends, HTTPException
+from routers.dependencies import get_settings, get_nornir_manager
+from models.ai_response import BaseResponse
+from core.exceptions import DeviceConnectionError
+
+router = APIRouter()
+
+@router.get("/api/devices", response_model=BaseResponse[List[Device]])
+async def get_devices(settings: Settings = Depends(get_settings)):
+    """設備清單查詢 - 標準BaseResponse格式"""
+    try:
+        # 業務邏輯實現
+        devices = load_devices_from_config()
+        return BaseResponse(
+            success=True,
+            data=devices,
+            message=f"成功載入 {len(devices)} 個設備"
+        )
+    except Exception as e:
+        # 使用統一異常處理
+        raise DeviceConnectionError(str(e))
+```
+
+**依賴注入最佳實踐**:
+```python
+# dependencies.py - 統一依賴管理
+from functools import lru_cache
+
+@lru_cache()
+def get_ai_service():
+    """AI服務單例模式"""
+    return AIService()
+
+@lru_cache()
+def get_task_manager():
+    """任務管理器單例模式"""
+    return AsyncTaskManager()
+
+# 在路由中使用
+@router.post("/api/batch-execute")
+async def batch_execute(
+    request: BatchExecuteRequest,
+    ai_service: AIService = Depends(get_ai_service),
+    task_manager: AsyncTaskManager = Depends(get_task_manager)
+):
+    """統一依賴注入模式"""
+```
+
+### 🔍 API 測試指南 ✨ v2.3.0 模組化版本
+
+**🖥️ 設備管理路由測試**:
 ```bash
+# 健康檢查 (基礎路由)
 curl http://localhost:8000/health
-```
 
-**設備清單查詢**:
-```bash
+# 設備清單查詢 (BaseResponse[List[Device]])
 curl http://localhost:8000/api/devices
+
+# 設備群組查詢 (BaseResponse[List[DeviceGroup]])
+curl http://localhost:8000/api/device-groups
+
+# 批次設備健康檢查 (BaseResponse[DeviceHealthSummary])
+curl http://localhost:8000/api/devices/status
 ```
 
-**AI 查詢測試**:
+**⚡ 執行相關路由測試**:
 ```bash
+# AI 查詢測試 (BaseResponse[AIAnalysisResult])
 curl -X POST http://localhost:8000/api/ai-query \
   -H "Content-Type: application/json" \
   -d '{
     "device_ip": "202.3.182.202",
     "query": "檢查設備版本"
   }'
-```
 
-**批次執行測試**:
-```bash
+# 同步批次執行 (BaseResponse[BatchExecutionResult])
 curl -X POST http://localhost:8000/api/batch-execute \
   -H "Content-Type: application/json" \
   -d '{
@@ -924,7 +1279,46 @@ curl -X POST http://localhost:8000/api/batch-execute \
     "command": "show version",
     "mode": "command"
   }'
+
+# 非同步批次執行 (BaseResponse[TaskCreationResult])
+curl -X POST http://localhost:8000/api/batch-execute-async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "devices": ["202.3.182.202"],
+    "command": "show version",
+    "mode": "command"
+  }'
 ```
+
+**📋 任務管理路由測試**:
+```bash
+# 任務狀態查詢 (BaseResponse[TaskResponse])
+curl http://localhost:8000/api/task/task_123456789
+
+# 列出所有任務 (BaseResponse[TaskListResponse])
+curl http://localhost:8000/api/tasks
+
+# 任務管理器統計 (BaseResponse[TaskManagerStats])
+curl http://localhost:8000/api/task-manager/stats
+```
+
+**🔧 管理功能路由測試**:
+```bash
+# AI 服務狀態 (BaseResponse[AIServiceStatus])
+curl http://localhost:8000/api/ai-status
+
+# 重載配置檔案 (BaseResponse[ConfigReloadResult])
+curl -X POST http://localhost:8000/api/admin/reload-config
+
+# 提示詞管理器統計 (BaseResponse[PromptManagerStats])
+curl http://localhost:8000/api/admin/prompt-manager/stats
+```
+
+**模組化測試優勢**:
+- **獨立測試**: 每個路由模組可獨立進行API測試
+- **BaseResponse 統一**: 所有端點回應格式完全一致
+- **錯誤處理**: 統一的異常處理和錯誤分類
+- **文檔生成**: FastAPI自動生成模組化API文檔
 
 ### 📊 日誌系統
 
@@ -1393,7 +1787,113 @@ class ExecuteRequest(BaseModel):
 
 ### 🚨 常見問題和解決方案
 
-**1. AI 服務初始化失敗**
+**🆕 1. 模組化路由載入失敗** ✨ v2.3.0
+
+*症狀*: `ModuleNotFoundError: No module named 'routers'` 或 `ImportError: cannot import name 'router'`
+
+*根本原因*: 
+- 路由模組結構問題：`routers/__init__.py` 缺失或不正確
+- 路由註冊順序錯誤：依賴項未正確載入
+- 路徑配置問題：Python模組路徑設定錯誤
+
+*v2.3.0 診斷方案*:
+```bash
+# 檢查路由模組結構
+ls -la WEB_APP/backend/routers/
+# 應該看到：__init__.py, dependencies.py, device_routes.py 等
+
+# 檢查路由模組載入
+python -c "from routers import device_routes; print('路由載入成功')"
+
+# 檢查依賴注入
+python -c "from routers.dependencies import get_ai_service; print('依賴注入正常')"
+```
+
+*解決方法*:
+```python
+# 確認 routers/__init__.py 內容正確
+from .device_routes import router as device_router
+from .execution_routes import router as execution_router
+from .task_routes import router as task_router
+from .admin_routes import router as admin_router
+
+__all__ = ["device_router", "execution_router", "task_router", "admin_router"]
+
+# 確認 main.py 路由註冊順序
+from routers import (
+    device_routes,    # 基礎設備管理，無依賴
+    execution_routes, # 依賴 AI 服務和 Nornir
+    task_routes,      # 依賴任務管理器
+    admin_routes      # 依賴配置管理器
+)
+```
+
+**🆕 2. BaseResponse 格式不一致** ✨ v2.3.0
+
+*症狀*: 前端收到的API回應格式與預期不符，TypeScript類型錯誤
+
+*根本原因*:
+- 部分路由未使用統一的BaseResponse格式
+- 前端API客戶端解析邏輯過時
+- Generic類型參數配置錯誤
+
+*v2.3.0 診斷方案*:
+```bash
+# 測試各路由模組的BaseResponse格式
+curl -s http://localhost:8000/api/devices | jq '.success, .data, .message'
+curl -s http://localhost:8000/api/device-groups | jq '.success, .data, .message'
+curl -s http://localhost:8000/api/ai-status | jq '.success, .data, .message'
+
+# 檢查回應是否包含必要欄位
+curl -s http://localhost:8000/api/devices | jq 'has("success") and has("data") and has("timestamp")'
+```
+
+*解決方法*:
+```python
+# 確保所有路由使用統一BaseResponse格式
+from models.ai_response import BaseResponse
+from typing import List
+
+@router.get("/api/devices", response_model=BaseResponse[List[Device]])
+async def get_devices():
+    return BaseResponse(
+        success=True,
+        data=devices,
+        message=f"成功載入 {len(devices)} 個設備",
+        timestamp=datetime.now().isoformat()
+    )
+```
+
+**🆕 3. 路由模組依賴循環問題** ✨ v2.3.0
+
+*症狀*: `ImportError: cannot import name 'X' from partially initialized module`
+
+*根本原因*:
+- 路由模組間存在循環依賴
+- 共用依賴注入不當引用
+- 背景任務模組與路由模組相互引用
+
+*v2.3.0 解決方案*:
+```python
+# 正確的依賴注入架構
+# dependencies.py - 作為依賴提供者，不引用其他路由
+from functools import lru_cache
+from ai_service import AIService
+from async_task_manager import AsyncTaskManager
+
+@lru_cache()
+def get_ai_service() -> AIService:
+    return AIService()
+
+# device_routes.py - 只引用dependencies，不引用其他路由
+from routers.dependencies import get_ai_service
+
+# background_tasks.py - 獨立模組，避免循環引用
+from ai_service import get_ai_service  # 直接引用，不通過路由
+from async_task_manager import get_task_manager
+```
+
+**2. AI 服務初始化失敗**
 
 *症狀*: `AI 服務未啟用或初始化失敗`
 
@@ -1752,7 +2252,35 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ## 📈 版本更新記錄
 
-### 🏢 v2.2.0 - 2025-08-04 (當前版本)
+### 🏗️ v2.3.0 - 2025-08-04 (當前版本)
+
+**🎯 後端模組化重構 - 單體架構完全解耦**：
+- ✅ **模組化路由系統**: 將1747行單體 `main.py` 重構為專業路由模組架構
+- ✅ **路由模組分離**: 新增5個專業路由模組，實現關注點分離
+- ✅ **背景任務模組**: 獨立 `background_tasks.py` 模組，優化非同步任務處理
+- ✅ **前端相容性優化**: 10個前端檔案配合後端模組化進行優化
+- ✅ **錯誤邊界增強**: 新增 `ErrorBoundary.tsx` 完善前端錯誤處理機制
+- ✅ **BaseResponse 統一**: 所有API端點完全統一 BaseResponse[T] 格式
+
+**📊 重大架構重構統計**：
+- 新增路由模組: 
+  - `routers/device_routes.py` - 設備管理路由 (17.6KB)
+  - `routers/execution_routes.py` - 執行相關路由 (26.0KB)
+  - `routers/task_routes.py` - 任務管理路由 (15.7KB)
+  - `routers/admin_routes.py` - 管理功能路由 (21.5KB)
+  - `background_tasks.py` - 背景任務處理模組 (4.6KB)
+- 核心重構: `main.py` 從1747行縮減至51行（-1696行，-97%）
+- 總變更統計: **981行新增，1849行移除**（淨減少868行程式碼）
+- 前端優化: 10個檔案配合模組化進行相容性調整
+
+**🏗️ 模組化架構優勢**：
+- **關注點分離**: 每個路由模組專注特定業務領域
+- **程式碼可維護性**: 從單體1747行分解為多個專業模組
+- **團隊協作**: 不同功能模組可並行開發和維護
+- **測試隔離**: 每個模組可獨立進行單元測試
+- **部署靈活性**: 為未來微服務化架構奠定基礎
+
+### 🏢 v2.2.0 - 2025-08-04
 
 **🎯 企業級架構優化 - 完全統一架構達成**：
 - ✅ **Pydantic Settings 配置管理系統**: 全部7個模組完成統一整合，60+ 個完整配置項目
@@ -1817,6 +2345,6 @@ grep "設備連線" logs/network.log | grep -c "成功"
 
 ---
 
-*📝 文件版本: v2.2.0*  
-*🔄 最後更新: 2025-08-04*  
+*📝 文件版本: v2.3.0*  
+*🔄 最後更新: 2025-08-04 (後端模組化重構完成)*  
 *👤 維護者: Claude AI Assistant*

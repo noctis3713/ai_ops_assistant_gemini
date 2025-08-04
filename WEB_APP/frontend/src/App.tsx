@@ -12,6 +12,7 @@ import {
   DeviceSelectionContainer,
   CommandInput,
   BatchOutputDisplay,
+  ErrorBoundary,
 } from '@/components';
 import { DEFAULT_TEXT } from '@/constants';
 
@@ -133,52 +134,118 @@ function App() {
   return (
     <div className="min-h-screen bg-terminal-bg">
       <div className="max-w-6xl mx-auto p-6 min-h-screen flex flex-col">
-        <Header />
+        <ErrorBoundary fallback={
+          <div className="text-center py-4 bg-red-50 border border-red-200 rounded">
+            <p className="text-red-700">標題載入失敗，請重新載入頁面</p>
+          </div>
+        }>
+          <Header />
+        </ErrorBoundary>
 
         <main className="flex-1 flex flex-col space-y-4">
           {/* 輸入區域 */}
-          <section className="card">
-            <div className="card-body space-y-6">
-              <DeviceSelectionContainer
-                devices={devices}
-                selectedDevices={selectedDevices}
-                onDevicesChange={setSelectedDevices}
-                executionMode={mode}
-                onExecutionModeChange={setMode}
-                isLoading={devicesLoading}
-              />
+          <ErrorBoundary 
+            fallback={
+              <div className="card">
+                <div className="card-body text-center py-8">
+                  <div className="text-red-600 mb-2">
+                    <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">設備選擇功能發生錯誤</h3>
+                  <p className="text-gray-600 mb-4">無法載入設備選擇介面，這可能是由於網路問題或後端服務異常</p>
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    重新載入頁面
+                  </button>
+                </div>
+              </div>
+            }
+            resetKeys={[devices.length, selectedDevices.length]}
+            resetOnPropsChange={true}
+          >
+            <section className="card">
+              <div className="card-body space-y-6">
+                <DeviceSelectionContainer
+                  devices={devices}
+                  selectedDevices={selectedDevices}
+                  onDevicesChange={setSelectedDevices}
+                  executionMode={mode}
+                  onExecutionModeChange={setMode}
+                  isLoading={devicesLoading}
+                />
 
-
-              <CommandInput
-                value={inputValue}
-                onChange={setInputValue}
-                mode={mode}
-                onExecute={handleExecute}
-                isExecuting={currentlyExecuting}
-                progress={batchProgress}
-                status={status}
-                isAsyncMode={isAsyncMode}
-                onToggleAsyncMode={setIsAsyncMode}
-                currentTask={currentTask}
-                onCancelTask={cancelCurrentTask}
-                taskPollingActive={taskPollingActive}
-              />
-            </div>
-          </section>
-
+                <CommandInput
+                  value={inputValue}
+                  onChange={setInputValue}
+                  mode={mode}
+                  onExecute={handleExecute}
+                  isExecuting={currentlyExecuting}
+                  progress={batchProgress}
+                  status={status}
+                  isAsyncMode={isAsyncMode}
+                  onToggleAsyncMode={setIsAsyncMode}
+                  currentTask={currentTask}
+                  onCancelTask={cancelCurrentTask}
+                  taskPollingActive={taskPollingActive}
+                />
+              </div>
+            </section>
+          </ErrorBoundary>
 
           {/* 輸出區域 */}
-          <section className="flex-1 flex flex-col min-h-0">
-            <BatchOutputDisplay
-              results={batchResults}
-              onClear={handleClearResults}
-              statusText={getStatusText()}
-              statusClassName={getStatusClassName()}
-            />
-          </section>
+          <ErrorBoundary 
+            fallback={
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="card">
+                  <div className="card-body text-center py-8">
+                    <div className="text-amber-600 mb-2">
+                      <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">結果顯示功能發生錯誤</h3>
+                    <p className="text-gray-600 mb-4">無法顯示執行結果，但您仍可繼續執行指令</p>
+                    <button 
+                      onClick={handleClearResults}
+                      className="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 mr-2"
+                    >
+                      清空結果
+                    </button>
+                    <button 
+                      onClick={() => window.location.reload()} 
+                      className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+                    >
+                      重新載入
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+            resetKeys={[batchResults.length]}
+            resetOnPropsChange={true}
+          >
+            <section className="flex-1 flex flex-col min-h-0">
+              <BatchOutputDisplay
+                results={batchResults}
+                onClear={handleClearResults}
+                statusText={getStatusText()}
+                statusClassName={getStatusClassName()}
+              />
+            </section>
+          </ErrorBoundary>
         </main>
 
-        <Footer />
+        <ErrorBoundary fallback={
+          <div className="text-center py-2 text-gray-500">
+            <p>頁尾載入失敗</p>
+          </div>
+        }>
+          <Footer />
+        </ErrorBoundary>
       </div>
     </div>
   );

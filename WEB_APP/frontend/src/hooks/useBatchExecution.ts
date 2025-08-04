@@ -13,6 +13,7 @@ import {
   PROGRESS_STAGE_TEXT, 
   createProgressCallback 
 } from '@/constants';
+import { logError, logSystem } from '@/utils/SimpleLogger';
 
 export const useBatchExecution = () => {
   const { 
@@ -189,24 +190,57 @@ export const useBatchExecution = () => {
           progressIntervalRef.current = null;
         }
         
-        // 先設置批次結果，確保結果立即可用
-        setBatchResults(response.results);
+        // 驗證回應資料格式 - 適配 BaseResponse 格式變化
+        if (!response) {
+          logError('批次執行成功但回應為空', { response });
+          setStatus('執行完成，但未收到結果資料', 'warning');
+          return;
+        }
         
-        // 設置最終進度（確保在清除模擬後設置，避免數值衝突）
-        updateBatchProgress(response.summary.total);
+        // 確保 results 陣列存在且有效
+        const results = Array.isArray(response.results) ? response.results : [];
+        if (results.length === 0) {
+          logError('批次執行成功但結果陣列為空', { response });
+        }
         
-        // 創建進度處理器並顯示完成階段
-        const progress = createProgressHandler();
-        progress.updateStage(PROGRESS_STAGE.COMPLETED);
+        // 驗證 summary 物件存在
+        const summary = response.summary || { total: results.length, successful: 0, failed: results.length };
         
-        const { successful, failed, total } = response.summary;
-        const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
-        
-        // 更新狀態訊息
-        setStatus(completionMessage, failed > 0 ? 'error' : 'success');
-        
-        // 更新完成訊息
-        progress.updateMessage(completionMessage);
+        try {
+          // 先設置批次結果，確保results立即可用
+          setBatchResults(results);
+          
+          // 設置最終進度（確保在清除模擬後設置，避免數值衝突）
+          updateBatchProgress(summary.total || results.length);
+          
+          // 創建進度處理器並顯示完成階段
+          const progress = createProgressHandler();
+          progress.updateStage(PROGRESS_STAGE.COMPLETED);
+          
+          const { successful = 0, failed = 0, total = results.length } = summary;
+          const completionMessage = `執行完成：${successful} 成功，${failed} 失敗，共 ${total} 個設備`;
+          
+          // 更新狀態訊息
+          setStatus(completionMessage, failed > 0 ? 'error' : 'success');
+          
+          // 更新完成訊息
+          progress.updateMessage(completionMessage);
+          
+          // 記錄成功資訊
+          logSystem('批次執行成功完成', {
+            total,
+            successful,
+            failed,
+            resultsLength: results.length
+          });
+          
+        } catch (error) {
+          logError('處理批次執行成功回應時發生錯誤', {
+            error: error instanceof Error ? error.message : String(error),
+            response
+          });
+          setStatus('執行完成，但處理結果時發生問題', 'warning');
+        }
         
         // 延長狀態顯示時間，確保用戶能看到結果
         clearStateWithDelay(8000);

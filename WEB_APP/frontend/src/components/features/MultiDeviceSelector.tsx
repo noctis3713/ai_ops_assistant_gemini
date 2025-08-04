@@ -16,8 +16,8 @@ const MultiDeviceSelector = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 獲取設備群組資料
-  const { data: deviceGroups = [], isLoading: groupsLoading } = useDeviceGroups();
+  // 獲取設備群組資料 - 強化容錯處理
+  const { data: deviceGroups = [], isLoading: groupsLoading, error: groupsError } = useDeviceGroups();
 
   const handleDeviceToggle = (deviceIp: string) => {
     const newSelection = selectedDevices.includes(deviceIp)
@@ -99,10 +99,16 @@ const MultiDeviceSelector = ({
     );
   }
 
+  // 添加調試日誌
+  console.log('MultiDeviceSelector 收到的設備資料:', {
+    devicesLength: devices.length,
+    devices: devices.map(d => ({ ip: d.ip, name: d.name }))
+  });
+
   if (devices.length === 0) {
     return (
       <div className="text-terminal-text-secondary text-center py-4">
-        沒有可用的設備
+        沒有可用的設備 (設備陣列長度: {devices.length})
       </div>
     );
   }
@@ -155,31 +161,67 @@ const MultiDeviceSelector = ({
         )}
       </div>
 
-      {/* 群組快速選擇 */}
-      {!groupsLoading && deviceGroups.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-          {deviceGroups.map((group) => {
-            const isSelected = isGroupSelected(group.name);
-            return (
-              <button
-                key={group.name}
-                onClick={() => handleGroupSelect(group.name)}
-                className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full transition-colors ${
-                  isSelected 
-                    ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {group.description}
-                <span className={`ml-1 ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
-                  ({group.device_count})
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* 群組快速選擇 - 強化容錯處理 */}
+      <div className="min-h-[2rem]">
+        {groupsLoading ? (
+          /* 載入中狀態 */
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
+            <div className="flex gap-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="animate-pulse bg-gray-200 rounded-full px-3 py-1 w-20 h-6"></div>
+              ))}
+            </div>
+          </div>
+        ) : groupsError ? (
+          /* 錯誤狀態 */
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
+            <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+              群組載入失敗，但不影響設備選擇功能
+            </div>
+          </div>
+        ) : deviceGroups && Array.isArray(deviceGroups) && deviceGroups.length > 0 ? (
+          /* 正常狀態 */
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
+            {deviceGroups
+              .filter((group: any) => group && group.name) // 額外過濾確保資料有效
+              .map((group: any) => {
+                try {
+                  const isSelected = isGroupSelected(group.name);
+                  return (
+                    <button
+                      key={group.name}
+                      onClick={() => handleGroupSelect(group.name)}
+                      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full transition-colors ${
+                        isSelected 
+                          ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {group.description || group.name}
+                      <span className={`ml-1 ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
+                        ({group.device_count || 0})
+                      </span>
+                    </button>
+                  );
+                } catch (error) {
+                  console.warn('渲染群組按鈕時發生錯誤:', error, group);
+                  return null; // 跳過有問題的群組，不影響其他群組
+                }
+              })
+              .filter(Boolean) // 移除 null 值
+            }
+          </div>
+        ) : (
+          /* 無資料狀態 */
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
+            <span className="text-xs text-gray-500">暫無可用群組</span>
+          </div>
+        )}
+      </div>
 
       {/* 設備列表 */}
       {isExpanded && (

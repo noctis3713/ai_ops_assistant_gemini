@@ -123,8 +123,8 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * 錯誤訊息處理函數
- * 根據錯誤類型返回用戶友好的錯誤訊息
+ * 錯誤訊息處理函數 - 強化 BaseResponse 支援
+ * 根據錯誤類型返回用戶友好的錯誤訊息，優先使用 BaseResponse.message
  */
 function getErrorMessage(error: AxiosError): string {
   // 伺服器回應錯誤
@@ -132,13 +132,63 @@ function getErrorMessage(error: AxiosError): string {
     const status = error.response.status;
     const responseData = error.response.data;
     
-    // 優先使用後端回傳的具體錯誤訊息
+    // 檢查是否為 BaseResponse 格式的錯誤回應
+    if (responseData && typeof responseData === 'object') {
+      const baseResponse = responseData as any;
+      
+      // BaseResponse 格式：{ success: false, message: "...", error_code: "..." }
+      if (baseResponse.success === false && baseResponse.message) {
+        logError('API 回傳 BaseResponse 錯誤格式', {
+          status,
+          message: baseResponse.message,
+          error_code: baseResponse.error_code,
+        });
+        return baseResponse.message;
+      }
+      
+      // 處理巢狀的錯誤訊息結構
+      if (baseResponse.detail && typeof baseResponse.detail === 'string') {
+        return baseResponse.detail;
+      }
+      
+      // 處理其他可能的錯誤訊息欄位
+      if (baseResponse.error && typeof baseResponse.error === 'string') {
+        return baseResponse.error;
+      }
+    }
+    
+    // 處理純文字錯誤回應（向後相容）
     if (typeof responseData === 'string' && responseData.trim()) {
       return responseData;
     }
     
-    // 使用預定義的錯誤訊息
-    return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES] || ERROR_MESSAGES.DEFAULT;
+    // 針對特定狀態碼提供更友善的錯誤訊息
+    switch (status) {
+      case 400:
+        return '請求參數錯誤，請檢查輸入內容';
+      case 401:
+        return '認證失敗，請檢查憑證設定';
+      case 403:
+        return '權限不足，無法執行此操作';
+      case 404:
+        return '請求的資源不存在';
+      case 408:
+        return '請求超時，請稍後再試';
+      case 422:
+        return '資料驗證失敗，請檢查輸入格式';
+      case 429:
+        return 'API 呼叫頻率過高，請稍後再試';
+      case 500:
+        return '伺服器內部錯誤，請聯繫管理員';
+      case 502:
+        return '網路閘道器錯誤，請稍後再試';
+      case 503:
+        return '服務暫時不可用，請稍後再試';
+      case 504:
+        return '網路閘道器超時，請稍後再試';
+      default:
+        return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES] || ERROR_MESSAGES.DEFAULT;
+    }
   }
   
   // 網路請求錯誤

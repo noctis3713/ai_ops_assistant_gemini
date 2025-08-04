@@ -7,14 +7,11 @@ import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
 import { PROGRESS_STAGE, type ProgressStage } from '@/constants';
 import { 
   type Device, 
-  type DevicesResponse, 
   type DeviceGroup,
-  type DeviceGroupsResponse,
   type ExecuteRequest, 
   type AIQueryRequest,
   type BatchExecuteRequest,
   type BatchExecutionResponse,
-  type APIResponse,
   // 非同步任務相關類型
   type TaskCreationResponse,
   type TaskResponse,
@@ -30,21 +27,37 @@ import type { LogEntry } from '@/utils/SimpleLogger';
 
 /**
  * 獲取設備列表
- * 支援自動重試機制
+ * 支援自動重試機制，適配 BaseResponse 格式
  */
 export const getDevices = async (): Promise<Device[]> => {
   return createRetryableRequest(async () => {
-    const response = await apiClient.get<DevicesResponse>(API_ENDPOINTS.DEVICES);
-    return response.data.data || [];
+    const response = await apiClient.get<{ success: boolean; data?: Device[]; message?: string }>(API_ENDPOINTS.DEVICES);
+    
+    // 處理 BaseResponse 格式
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取設備列表失敗');
+    }
+    
+    // 後端 BaseResponse.data 直接包含 Device[] 陣列
+    const devices = response.data.data || [];
+    
+    // 添加詳細日誌以幫助診斷
+    console.log('getDevices API 回應:', {
+      success: response.data.success,
+      deviceCount: devices.length,
+      devices: devices.map(d => ({ ip: d.ip, name: d.name }))
+    });
+    
+    return devices;
   });
 };
 
 /**
  * 執行網路設備指令
- * 使用較長的超時時間以適應網路設備回應時間
+ * 使用較長的超時時間以適應網路設備回應時間，適配 BaseResponse 格式
  */
 export const executeCommand = async (request: ExecuteRequest): Promise<string> => {
-  const response = await apiClient.post<APIResponse>(
+  const response = await apiClient.post<{ success: boolean; data?: string; message?: string; error_code?: string }>(
     API_ENDPOINTS.EXECUTE, 
     request, 
     {
@@ -52,15 +65,29 @@ export const executeCommand = async (request: ExecuteRequest): Promise<string> =
     }
   );
   
-  return response.data;
+  // 對於純文字回應的端點，可能直接回傳字串而非 BaseResponse
+  // 先嘗試解析為 BaseResponse，如果失敗則當作純文字處理
+  if (typeof response.data === 'string') {
+    return response.data;
+  }
+  
+  // 處理 BaseResponse 格式
+  if (response.data && typeof response.data === 'object') {
+    if (!response.data.success) {
+      throw new Error(response.data.message || '執行指令失敗');
+    }
+    return response.data.data || '';
+  }
+  
+  return String(response.data || '');
 };
 
 /**
  * 執行 AI 查詢
- * 使用最長的超時時間以適應 AI 模型處理時間
+ * 使用最長的超時時間以適應 AI 模型處理時間，適配 BaseResponse 格式
  */
 export const queryAI = async (request: AIQueryRequest): Promise<string> => {
-  const response = await apiClient.post<APIResponse>(
+  const response = await apiClient.post<{ success: boolean; data?: string; message?: string; error_code?: string }>(
     API_ENDPOINTS.AI_QUERY, 
     request, 
     {
@@ -68,42 +95,79 @@ export const queryAI = async (request: AIQueryRequest): Promise<string> => {
     }
   );
   
-  return response.data;
+  // 對於純文字回應的端點，可能直接回傳字串而非 BaseResponse
+  // 先嘗試解析為 BaseResponse，如果失敗則當作純文字處理
+  if (typeof response.data === 'string') {
+    return response.data;
+  }
+  
+  // 處理 BaseResponse 格式
+  if (response.data && typeof response.data === 'object') {
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'AI 查詢失敗');
+    }
+    return response.data.data || '';
+  }
+  
+  return String(response.data || '');
 };
 
 /**
  * 健康檢查
- * 檢查後端服務是否正常運行
+ * 檢查後端服務是否正常運行，適配 BaseResponse 格式
  */
 export const healthCheck = async (): Promise<{ 
   status: string; 
   message: string 
 }> => {
-  const response = await apiClient.get(API_ENDPOINTS.HEALTH);
-  return response.data;
+  const response = await apiClient.get<{ success?: boolean; data?: { status: string; message: string }; status?: string; message?: string }>(API_ENDPOINTS.HEALTH);
+  
+  // 健康檢查端點可能有特殊格式，嘗試多種解析方式
+  if (response.data.success !== undefined) {
+    // BaseResponse 格式
+    if (!response.data.success) {
+      throw new Error(response.data.message || '健康檢查失敗');
+    }
+    return response.data.data || { status: 'unknown', message: '健康檢查無資料' };
+  } else if (response.data.status && response.data.message) {
+    // 直接格式
+    return {
+      status: response.data.status,
+      message: response.data.message
+    };
+  }
+  
+  return { status: 'unknown', message: '健康檢查回應格式無法識別' };
 };
 
 /**
  * 獲取設備群組列表
- * 支援自動重試機制
+ * 支援自動重試機制，適配 BaseResponse 格式
  */
 export const getDeviceGroups = async (): Promise<DeviceGroup[]> => {
   return createRetryableRequest(async () => {
-    const response = await apiClient.get<DeviceGroupsResponse>(API_ENDPOINTS.DEVICE_GROUPS);
-    return response.data.groups;
+    const response = await apiClient.get<{ success: boolean; data?: DeviceGroup[]; message?: string }>(API_ENDPOINTS.DEVICE_GROUPS);
+    
+    // 處理 BaseResponse 格式
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取設備群組失敗');
+    }
+    
+    // 後端 BaseResponse.data 直接包含 DeviceGroup[] 陣列
+    return response.data.data || [];
   });
 };
 
 /**
  * 統一的批次執行網路設備指令
- * 支援單一設備、多設備、以及所有設備操作
+ * 支援單一設備、多設備、以及所有設備操作，適配 BaseResponse 格式
  * 透過 devices 陣列的內容來決定操作範圍：
  * - devices: ["單一IP"] -> 單設備操作
  * - devices: ["IP1", "IP2", "IP3"] -> 多設備操作  
  * - devices: [所有設備IP] -> 全設備操作
  */
 export const batchExecuteCommand = async (request: BatchExecuteRequest): Promise<BatchExecutionResponse> => {
-  const response = await apiClient.post<BatchExecutionResponse>(
+  const response = await apiClient.post<{ success: boolean; data?: BatchExecutionResponse; message?: string; error_code?: string }>(
     API_ENDPOINTS.BATCH_EXECUTE,
     request,
     {
@@ -111,12 +175,22 @@ export const batchExecuteCommand = async (request: BatchExecuteRequest): Promise
     }
   );
   
-  return response.data;
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '批次執行失敗');
+  }
+  
+  if (!response.data.data) {
+    throw new Error('批次執行回應資料格式錯誤');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 BatchExecutionResponse
+  return response.data.data;
 };
 
 /**
  * 獲取 API 根資訊
- * 包含版本資訊和可用端點
+ * 包含版本資訊和可用端點，適配 BaseResponse 格式
  */
 export const getAPIInfo = async (): Promise<{
   message: string;
@@ -124,13 +198,45 @@ export const getAPIInfo = async (): Promise<{
   endpoints: Record<string, string>;
   ai_available: boolean;
 }> => {
-  const response = await apiClient.get(API_ENDPOINTS.ROOT);
-  return response.data;
+  const response = await apiClient.get<{ 
+    success?: boolean; 
+    data?: {
+      message: string;
+      version: string;
+      endpoints: Record<string, string>;
+      ai_available: boolean;
+    };
+    message?: string;
+    version?: string;
+    endpoints?: Record<string, string>;
+    ai_available?: boolean;
+  }>(API_ENDPOINTS.ROOT);
+  
+  // 嘗試 BaseResponse 格式
+  if (response.data.success !== undefined) {
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取 API 資訊失敗');
+    }
+    return response.data.data || {
+      message: '無法獲取 API 資訊',
+      version: 'unknown',
+      endpoints: {},
+      ai_available: false
+    };
+  }
+  
+  // 直接格式（向後兼容）
+  return {
+    message: response.data.message || 'API 正常運行',
+    version: response.data.version || 'unknown',
+    endpoints: response.data.endpoints || {},
+    ai_available: response.data.ai_available || false
+  };
 };
 
 /**
  * 獲取 AI 服務狀態
- * 包含配額、初始化狀態和建議
+ * 包含配額、初始化狀態和建議，適配 BaseResponse 格式
  */
 export const getAIStatus = async (): Promise<{
   ai_available: boolean;
@@ -145,8 +251,63 @@ export const getAIStatus = async (): Promise<{
   };
   recommendations: string[];
 }> => {
-  const response = await apiClient.get('/api/ai-status');
-  return response.data;
+  const response = await apiClient.get<{
+    success?: boolean;
+    data?: {
+      ai_available: boolean;
+      ai_initialized: boolean;
+      ai_provider: string;
+      parser_version: string;
+      search_enabled: boolean;
+      api_keys: {
+        gemini_configured: boolean;
+        claude_configured: boolean;
+        current_provider: string;
+      };
+      recommendations: string[];
+    };
+    message?: string;
+    // 直接格式的欄位（向後兼容）
+    ai_available?: boolean;
+    ai_initialized?: boolean;
+    ai_provider?: string;
+  }>('/api/ai-status');
+  
+  // 嘗試 BaseResponse 格式
+  if (response.data.success !== undefined) {
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取 AI 狀態失敗');
+    }
+    return response.data.data || {
+      ai_available: false,
+      ai_initialized: false,
+      ai_provider: 'unknown',
+      parser_version: 'unknown',
+      search_enabled: false,
+      api_keys: {
+        gemini_configured: false,
+        claude_configured: false,
+        current_provider: 'unknown'
+      },
+      recommendations: []
+    };
+  }
+  
+  // 直接格式（向後兼容）
+  const directData = response.data as any;
+  return {
+    ai_available: directData.ai_available || false,
+    ai_initialized: directData.ai_initialized || false,
+    ai_provider: directData.ai_provider || 'unknown',
+    parser_version: directData.parser_version || 'unknown',
+    search_enabled: directData.search_enabled || false,
+    api_keys: directData.api_keys || {
+      gemini_configured: false,
+      claude_configured: false,
+      current_provider: 'unknown'
+    },
+    recommendations: directData.recommendations || []
+  };
 };
 
 // =============================================================================
@@ -155,10 +316,10 @@ export const getAIStatus = async (): Promise<{
 
 /**
  * 非同步批次執行指令
- * 立即返回任務 ID，適用於長時間執行的操作
+ * 立即返回任務 ID，適用於長時間執行的操作，適配 BaseResponse 格式
  */
 export const batchExecuteAsync = async (request: BatchExecuteRequest): Promise<TaskCreationResponse> => {
-  const response = await apiClient.post<TaskCreationResponse>(
+  const response = await apiClient.post<{ success: boolean; data?: TaskCreationResponse; message?: string; error_code?: string }>(
     API_ENDPOINTS.BATCH_EXECUTE_ASYNC,
     request,
     {
@@ -166,24 +327,60 @@ export const batchExecuteAsync = async (request: BatchExecuteRequest): Promise<T
     }
   );
   
-  return response.data;
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '建立非同步任務失敗');
+  }
+  
+  if (!response.data.data) {
+    throw new Error('任務建立回應資料格式錯誤');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 TaskCreationResponse
+  return response.data.data;
 };
 
 /**
  * 查詢特定任務的狀態和結果
- * 用於輪詢任務執行進度
+ * 用於輪詢任務執行進度，適配 BaseResponse 格式
  */
 export const getTaskStatus = async (taskId: string): Promise<TaskResponse> => {
-  const response = await apiClient.get<TaskResponse>(
-    `${API_ENDPOINTS.TASK_STATUS}/${taskId}`
+  // 參數驗證 - 防止無效的任務 ID
+  if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+    throw new Error(`無效的任務 ID: '${taskId}'`);
+  }
+  
+  // 防止 'undefined' 字串被發送到後端
+  if (taskId === 'undefined' || taskId === 'null') {
+    throw new Error(`不可接受的任務 ID 值: '${taskId}'`);
+  }
+  
+  // 基本格式驗證（可選，根據任務 ID 格式調整）
+  const taskIdPattern = /^task_\d+_[a-zA-Z0-9]+$/;
+  if (!taskIdPattern.test(taskId)) {
+    console.warn(`任務 ID 格式可能不正確: '${taskId}'，但仍然嘗試查詢`);
+  }
+  
+  const response = await apiClient.get<{ success: boolean; data?: TaskResponse; message?: string; error_code?: string }>(
+    `${API_ENDPOINTS.TASK_STATUS}/${encodeURIComponent(taskId)}`
   );
   
-  return response.data;
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '查詢任務狀態失敗');
+  }
+  
+  if (!response.data.data) {
+    throw new Error('任務狀態回應資料格式錯誤');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 TaskResponse
+  return response.data.data;
 };
 
 /**
  * 列出任務，支援篩選和分頁
- * 用於任務管理和歷史查詢
+ * 用於任務管理和歷史查詢，適配 BaseResponse 格式
  */
 export const getTasks = async (params?: {
   status?: TaskStatus;
@@ -206,32 +403,80 @@ export const getTasks = async (params?: {
     ? `${API_ENDPOINTS.TASKS}?${queryParams.toString()}`
     : API_ENDPOINTS.TASKS;
   
-  const response = await apiClient.get<TaskListResponse>(url);
-  return response.data;
+  const response = await apiClient.get<{ success: boolean; data?: TaskListResponse; message?: string }>(url);
+  
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '獲取任務列表失敗');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 TaskListResponse
+  return response.data.data || { tasks: [], total_count: 0, filters_applied: {} };
 };
 
 /**
  * 取消指定任務
- * 用於用戶主動取消長時間執行的任務
+ * 用於用戶主動取消長時間執行的任務，適配 BaseResponse 格式
  */
 export const cancelTask = async (taskId: string): Promise<TaskCancelResponse> => {
-  const response = await apiClient.delete<TaskCancelResponse>(
-    `${API_ENDPOINTS.CANCEL_TASK}/${taskId}`
+  // 參數驗證 - 防止無效的任務 ID
+  if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+    throw new Error(`無效的任務 ID: '${taskId}'`);
+  }
+  
+  // 防止 'undefined' 字串被發送到後端
+  if (taskId === 'undefined' || taskId === 'null') {
+    throw new Error(`不可接受的任務 ID 值: '${taskId}'`);
+  }
+  
+  const response = await apiClient.delete<{ success: boolean; data?: TaskCancelResponse; message?: string }>(
+    `${API_ENDPOINTS.CANCEL_TASK}/${encodeURIComponent(taskId)}`
   );
   
-  return response.data;
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '取消任務失敗');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 TaskCancelResponse
+  return response.data.data || { message: '任務已取消', task_id: taskId };
 };
 
 /**
  * 獲取任務管理器統計資訊
- * 用於系統監控和診斷
+ * 用於系統監控和診斷，適配 BaseResponse 格式
  */
 export const getTaskManagerStats = async (): Promise<TaskManagerStatsResponse> => {
-  const response = await apiClient.get<TaskManagerStatsResponse>(
+  const response = await apiClient.get<{ success: boolean; data?: TaskManagerStatsResponse; message?: string }>(
     API_ENDPOINTS.TASK_MANAGER_STATS
   );
   
-  return response.data;
+  // 處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '獲取任務統計失敗');
+  }
+  
+  // 後端 BaseResponse.data 直接包含 TaskManagerStatsResponse
+  return response.data.data || { 
+    task_manager_stats: {
+      total_created: 0,
+      total_completed: 0,
+      total_failed: 0,
+      total_cancelled: 0,
+      current_tasks: 0,
+      active_tasks: 0,
+      finished_tasks: 0,
+      cleanup_runs: 0,
+      tasks_cleaned: 0,
+      cleanup_interval: 0,
+      task_ttl_hours: 0,
+      uptime_seconds: 0,
+    },
+    system_info: {
+      python_version: [0, 0, 0],
+      platform: 'unknown'
+    }
+  };
 };
 
 // =============================================================================
@@ -313,6 +558,23 @@ export class TaskPoller {
       timeout?: number;
     } = {}
   ): Promise<TaskResponse> {
+    // 參數驗證 - 防止無效的任務 ID
+    if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+      const error = new Error(`TaskPoller: 無效的任務 ID '${taskId}'`);
+      if (options.onError) {
+        options.onError(error, '任務 ID 驗證失敗');
+      }
+      throw error;
+    }
+    
+    // 防止 'undefined' 字串
+    if (taskId === 'undefined' || taskId === 'null') {
+      const error = new Error(`TaskPoller: 不可接受的任務 ID 值 '${taskId}'`);
+      if (options.onError) {
+        options.onError(error, '任務 ID 值無效');
+      }
+      throw error;
+    }
     // 合併預設回調和選項回調
     const mergedOptions = {
       ...options,
@@ -451,6 +713,12 @@ export class TaskPoller {
       try {
         pollCount++;
         const task = await getTaskStatus(taskId);
+        
+        // 驗證任務資料有效性
+        if (!task || !task.task_id) {
+          throw new Error(`無效的任務資料: taskId=${taskId}`);
+        }
+        
         const meta: PollMeta = { 
           pollCount, 
           duration: currentTime - startTime, 
