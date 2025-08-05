@@ -2,7 +2,7 @@
 .env
 *.env
 
-# Python
+# Python 核心檔案
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,33 +25,109 @@ wheels/
 *.egg
 MANIFEST
 
+# Python 現代化工具快取
+.ruff_cache/
+.mypy_cache/
+.bandit/
+.coverage.*
+.cache/
+.nox/
+.tox/
+pyproject.toml.bak
+
 # 虛擬環境
 venv/
 env/
 ENV/
 
-# IDE
+# IDE 和編輯器
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.vim/
+.netrwhist
 
-# 日誌檔案
+# 日誌檔案 (全專案)
 *.log
 logs/
+WEB_APP/backend/logs/
 
 # 測試
 .pytest_cache/
 .coverage
 htmlcov/
 
-# 暫存檔案
+# 系統檔案
+.DS_Store
+.DS_Store?
+Thumbs.db
+Desktop.ini
 *.tmp
 *.temp
-.DS_Store
-Thumbs.db
+*.swp
+*.lock
+
+# Windows 系統檔案
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+
+# macOS 系統檔案
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
 # 設備特定配置（如包含敏感資訊）
 devices_prod.json
 backup_configs/
+
+# Node.js 前端依賴 (全域)
+**/node_modules/
+**/dist/
+**/.vite/
+**/.nuxt/
+**/.next/
+**/.turbo/
+
+# 前端專案特定
+WEB_APP/frontend/node_modules/
+WEB_APP/frontend/.vite/
+WEB_APP/frontend/dist/
+WEB_APP/frontend/.turbo/
+
+# 容器化和部署
+Dockerfile.*
+.dockerignore
+docker-compose.override.yml
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# 備份和暫存
+*.bak
+*.orig
+*.rej
+.sass-cache/
+.npm/
+.yarn-integrity
+
+# 專案特定的敏感檔案
+config/local_*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
