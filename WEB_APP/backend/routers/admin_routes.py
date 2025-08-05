@@ -615,3 +615,130 @@ async def get_ai_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI 狀態檢查失敗: {str(e)}",
         )
+
+# =============================================================================
+# 前端動態配置端點
+# =============================================================================
+
+class FrontendConfig(BaseModel):
+    """前端動態配置模型"""
+    polling: Dict[str, Any]
+    ui: Dict[str, Any]
+    api: Dict[str, Any]
+
+FrontendConfigTyped = BaseResponse[FrontendConfig]
+
+@status_router.get(
+    "/frontend-config",
+    response_model=FrontendConfigTyped,
+    summary="⚙️ 取得前端動態配置",
+    description="獲取前端應用程式的動態配置，包含輪詢間隔、UI 設定、API 配置等",
+    response_description="前端動態配置的標準化回應格式",
+    responses={
+        200: {
+            "description": "成功獲取前端配置",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "polling": {
+                                "pollInterval": 2000,
+                                "maxPollInterval": 10000,
+                                "timeout": 1800000,
+                                "autoStartPolling": True
+                            },
+                            "ui": {
+                                "progressUpdateInterval": 500,
+                                "errorDisplayDuration": 5000,
+                                "successDisplayDuration": 3000
+                            },
+                            "api": {
+                                "retryCount": 3,
+                                "retryDelay": 1000,
+                                "timeouts": {
+                                    "command": 60000,
+                                    "aiQuery": 120000,
+                                    "batchCommand": 300000
+                                }
+                            }
+                        },
+                        "message": "前端配置獲取成功",
+                        "error_code": None,
+                        "timestamp": "2025-08-04T10:30:15.123456"
+                    }
+                }
+            }
+        },
+        500: {"description": "伺服器內部錯誤"}
+    }
+)
+async def get_frontend_config_endpoint(
+    app_settings: Settings = Depends(get_settings_dep)
+) -> FrontendConfigTyped:
+    """
+    取得前端動態配置
+    
+    這個端點允許前端在啟動時從後端獲取配置參數，
+    包含輪詢間隔、超時設定、UI 行為等，實現配置的集中化管理。
+
+    Args:
+        app_settings: 應用程式設定實例（依賴注入）
+
+    Returns:
+        FrontendConfig: 前端動態配置資訊
+        
+    Raises:
+        HTTPException: 當配置獲取失敗時
+    """
+    logger.info("收到前端動態配置查詢請求")
+
+    try:
+        # 構建前端配置
+        frontend_config = FrontendConfig(
+            polling={
+                "pollInterval": 2000,  # 基礎輪詢間隔 (ms)
+                "maxPollInterval": 10000,  # 最大輪詢間隔 (ms) 
+                "timeout": 30 * 60 * 1000,  # 總超時時間 (30分鐘)
+                "autoStartPolling": True,  # 自動開始輪詢
+                "backoffMultiplier": 1.2,  # 指數退避倍數
+                "maxRetries": 3,  # 最大重試次數
+            },
+            ui={
+                "progressUpdateInterval": 500,  # 進度更新間隔 (ms)
+                "errorDisplayDuration": 5000,  # 錯誤訊息顯示時間 (ms)
+                "successDisplayDuration": 3000,  # 成功訊息顯示時間 (ms)
+                "animationDuration": 300,  # 動畫持續時間 (ms)
+                "debounceDelay": 300,  # 防抖延遲 (ms)
+                "maxConcurrentRequests": 5,  # 最大併發請求數
+            },
+            api={
+                "retryCount": 3,  # API 重試次數
+                "retryDelay": 1000,  # 重試延遲 (ms)
+                "enableRequestDeduplication": True,  # 啟用請求去重
+                "deduplicationTTL": 5000,  # 去重快取 TTL (ms)
+                "timeouts": {
+                    "command": 60000,  # 指令執行超時 (60秒)
+                    "aiQuery": 120000,  # AI 查詢超時 (2分鐘)
+                    "batchCommand": 300000,  # 批次執行超時 (5分鐘)
+                    "taskPolling": 2000,  # 任務輪詢超時 (2秒)
+                    "healthCheck": 10000,  # 健康檢查超時 (10秒)
+                }
+            }
+        )
+
+        logger.info("前端動態配置構建完成")
+        
+        return FrontendConfigTyped(
+            success=True,
+            data=frontend_config,
+            message="前端配置獲取成功",
+            error_code=None
+        )
+
+    except Exception as e:
+        error_msg = f"獲取前端配置失敗: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )

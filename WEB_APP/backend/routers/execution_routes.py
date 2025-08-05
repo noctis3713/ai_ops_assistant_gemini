@@ -25,6 +25,12 @@ from starlette import status
 from .dependencies import get_ai_service_dep, get_config_manager_dep
 from async_task_manager import TaskType, get_task_manager
 from core.network_tools import CommandValidator
+from core.error_codes import NetworkErrorCodes, AIErrorCodes, classify_network_error, classify_ai_error
+from core.exceptions import (
+    DeviceNotFoundError, DeviceConnectionError, DeviceAuthenticationError, DeviceTimeoutError,
+    CommandValidationError, CommandExecutionError, CommandTimeoutError,
+    AIServiceError, AINotAvailableError, AIQuotaExceededError, AIAPIError
+)
 
 # 導入 Pydantic 模型
 from pydantic import BaseModel
@@ -126,52 +132,8 @@ TaskCreationResponseTyped = BaseResponse[TaskCreationResponse]
 # AI 處理輔助函數 (從 main.py 遷移)
 # =============================================================================
 
-async def _handle_ai_request(
-    ai_service, query: str, device_ips: List[str] = None
-) -> str:
-    """統一處理所有 AI 相關請求的輔助函數
-    
-    重要更新 (v2.1.0):
-    - 修復依賴注入問題：正確傳入 ai_service 參數
-    - 支援 batch_execute 和 run_batch_task_worker 統一調用
-    - 增強錯誤分類和回應格式標準化
-    
-    Args:
-        ai_service: AI 服務實例 (必須正確傳入)
-        query: 用戶查詢內容
-        device_ips: 目標設備 IP 列表（可選）
-        
-    Returns:
-        str: AI 分析結果
-        
-    Raises:
-        HTTPException: 當 AI 處理失敗時
-    """
-    try:
-        logger.info(f"AI 請求處理開始: query='{query[:50]}...', devices={device_ips}")
-        
-        # 檢查 AI 服務可用性
-        if not ai_service.ai_initialized:
-            logger.error("AI 服務未初始化")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI 服務未啟用或初始化失敗，請檢查 API 金鑰配置"
-            )
-        
-        # 執行 AI 查詢
-        ai_response = await ai_service.query_ai(
-            prompt=query,
-            device_ips=device_ips
-        )
-        
-        logger.info(f"AI 請求處理完成: response_length={len(ai_response)}")
-        return ai_response
-
-    except Exception as e:
-        # 使用 AIService 的錯誤分類機制
-        error_msg, status_code = ai_service.classify_ai_error(str(e))
-        logger.error(f"AI 請求處理失敗: {error_msg} (Query: {query[:50]}...)")
-        raise HTTPException(status_code=status_code, detail=error_msg)
+# 移除本地的 _handle_ai_request 函數，統一使用 AIService.handle_ai_request
+# 這樣可以消除程式碼重複，提升維護性
 
 # =============================================================================
 # 指令執行 API 端點
@@ -179,16 +141,22 @@ async def _handle_ai_request(
 
 @router.post(
     "/execute",
-    response_class=PlainTextResponse,
+    response_model=BaseResponse[str],
     summary="💻 單一設備指令執行",
-    description="在指定設備上執行網路指令，返回純文字執行結果，只允許安全的 show 指令",
-    response_description="指令執行結果（純文字格式）",
+    description="在指定設備上執行網路指令，返回標準化格式的執行結果，只允許安全的 show 指令",
+    response_description="指令執行結果（BaseResponse[str] 格式）",
     responses={
         200: {
             "description": "指令執行成功",
             "content": {
-                "text/plain": {
-                    "example": "Cisco IOS XE Software, Version 17.03.04a\nCopyright (c) 1986-2021 by Cisco Systems, Inc.\n..."
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": "Cisco IOS XE Software, Version 17.03.04a\nCopyright (c) 1986-2021 by Cisco Systems, Inc.\n...",
+                        "message": "指令執行成功",
+                        "error_code": None,
+                        "timestamp": "2025-08-04T10:30:15.123456"
+                    }
                 }
             }
         },
@@ -201,7 +169,7 @@ async def _handle_ai_request(
 async def execute_command(
     request: ExecuteRequest, 
     config_manager=Depends(get_config_manager_dep)
-) -> str:
+) -> BaseResponse[str]:
     """執行網路設備指令
 
     Args:
@@ -209,7 +177,7 @@ async def execute_command(
         config_manager: 配置管理器實例（依賴注入）
 
     Returns:
-        str: 指令執行結果（純文字格式）
+        BaseResponse[str]: 指令執行結果（標準化格式）
 
     Raises:
         HTTPException: 當指令不安全、設備不存在或執行失敗時
@@ -220,20 +188,17 @@ async def execute_command(
     is_safe, error_message = CommandValidator.validate_command(request.command)
     if not is_safe:
         logger.warning(f"拒絕執行不安全指令: {request.command}, 原因: {error_message}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
-        )
+        raise CommandValidationError(request.command, error_message)
 
     # 驗證設備IP
     try:
         device_config = config_manager.get_device_by_ip(request.device_ip)
 
         if not device_config:
-            error_msg = f"設備 {request.device_ip} 不在配置列表中"
-            logger.error(error_msg)
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+            logger.error(f"設備 {request.device_ip} 不在配置列表中")
+            raise DeviceNotFoundError(request.device_ip)
 
-    except HTTPException:
+    except DeviceNotFoundError:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
@@ -252,7 +217,14 @@ async def execute_command(
         )
 
         logger.info(f"指令執行成功: {request.device_ip} -> {request.command}")
-        return output
+        
+        # 返回標準化的 BaseResponse 格式
+        return BaseResponse[str](
+            success=True,
+            data=output,
+            message="指令執行成功",
+            error_code=None
+        )
 
     except Exception as e:
         from core.nornir_integration import classify_error
@@ -261,34 +233,37 @@ async def execute_command(
         error_detail = classify_error(error_str)
         logger.error(f"指令執行失敗: {error_str}")
 
-        # 根據錯誤類型設定 HTTP 狀態碼
-        if error_detail["type"] == "connection_timeout":
-            status_code = status.HTTP_408_REQUEST_TIMEOUT
-        elif error_detail["type"] == "authentication_failed":
-            status_code = status.HTTP_401_UNAUTHORIZED
+        # 使用統一的錯誤分類系統
+        error_code = classify_network_error(error_str)
+        
+        # 根據錯誤代碼拋出適當的異常
+        if error_code == NetworkErrorCodes.CONNECTION_TIMEOUT:
+            raise DeviceTimeoutError(request.device_ip, "指令執行", 30)
+        elif error_code in [NetworkErrorCodes.AUTH_FAILED, NetworkErrorCodes.CREDENTIALS_INVALID]:
+            raise DeviceAuthenticationError(request.device_ip)
+        elif error_code == NetworkErrorCodes.CONNECTION_REFUSED:
+            raise DeviceConnectionError(request.device_ip, error_str)
         else:
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-        # 構建詳細錯誤訊息
-        error_msg = f"設備 {request.device_ip} 執行失敗: {error_str}\n"
-        error_msg += f"分類: {error_detail['category']} ({error_detail['type']})\n"
-        error_msg += f"嚴重性: {error_detail['severity']}\n"
-        error_msg += f"建議: {error_detail['suggestion']}"
-
-        raise HTTPException(status_code=status_code, detail=error_msg)
+            raise CommandExecutionError(request.command, request.device_ip, error_str)
 
 @router.post(
     "/ai-query",
-    response_class=PlainTextResponse,
+    response_model=BaseResponse[str],
     summary="🤖 AI 智能查詢",
     description="使用 AI 對設備進行智能分析和查詢，支援自然語言問題理解",
-    response_description="AI 分析結果（Markdown 格式）",
+    response_description="AI 分析結果（BaseResponse[str] 格式）",
     responses={
         200: {
             "description": "AI 分析成功完成",
             "content": {
-                "text/plain": {
-                    "example": "# 設備狀態分析報告\n\n## 系統版本\n- IOS XE: 17.03.04a\n- 平台: ASR1001-X\n\n## 建議\n- 系統運作正常\n- 建議定期備份配置"
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": "# 設備狀態分析報告\n\n## 系統版本\n- IOS XE: 17.03.04a\n- 平台: ASR1001-X\n\n## 建議\n- 系統運作正常\n- 建議定期備份配置",
+                        "message": "AI 分析完成",
+                        "error_code": None,
+                        "timestamp": "2025-08-04T10:30:15.123456"
+                    }
                 }
             }
         },
@@ -301,7 +276,7 @@ async def ai_query(
     request: AIQueryRequest,
     config_manager=Depends(get_config_manager_dep),
     ai_service=Depends(get_ai_service_dep),
-) -> str:
+) -> BaseResponse[str]:
     """AI 查詢端點（重構版）
 
     Args:
@@ -310,7 +285,7 @@ async def ai_query(
         ai_service: AI 服務實例（依賴注入）
 
     Returns:
-        str: AI 分析結果（Markdown 格式）
+        BaseResponse[str]: AI 分析結果（標準化格式）
 
     Raises:
         HTTPException: 當設備不存在或 AI 查詢失敗時
@@ -322,11 +297,10 @@ async def ai_query(
         device_config = config_manager.get_device_by_ip(request.device_ip)
 
         if not device_config:
-            error_msg = f"設備 {request.device_ip} 不在配置列表中"
-            logger.error(error_msg)
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+            logger.error(f"設備 {request.device_ip} 不在配置列表中")
+            raise DeviceNotFoundError(request.device_ip)
 
-    except HTTPException:
+    except DeviceNotFoundError:
         raise
     except Exception as e:
         logger.error(f"驗證設備配置失敗: {e}")
@@ -334,10 +308,41 @@ async def ai_query(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="驗證設備配置失敗"
         )
 
-    # 直接呼叫統一的 AI 處理函數
-    return await _handle_ai_request(
-        ai_service, query=request.query, device_ips=[request.device_ip]
-    )
+    # 使用 AIService 的統一 AI 請求處理方法
+    try:
+        ai_result = await ai_service.handle_ai_request(
+            query=request.query, device_ips=[request.device_ip]
+        )
+        
+        # 返回標準化的 BaseResponse 格式
+        return BaseResponse[str](
+            success=True,
+            data=ai_result,
+            message="AI 分析完成",
+            error_code=None
+        )
+        
+    except Exception as e:
+        # 解析錯誤訊息和狀態碼
+        error_parts = str(e).split('|')
+        if len(error_parts) == 2:
+            error_msg, status_code_str = error_parts
+            status_code = int(status_code_str)
+        else:
+            error_msg = str(e)
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        
+        logger.error(f"AI 查詢失敗: {error_msg}")
+        
+        # 根據狀態碼拋出適當的 AI 服務異常
+        if status_code == 429:
+            raise AIQuotaExceededError("AI")
+        elif status_code == 401:
+            raise AIAPIError("AI", "認證失敗")
+        elif status_code == 503:
+            raise AINotAvailableError(error_msg)
+        else:
+            raise AIServiceError(error_msg)
 
 @router.post(
     "/batch-execute",
@@ -428,11 +433,24 @@ async def batch_execute(
             logger.info(f"AI 模式批次執行: {request.devices} -> {request.command}")
 
             from ai_service import get_ai_service
-            # 直接呼叫 _handle_ai_request，不再需要 execute_ai_mode
+            # 使用 AIService 的統一 AI 請求處理方法
             ai_service = get_ai_service()
-            ai_response = await _handle_ai_request(
-                ai_service, query=request.command, device_ips=request.devices
-            )
+            try:
+                ai_response = await ai_service.handle_ai_request(
+                    query=request.command, device_ips=request.devices
+                )
+            except Exception as e:
+                # 解析錯誤訊息和狀態碼
+                error_parts = str(e).split('|')
+                if len(error_parts) == 2:
+                    error_msg, status_code_str = error_parts
+                    status_code = int(status_code_str)
+                else:
+                    error_msg = str(e)
+                    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+                
+                logger.error(f"AI 批次執行失敗: {error_msg}")
+                raise HTTPException(status_code=status_code, detail=error_msg)
 
             # 構建AI模式的回應格式 - 每個設備顯示相同的 AI 分析結果
             results = []

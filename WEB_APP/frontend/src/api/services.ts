@@ -55,7 +55,7 @@ export const getDevices = async (): Promise<Device[]> => {
 
 /**
  * 執行網路設備指令
- * 使用較長的超時時間以適應網路設備回應時間，適配 BaseResponse 格式
+ * 使用較長的超時時間以適應網路設備回應時間，統一使用 BaseResponse 格式
  */
 export const executeCommand = async (request: ExecuteRequest): Promise<string> => {
   const response = await apiClient.post<{ success: boolean; data?: string; message?: string; error_code?: string }>(
@@ -66,26 +66,17 @@ export const executeCommand = async (request: ExecuteRequest): Promise<string> =
     }
   );
   
-  // 對於純文字回應的端點，可能直接回傳字串而非 BaseResponse
-  // 先嘗試解析為 BaseResponse，如果失敗則當作純文字處理
-  if (typeof response.data === 'string') {
-    return response.data;
+  // 統一處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || '執行指令失敗');
   }
   
-  // 處理 BaseResponse 格式
-  if (response.data && typeof response.data === 'object') {
-    if (!response.data.success) {
-      throw new Error(response.data.message || '執行指令失敗');
-    }
-    return response.data.data || '';
-  }
-  
-  return String(response.data || '');
+  return response.data.data || '';
 };
 
 /**
  * 執行 AI 查詢
- * 使用最長的超時時間以適應 AI 模型處理時間，適配 BaseResponse 格式
+ * 使用最長的超時時間以適應 AI 模型處理時間，統一使用 BaseResponse 格式
  */
 export const queryAI = async (request: AIQueryRequest): Promise<string> => {
   const response = await apiClient.post<{ success: boolean; data?: string; message?: string; error_code?: string }>(
@@ -96,21 +87,12 @@ export const queryAI = async (request: AIQueryRequest): Promise<string> => {
     }
   );
   
-  // 對於純文字回應的端點，可能直接回傳字串而非 BaseResponse
-  // 先嘗試解析為 BaseResponse，如果失敗則當作純文字處理
-  if (typeof response.data === 'string') {
-    return response.data;
+  // 統一處理 BaseResponse 格式
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'AI 查詢失敗');
   }
   
-  // 處理 BaseResponse 格式
-  if (response.data && typeof response.data === 'object') {
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'AI 查詢失敗');
-    }
-    return response.data.data || '';
-  }
-  
-  return String(response.data || '');
+  return response.data.data || '';
 };
 
 /**
@@ -1007,4 +989,98 @@ export const getFrontendLogConfig = async (): Promise<FrontendLogConfig> => {
       enabledCategories: ['api', 'error', 'user'],
     };
   }
+};
+
+/**
+ * 前端動態配置接口
+ */
+export interface FrontendConfig {
+  polling: {
+    pollInterval: number;
+    maxPollInterval: number;
+    timeout: number;
+    autoStartPolling: boolean;
+    backoffMultiplier: number;
+    maxRetries: number;
+  };
+  ui: {
+    progressUpdateInterval: number;
+    errorDisplayDuration: number;
+    successDisplayDuration: number;
+    animationDuration: number;
+    debounceDelay: number;
+    maxConcurrentRequests: number;
+  };
+  api: {
+    retryCount: number;
+    retryDelay: number;
+    enableRequestDeduplication: boolean;
+    deduplicationTTL: number;
+    timeouts: {
+      command: number;
+      aiQuery: number;
+      batchCommand: number;
+      taskPolling: number;
+      healthCheck: number;
+    };
+  };
+}
+
+/**
+ * 獲取前端動態配置
+ * 從後端獲取前端應用程式的配置參數，實現配置的集中化管理
+ */
+export const getFrontendConfig = async (): Promise<FrontendConfig> => {
+  try {
+    const response = await apiClient.get<{ success: boolean; data?: FrontendConfig; message?: string }>('/api/frontend-config');
+    
+    // 處理 BaseResponse 格式
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取前端配置失敗');
+    }
+    
+    return response.data.data || getDefaultFrontendConfig();
+  } catch (error) {
+    // 如果無法獲取配置，返回預設配置
+    logError('無法獲取前端動態配置，使用預設配置', { error });
+    return getDefaultFrontendConfig();
+  }
+};
+
+/**
+ * 獲取預設前端配置
+ * 當後端配置不可用時的後備配置
+ */
+export const getDefaultFrontendConfig = (): FrontendConfig => {
+  return {
+    polling: {
+      pollInterval: 2000,
+      maxPollInterval: 10000,
+      timeout: 30 * 60 * 1000, // 30分鐘
+      autoStartPolling: true,
+      backoffMultiplier: 1.2,
+      maxRetries: 3,
+    },
+    ui: {
+      progressUpdateInterval: 500,
+      errorDisplayDuration: 5000,
+      successDisplayDuration: 3000,
+      animationDuration: 300,
+      debounceDelay: 300,
+      maxConcurrentRequests: 5,
+    },
+    api: {
+      retryCount: 3,
+      retryDelay: 1000,
+      enableRequestDeduplication: true,
+      deduplicationTTL: 5000,
+      timeouts: {
+        command: 60000,      // 1分鐘
+        aiQuery: 120000,     // 2分鐘
+        batchCommand: 300000, // 5分鐘
+        taskPolling: 2000,   // 2秒
+        healthCheck: 10000,  // 10秒
+      },
+    },
+  };
 };

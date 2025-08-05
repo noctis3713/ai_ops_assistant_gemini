@@ -870,6 +870,48 @@ Question: {{input}}
             error_msg = f"{ai_provider.upper()} AI 查詢執行失敗: {error_str}"
             return error_msg, 500
 
+    async def handle_ai_request(
+        self, query: str, device_ips: List[str] = None
+    ) -> str:
+        """統一處理所有 AI 相關請求的公共方法
+        
+        這個方法將原本分散在 execution_routes.py 和 background_tasks.py 中的
+        _handle_ai_request 邏輯統一整合到 AIService 中，消除程式碼重複。
+        
+        Args:
+            query: 用戶查詢內容
+            device_ips: 目標設備 IP 列表（可選）
+            
+        Returns:
+            str: AI 分析結果
+            
+        Raises:
+            Exception: 當 AI 處理失敗時
+        """
+        try:
+            logger.info(f"AI 請求處理開始: query='{query[:50]}...', devices={device_ips}")
+            
+            # 檢查 AI 服務可用性
+            if not self.ai_initialized:
+                logger.error("AI 服務未初始化")
+                raise Exception("AI 服務未啟用或初始化失敗，請檢查 API 金鑰配置")
+            
+            # 執行 AI 查詢
+            ai_response = await self.query_ai(
+                prompt=query,
+                device_ips=device_ips
+            )
+            
+            logger.info(f"AI 請求處理完成: response_length={len(ai_response)}")
+            return ai_response
+
+        except Exception as e:
+            # 使用 AIService 的錯誤分類機制
+            error_msg, status_code = self.classify_ai_error(str(e))
+            logger.error(f"AI 請求處理失敗: {error_msg} (Query: {query[:50]}...)")
+            # 重新拋出異常，但包含分類後的錯誤訊息和狀態碼資訊
+            raise Exception(f"{error_msg}|{status_code}")
+
     def get_ai_status(self) -> Dict[str, Any]:
         """取得 AI 服務狀態
 

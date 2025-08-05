@@ -78,6 +78,40 @@ export interface AppActions {
   setIsAsyncMode: (isAsync: boolean) => void;
   setTaskPollingActive: (active: boolean) => void;
   updateTaskProgress: (taskId: string, progress: number, stage: string) => void;
+  
+  // =============================================================================
+  // 高階集中化 Actions - 減少 Hook 中的零散調用
+  // =============================================================================
+  
+  /**
+   * 處理任務完成的統一函數
+   * 集中處理所有任務完成後需要的狀態更新
+   */
+  handleTaskCompletion: (taskResult: any) => void;
+  
+  /**
+   * 處理執行開始的統一函數
+   * 集中處理所有執行開始時需要的狀態更新
+   */
+  handleExecutionStart: (params: { deviceCount: number; isBatch?: boolean }) => void;
+  
+  /**
+   * 處理執行錯誤的統一函數
+   * 集中處理所有執行錯誤時需要的狀態更新
+   */
+  handleExecutionError: (error: unknown, context?: string) => void;
+  
+  /**
+   * 處理非同步任務開始的統一函數
+   * 集中處理非同步任務相關的狀態更新
+   */
+  handleAsyncTaskStart: (taskId: string, deviceCount: number) => void;
+  
+  /**
+   * 重置所有執行相關狀態的統一函數
+   * 用於組件卸載或重置時使用
+   */
+  resetExecutionState: () => void;
 }
 
 // 完整的 Store 類型

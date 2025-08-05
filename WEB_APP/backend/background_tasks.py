@@ -19,44 +19,8 @@ from core.nornir_integration import BatchResult, get_nornir_manager
 
 logger = logging.getLogger(__name__)
 
-async def _handle_ai_request(
-    ai_service, query: str, device_ips: List[str] = None
-) -> str:
-    """統一處理所有 AI 相關請求的輔助函數
-    
-    Args:
-        ai_service: AI 服務實例
-        query: 用戶查詢內容
-        device_ips: 目標設備 IP 列表（可選）
-        
-    Returns:
-        str: AI 分析結果
-        
-    Raises:
-        Exception: 當 AI 處理失敗時
-    """
-    try:
-        logger.info(f"AI 請求處理開始: query='{query[:50]}...', devices={device_ips}")
-        
-        # 檢查 AI 服務可用性
-        if not ai_service.ai_initialized:
-            logger.error("AI 服務未初始化")
-            raise Exception("AI 服務未啟用或初始化失敗，請檢查 API 金鑰配置")
-        
-        # 執行 AI 查詢
-        ai_response = await ai_service.query_ai(
-            prompt=query,
-            device_ips=device_ips
-        )
-        
-        logger.info(f"AI 請求處理完成: response_length={len(ai_response)}")
-        return ai_response
-
-    except Exception as e:
-        # 使用 AIService 的錯誤分類機制
-        error_msg, status_code = ai_service.classify_ai_error(str(e))
-        logger.error(f"AI 請求處理失敗: {error_msg} (Query: {query[:50]}...)")
-        raise Exception(error_msg)
+# 移除本地的 _handle_ai_request 函數，統一使用 AIService.handle_ai_request
+# 這樣可以消除程式碼重複，提升維護性
 
 async def run_batch_task_worker(
     task_id: str, devices: List[str], command: str, mode: str
@@ -92,9 +56,9 @@ async def run_batch_task_worker(
             await task_manager.update_progress(task_id, 10.0, "AI 正在分析需求...")
 
             try:
-                # 直接呼叫 _handle_ai_request
+                # 使用 AIService 的統一 AI 請求處理方法
                 ai_service = get_ai_service()
-                result = await _handle_ai_request(ai_service, query=command, device_ips=devices)
+                result = await ai_service.handle_ai_request(query=command, device_ips=devices)
                 await task_manager.update_progress(task_id, 90.0, "AI 分析完成")
 
                 # 使用統一的格式化函數處理 AI 結果
@@ -103,8 +67,10 @@ async def run_batch_task_worker(
                 final_result = format_ai_results(devices, result, execution_time=2.0)
 
             except Exception as ai_error:
-                logger.error(f"AI 模式執行失敗: {ai_error}")
-                raise ai_error
+                # AIService.handle_ai_request 已經包含錯誤分類，直接處理
+                error_msg = str(ai_error).split('|')[0] if '|' in str(ai_error) else str(ai_error)
+                logger.error(f"AI 模式執行失敗: {error_msg}")
+                raise Exception(error_msg)
 
         else:
             # 指令模式執行
