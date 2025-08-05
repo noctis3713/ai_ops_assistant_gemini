@@ -645,14 +645,14 @@ class FrontendConfig(BaseModel):
 
 class BackendConfig(BaseModel):
     """後端動態配置模型 ✨ v2.5.0"""
-    ai: Dict[str, Any]
-    network: Dict[str, Any]
-    cache: Dict[str, Any]
-    logging: Dict[str, Any]
-    async_: Dict[str, Any] = Field(alias="async")  # async 是 Python 關鍵字，使用別名
-    prompts: Dict[str, Any]
-    security: Dict[str, Any]
-    performance: Dict[str, Any]
+    ai: Dict[str, Any] = Field(default_factory=dict)
+    network: Dict[str, Any] = Field(default_factory=dict)
+    cache: Dict[str, Any] = Field(default_factory=dict)
+    logging: Dict[str, Any] = Field(default_factory=dict)
+    async_: Dict[str, Any] = Field(default_factory=dict, alias="async")  # async 是 Python 關鍵字，使用別名
+    prompts: Dict[str, Any] = Field(default_factory=dict)
+    security: Dict[str, Any] = Field(default_factory=dict)
+    performance: Dict[str, Any] = Field(default_factory=dict)
 
 FrontendConfigTyped = BaseResponse[FrontendConfig]
 BackendConfigTyped = BaseResponse[BackendConfig]

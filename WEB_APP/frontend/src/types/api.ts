@@ -43,6 +43,55 @@ export interface AIQueryRequest {
   query: string;
 }
 
+// 後端動態配置介面 ✨ v2.5.2 新增
+// 對應後端 Pydantic 模型的 JSON 輸出格式
+export interface BackendConfig {
+  ai: {
+    enableDocumentSearch?: boolean;
+    parserVersion?: string;
+    enableSummarization?: boolean;
+    enableAiQuery?: boolean;  // AI 查詢功能開關
+    summaryThreshold?: number;
+    models?: {
+      gemini?: string;
+      claude?: string;
+    };
+    behavior?: {
+      enableRetry?: boolean;
+      maxRetryAttempts?: number;
+      retryDelay?: number;
+      timeoutWarningThreshold?: number;
+    };
+  };
+  network?: {
+    connection?: {
+      maxConnections?: number;
+      connectionTimeout?: number;
+      commandTimeout?: number;
+      healthCheckInterval?: number;
+      keepAliveInterval?: number;
+    };
+    device?: {
+      defaultType?: string;
+      enableVerboseLogging?: boolean;
+      retryConnection?: boolean;
+      maxConnectionRetries?: number;
+    };
+    nornir?: {
+      workers?: number;
+      enableProgressBar?: boolean;
+      raiseOnError?: boolean;
+      numWorkers?: number;
+    };
+  };
+  cache?: Record<string, unknown>;
+  logging?: Record<string, unknown>;
+  async?: Record<string, unknown>;  // 注意：JSON 中使用 async 鍵名（Pydantic 別名處理）
+  prompts?: Record<string, unknown>;
+  security?: Record<string, unknown>;
+  performance?: Record<string, unknown>;
+}
+
 // 統一的批次執行請求介面
 // 支援單一設備、多設備、全設備操作
 export interface BatchExecuteRequest {

@@ -12,6 +12,7 @@ import {
   type AIQueryRequest,
   type BatchExecuteRequest,
   type BatchExecutionResponse,
+  type BackendConfig,  // ✨ v2.5.2 新增後端配置類型
   // 非同步任務相關類型
   type TaskCreationResponse,
   type TaskResponse,
@@ -1025,6 +1026,33 @@ export interface FrontendConfig {
     };
   };
 }
+
+/**
+ * 獲取後端動態配置 ✨ v2.5.2 新增
+ * 從後端獲取完整的動態配置，包含 AI、網路、快取等所有模組配置
+ */
+export const getBackendConfig = async (): Promise<BackendConfig> => {
+  return createRetryableRequest(async () => {
+    const response = await apiClient.get<{ success: boolean; data?: BackendConfig; message?: string }>('/api/backend-config');
+    
+    // 處理 BaseResponse 格式
+    if (!response.data.success) {
+      throw new Error(response.data.message || '獲取後端配置失敗');
+    }
+    
+    // API 回應記錄到日誌系統
+    logApi('getBackendConfig API 回應', {
+      success: response.data.success,
+      enableAiQuery: response.data.data?.ai?.enableAiQuery
+    });
+    
+    if (!response.data.data) {
+      throw new Error('後端配置資料為空');
+    }
+    
+    return response.data.data;
+  });
+};
 
 /**
  * 獲取前端動態配置

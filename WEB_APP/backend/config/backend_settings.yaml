@@ -11,6 +11,7 @@ ai:
   enableDocumentSearch: false  # 啟用文檔搜尋功能
   parserVersion: "original"     # 解析器版本 (original|enhanced)
   enableSummarization: false    # 啟用 AI 摘要功能
+  enableAiQuery: true           # 啟用前端 AI 查詢功能
   
   # AI 處理參數
   summaryThreshold: 10000       # AI 摘要觸發門檻 (字元數)
