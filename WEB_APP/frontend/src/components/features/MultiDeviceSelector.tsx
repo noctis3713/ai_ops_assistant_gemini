@@ -156,7 +156,6 @@ const MultiDeviceSelector = ({
             <div className="text-xs text-gray-600 space-y-1">
               <div>設備陣列長度: {devices.length}</div>
               <div>載入狀態: {isLoading ? '載入中' : '已完成'}</div>
-              <div>API 基礎 URL: {import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}</div>
             </div>
           </div>
         )}
