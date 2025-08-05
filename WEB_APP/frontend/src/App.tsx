@@ -15,6 +15,7 @@ import {
   BatchOutputDisplay,
   ErrorBoundary,
 } from '@/components';
+import { SplashCursor } from '@/components/ui/splash-cursor';
 import { DEFAULT_TEXT } from '@/constants';
 
 function App() {
@@ -137,6 +138,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-terminal-bg">
+      <SplashCursor 
+        BACK_COLOR={{ r: 0.1, g: 0.2, b: 0.4 }}
+        TRANSPARENT={true}
+        SPLAT_FORCE={3000}
+        COLOR_UPDATE_SPEED={5}
+        DENSITY_DISSIPATION={2.5}
+        VELOCITY_DISSIPATION={1.5}
+      />
       <div className="max-w-6xl mx-auto p-6 min-h-screen flex flex-col">
         <ErrorBoundary fallback={
           <div className="text-center py-4 bg-red-50 border border-red-200 rounded">
