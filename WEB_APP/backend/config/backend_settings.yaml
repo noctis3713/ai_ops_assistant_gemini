@@ -1,0 +1,211 @@
+# 後端動態配置檔案
+# 支援通過 POST /api/admin/reload-config 進行熱重載
+# Created: 2025-08-05
+# Version: v2.5.0 - 企業級後端配置外部化
+
+# =============================================================================
+# AI 服務核心配置
+# =============================================================================
+ai:
+  # AI 功能開關
+  enableDocumentSearch: false  # 啟用文檔搜尋功能
+  parserVersion: "original"     # 解析器版本 (original|enhanced)
+  enableSummarization: false    # 啟用 AI 摘要功能
+  
+  # AI 處理參數
+  summaryThreshold: 10000       # AI 摘要觸發門檻 (字元數)
+  
+  # AI 模型配置 (環境變數優先)
+  models:
+    gemini: "gemini-1.5-flash-latest"    # Gemini 預設模型
+    claude: "claude-3-haiku-20240307"    # Claude 預設模型
+  
+  # AI 處理行為配置
+  behavior:
+    enableRetry: true           # 啟用失敗重試
+    maxRetryAttempts: 3         # 最大重試次數
+    retryDelay: 1000           # 重試延遲 (毫秒)
+    timeoutWarningThreshold: 30 # 超時警告門檻 (秒)
+
+# =============================================================================
+# 網路連線和設備配置
+# =============================================================================
+network:
+  # SSH 連線池配置
+  connection:
+    maxConnections: 5          # 最大同時連線數
+    connectionTimeout: 300     # 連線建立逾時 (秒)
+    commandTimeout: 20         # 指令執行逾時 (秒)
+    healthCheckInterval: 30    # 健康檢查間隔 (秒)
+    keepAliveInterval: 60      # 保持連線間隔 (秒)
+  
+  # 設備預設配置
+  device:
+    defaultType: "cisco_xe"    # 預設設備類型
+    enableVerboseLogging: false # 啟用詳細連線日誌
+    retryConnection: true      # 連線失敗時重試
+    maxConnectionRetries: 3    # 最大連線重試次數
+  
+  # Nornir 工作引擎配置
+  nornir:
+    workers: 5                 # 並行工作執行緒數量
+    enableProgressBar: false   # 啟用進度條顯示
+    raiseOnError: false        # 遇到錯誤時是否拋出異常
+    numWorkers: 5              # Nornir 內部工作執行緒
+
+# =============================================================================
+# 快取和效能配置
+# =============================================================================
+cache:
+  # 指令快取配置
+  command:
+    maxSize: 512               # 快取最大項目數
+    ttlSeconds: 300            # 快取存活時間 (秒)
+    enableCompression: false   # 啟用快取內容壓縮
+    maxItemSize: 1048576       # 單項最大大小 (1MB)
+  
+  # 輸出處理快取
+  output:
+    maxLength: 50000           # 設備輸出最大長度
+    maxCacheSize: 50000        # 輸出快取最大大小
+    enableTruncation: true     # 自動截斷過長輸出
+    truncationSuffix: "... [輸出已截斷]"
+  
+  # 連線狀態快取
+  status:
+    deviceStatusTTL: 60        # 設備狀態快取時間 (秒)
+    healthCheckCacheTTL: 30    # 健康檢查快取時間 (秒)
+
+# =============================================================================
+# 日誌系統配置
+# =============================================================================
+logging:
+  # 基礎日誌配置
+  basic:
+    logLevel: "INFO"           # 日誌級別 (DEBUG|INFO|WARNING|ERROR|CRITICAL)
+    maxFileSize: 10485760      # 日誌檔案最大大小 (10MB)
+    backupCount: 5             # 日誌輪轉備份數量
+    enableColoredLogging: true # 啟用彩色日誌輸出
+  
+  # 專用日誌模組配置
+  modules:
+    # AI 服務日誌
+    ai:
+      logLevel: "INFO"
+      enableDetailedLogging: false
+      logRequestResponse: false
+    
+    # 網路操作日誌
+    network:
+      logLevel: "INFO"
+      enableConnectionLogging: true
+      enableCommandLogging: true
+      enableErrorDetails: true
+    
+    # 效能監控日誌
+    performance:
+      enableMetrics: true
+      logSlowOperations: true
+      slowOperationThreshold: 5  # 慢操作門檻 (秒)
+  
+  # 前端日誌後端處理配置
+  frontend:
+    logLevel: "INFO"           # 前端日誌級別
+    batchSize: 10              # 批次處理大小
+    batchInterval: 30000       # 批次處理間隔 (毫秒)
+    maxLocalStorageEntries: 100 # 本地儲存最大條目數
+    maxMessageLength: 1000     # 單條訊息最大長度
+    enableStackTrace: false    # 啟用堆疊追蹤
+    enableConsoleLog: false    # 後端控制台顯示前端日誌
+
+# =============================================================================
+# 非同步任務配置
+# =============================================================================
+async:
+  # 任務管理配置
+  tasks:
+    cleanupInterval: 3600      # 任務清理間隔 (秒) - 1小時
+    taskTTL: 86400            # 任務存活時間 (秒) - 24小時
+    maxConcurrentTasks: 10     # 最大同時任務數
+    enableTaskPersistence: false # 啟用任務持久化
+  
+  # 任務執行配置
+  execution:
+    defaultTimeout: 1800       # 預設任務超時 (秒) - 30分鐘
+    enableProgressTracking: true # 啟用進度追蹤
+    progressUpdateInterval: 2   # 進度更新間隔 (秒)
+    enableTaskHistory: true    # 保存任務歷史記錄
+  
+  # 背景任務處理配置
+  background:
+    enableAutoCleanup: true    # 啟用自動清理
+    maxRetryAttempts: 3        # 失敗任務最大重試次數
+    retryBackoffMultiplier: 2.0 # 重試退避倍數
+
+# =============================================================================
+# 提示詞管理配置
+# =============================================================================
+prompts:
+  # 基礎提示詞配置
+  basic:
+    language: "zh_TW"          # 提示詞語言
+    enableCaching: true        # 啟用提示詞快取
+    cacheTTL: 3600            # 快取存活時間 (秒)
+  
+  # 模板管理配置
+  templates:
+    enableHotReload: true      # 啟用熱重載
+    enableVersionControl: false # 啟用版本控制
+    maxTemplateSize: 102400    # 單個模板最大大小 (100KB)
+  
+  # Jinja2 引擎配置
+  jinja:
+    enableAutoEscape: true     # 啟用自動轉義
+    enableExtensions: true     # 啟用擴展功能
+    strictUndefined: false     # 嚴格未定義變數檢查
+
+# =============================================================================
+# 安全和管理配置
+# =============================================================================
+security:
+  # API 安全配置
+  api:
+    enableRateLimit: false     # 啟用 API 限流
+    rateLimitPerMinute: 60     # 每分鐘請求限制
+    enableIPWhitelist: false   # 啟用 IP 白名單
+  
+  # 指令安全配置
+  commands:
+    enableStrictValidation: true    # 啟用嚴格指令驗證
+    allowConfigCommands: false      # 允許配置類指令
+    enableAuditLogging: true        # 啟用審計日誌
+    maxCommandLength: 1000          # 最大指令長度
+  
+  # 設備認證配置
+  authentication:
+    enableCredentialEncryption: false # 啟用憑證加密
+    credentialCacheTTL: 300          # 憑證快取時間 (秒)
+    enableMultiFactorAuth: false     # 啟用多因子認證
+
+# =============================================================================
+# 系統效能和監控配置
+# =============================================================================
+performance:
+  # 系統資源配置
+  resources:
+    maxMemoryUsage: 1073741824 # 最大記憶體使用 (1GB)
+    enableMemoryMonitoring: true # 啟用記憶體監控
+    memoryWarningThreshold: 0.8  # 記憶體警告門檻 (80%)
+  
+  # 效能監控配置
+  monitoring:
+    enableMetricsCollection: true    # 啟用效能指標收集
+    metricsCollectionInterval: 60    # 指標收集間隔 (秒)
+    enableSlowQueryLogging: true     # 記錄慢查詢
+    slowQueryThreshold: 5            # 慢查詢門檻 (秒)
+  
+  # 最佳化配置
+  optimization:
+    enableAsyncProcessing: true      # 啟用非同步處理
+    enableRequestCompression: false  # 啟用請求壓縮
+    enableResponseCaching: true      # 啟用回應快取

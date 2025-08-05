@@ -26,7 +26,7 @@ from core.settings import Settings
 from utils import get_frontend_log_handler
 
 # 導入 Pydantic 模型
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import TypeVar, Generic
 from datetime import datetime
 
@@ -93,7 +93,9 @@ class ReloadConfigRequest(BaseModel):
         "devices",
         "groups", 
         "security",
-    ]  # 預設重載所有配置
+        "frontend",
+        "backend",
+    ]  # 預設重載所有配置 (v2.5.0 新增後端配置)
 
 class ReloadConfigResponse(BaseModel):
     """配置重載回應模型"""
@@ -174,7 +176,7 @@ AIStatusResponseTyped = BaseResponse[AIStatusResponse]
     "/reload-config",
     response_model=ReloadConfigResponseTyped,
     summary="🔄 重載配置檔案",
-    description="管理員功能：在不重啟服務的情況下重新載入配置檔案，支援熱重載功能",
+    description="管理員功能：在不重啟服務的情況下重新載入配置檔案，支援熱重載功能。支援 devices, groups, security, frontend, backend 配置重載",
     response_description="配置重載結果和詳細資訊的標準化回應格式",
     responses={
         200: {
@@ -185,8 +187,8 @@ AIStatusResponseTyped = BaseResponse[AIStatusResponse]
                         "success": True,
                         "data": {
                             "success": True,
-                            "message": "成功重載 3 個配置檔案",
-                            "reloaded_configs": ["devices", "groups", "security"],
+                            "message": "成功重載 5 個配置檔案",
+                            "reloaded_configs": ["devices", "groups", "security", "frontend", "backend"],
                             "timestamp": "2025-08-04T10:30:15.123456",
                             "errors": None
                         },
@@ -209,7 +211,11 @@ async def reload_config_endpoint(
     重載配置檔案（管理員功能）
 
     這個端點允許在不重啟服務的情況下重新載入配置檔案，
-    適用於生產環境中需要更新設備清單或安全規則的場景。
+    適用於生產環境中需要更新設備清單、安全規則或前端配置的場景。
+    
+    v2.5.0 新增支援:
+    - frontend: 熱重載前端動態配置 (frontend_settings.yaml)
+    - backend: 熱重載後端動態配置 (backend_settings.yaml)
 
     Args:
         request: 包含 API Key 和要重載的配置類型
@@ -252,6 +258,17 @@ async def reload_config_endpoint(
                     CommandValidator.reload_security_config()
                     config_manager.refresh_config()
                     reloaded_configs.append("security")
+                elif config_type == "frontend":
+                    # 重載前端配置時，清除前端配置快取
+                    app_settings.clear_frontend_config_cache()
+                    logger.info("前端配置快取已清除")
+                    reloaded_configs.append("frontend")
+                elif config_type == "backend":
+                    # 重載後端配置時，清除後端配置快取並重新應用覆蓋
+                    app_settings.clear_backend_config_cache()
+                    app_settings.apply_backend_config_overrides()
+                    logger.info("後端配置快取已清除並重新載入")
+                    reloaded_configs.append("backend")
                 else:
                     errors.append(f"未知的配置類型: {config_type}")
             except Exception as e:
@@ -626,7 +643,19 @@ class FrontendConfig(BaseModel):
     ui: Dict[str, Any]
     api: Dict[str, Any]
 
+class BackendConfig(BaseModel):
+    """後端動態配置模型 ✨ v2.5.0"""
+    ai: Dict[str, Any]
+    network: Dict[str, Any]
+    cache: Dict[str, Any]
+    logging: Dict[str, Any]
+    async_: Dict[str, Any] = Field(alias="async")  # async 是 Python 關鍵字，使用別名
+    prompts: Dict[str, Any]
+    security: Dict[str, Any]
+    performance: Dict[str, Any]
+
 FrontendConfigTyped = BaseResponse[FrontendConfig]
+BackendConfigTyped = BaseResponse[BackendConfig]
 
 @status_router.get(
     "/frontend-config",
@@ -679,8 +708,13 @@ async def get_frontend_config_endpoint(
     """
     取得前端動態配置
     
-    這個端點允許前端在啟動時從後端獲取配置參數，
-    包含輪詢間隔、超時設定、UI 行為等，實現配置的集中化管理。
+    這個端點從 frontend_settings.yaml 配置檔案讀取前端配置參數，
+    包含輪詢間隔、超時設定、UI 行為等，實現真正的動態配置管理。
+    
+    v2.4.1 進化特色:
+    - 從 YAML 配置檔案讀取，支援熱重載
+    - 配置檔案讀取失敗時自動降級為預設配置
+    - 支援環境變數覆蓋機制
 
     Args:
         app_settings: 應用程式設定實例（依賴注入）
@@ -694,50 +728,139 @@ async def get_frontend_config_endpoint(
     logger.info("收到前端動態配置查詢請求")
 
     try:
-        # 構建前端配置
+        # 從配置檔案載入前端配置
+        config_data = app_settings.get_frontend_config()
+        
+        # 構建前端配置物件
         frontend_config = FrontendConfig(
-            polling={
-                "pollInterval": 2000,  # 基礎輪詢間隔 (ms)
-                "maxPollInterval": 10000,  # 最大輪詢間隔 (ms) 
-                "timeout": 30 * 60 * 1000,  # 總超時時間 (30分鐘)
-                "autoStartPolling": True,  # 自動開始輪詢
-                "backoffMultiplier": 1.2,  # 指數退避倍數
-                "maxRetries": 3,  # 最大重試次數
-            },
-            ui={
-                "progressUpdateInterval": 500,  # 進度更新間隔 (ms)
-                "errorDisplayDuration": 5000,  # 錯誤訊息顯示時間 (ms)
-                "successDisplayDuration": 3000,  # 成功訊息顯示時間 (ms)
-                "animationDuration": 300,  # 動畫持續時間 (ms)
-                "debounceDelay": 300,  # 防抖延遲 (ms)
-                "maxConcurrentRequests": 5,  # 最大併發請求數
-            },
-            api={
-                "retryCount": 3,  # API 重試次數
-                "retryDelay": 1000,  # 重試延遲 (ms)
-                "enableRequestDeduplication": True,  # 啟用請求去重
-                "deduplicationTTL": 5000,  # 去重快取 TTL (ms)
-                "timeouts": {
-                    "command": 60000,  # 指令執行超時 (60秒)
-                    "aiQuery": 120000,  # AI 查詢超時 (2分鐘)
-                    "batchCommand": 300000,  # 批次執行超時 (5分鐘)
-                    "taskPolling": 2000,  # 任務輪詢超時 (2秒)
-                    "healthCheck": 10000,  # 健康檢查超時 (10秒)
-                }
-            }
+            polling=config_data.get("polling", {}),
+            ui=config_data.get("ui", {}),
+            api=config_data.get("api", {})
         )
 
-        logger.info("前端動態配置構建完成")
+        logger.info("前端動態配置從配置檔案載入完成")
         
         return FrontendConfigTyped(
             success=True,
             data=frontend_config,
-            message="前端配置獲取成功",
+            message="前端配置獲取成功 (從 frontend_settings.yaml)",
             error_code=None
         )
 
     except Exception as e:
         error_msg = f"獲取前端配置失敗: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )
+
+# =============================================================================
+# 後端動態配置端點 ✨ v2.5.0
+# =============================================================================
+
+@status_router.get(
+    "/backend-config",
+    response_model=BackendConfigTyped,
+    summary="⚙️ 取得後端動態配置",
+    description="獲取後端應用程式的動態配置，包含 AI、網路、快取、日誌、非同步、提示詞、安全、效能等完整配置",
+    response_description="後端動態配置的標準化回應格式",
+    responses={
+        200: {
+            "description": "成功獲取後端配置",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "ai": {
+                                "enableDocumentSearch": False,
+                                "parserVersion": "original",
+                                "enableSummarization": False
+                            },
+                            "network": {
+                                "connection": {
+                                    "maxConnections": 5,
+                                    "connectionTimeout": 300,
+                                    "commandTimeout": 20
+                                }
+                            },
+                            "cache": {
+                                "command": {
+                                    "maxSize": 512,
+                                    "ttlSeconds": 300
+                                }
+                            },
+                            "logging": {
+                                "basic": {
+                                    "logLevel": "INFO",
+                                    "maxFileSize": 10485760
+                                }
+                            }
+                        },
+                        "message": "後端配置獲取成功",
+                        "error_code": None,
+                        "timestamp": "2025-08-05T10:30:15.123456"
+                    }
+                }
+            }
+        },
+        500: {"description": "伺服器內部錯誤"}
+    }
+)
+async def get_backend_config_endpoint(
+    app_settings: Settings = Depends(get_settings_dep)
+) -> BackendConfigTyped:
+    """
+    取得後端動態配置
+    
+    這個端點從 backend_settings.yaml 配置檔案讀取後端配置參數，
+    包含 AI 服務、網路連線、快取管理、日誌系統、非同步任務、
+    提示詞管理、安全配置、效能監控等完整設定。
+    
+    v2.5.0 核心特色:
+    - 從 YAML 配置檔案讀取，支援熱重載
+    - 配置檔案讀取失敗時自動降級為 Pydantic 預設配置
+    - 支援環境變數覆蓋機制 (最高優先級)
+    - 8 大配置類別：AI、網路、快取、日誌、非同步、提示詞、安全、效能
+
+    Args:
+        app_settings: 應用程式設定實例（依賴注入）
+
+    Returns:
+        BackendConfig: 後端動態配置資訊
+        
+    Raises:
+        HTTPException: 當配置獲取失敗時
+    """
+    logger.info("收到後端動態配置查詢請求")
+
+    try:
+        # 從配置檔案載入後端配置
+        config_data = app_settings.get_backend_config()
+        
+        # 構建後端配置物件
+        backend_config = BackendConfig(
+            ai=config_data.get("ai", {}),
+            network=config_data.get("network", {}),
+            cache=config_data.get("cache", {}),
+            logging=config_data.get("logging", {}),
+            async_=config_data.get("async", {}),  # 使用別名處理 async 關鍵字
+            prompts=config_data.get("prompts", {}),
+            security=config_data.get("security", {}),
+            performance=config_data.get("performance", {})
+        )
+
+        logger.info("後端動態配置從配置檔案載入完成")
+        
+        return BackendConfigTyped(
+            success=True,
+            data=backend_config,
+            message="後端配置獲取成功 (從 backend_settings.yaml)",
+            error_code=None
+        )
+
+    except Exception as e:
+        error_msg = f"獲取後端配置失敗: {str(e)}"
         logger.error(error_msg)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
