@@ -13,19 +13,13 @@ sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
 
-# 載入環境變數並輸出載入狀態
+# 載入環境變數
 env_loaded = load_dotenv("config/.env")
-print(f"環境變數載入狀態: {'成功' if env_loaded else '失敗'}")
 
 # 先導入 settings 才能使用
 from core.settings import Settings, get_settings, settings
 
-# 檢查關鍵環境變數 (使用統一 Settings)
-if settings.GOOGLE_API_KEY:
-    print(f"Google API Key 載入成功: {settings.GOOGLE_API_KEY[:10]}...")
-else:
-    print("WARNING - Google API Key 未載入")
-print(f"AI Provider: {settings.AI_PROVIDER}")
+# 環境變數已載入，settings 可使用
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

@@ -149,16 +149,6 @@ const MultiDeviceSelector = ({
           </div>
         </div>
 
-        {/* 除錯資訊 */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-3">
-            <h4 className="text-xs font-medium text-gray-700 mb-2">除錯資訊</h4>
-            <div className="text-xs text-gray-600 space-y-1">
-              <div>設備陣列長度: {devices.length}</div>
-              <div>載入狀態: {isLoading ? '載入中' : '已完成'}</div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }

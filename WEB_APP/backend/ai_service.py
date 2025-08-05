@@ -285,7 +285,6 @@ class AIService:
         """
         if not AI_AVAILABLE:
             logger.warning("AI 功能不可用，跳過初始化")
-            print("WARNING - AI 功能不可用，跳過初始化")
             return False
 
         try:
@@ -294,32 +293,23 @@ class AIService:
             anthropic_api_key = settings.ANTHROPIC_API_KEY
             ai_provider = settings.AI_PROVIDER
 
-            # 輸出調試資訊
+            # 記錄初始化資訊
             debug_msg = f"AI 初始化開始 - 提供者: {ai_provider}"
             logger.info(debug_msg)
-            print(f"INFO - {debug_msg}")
 
             if ai_provider == "gemini":
                 if google_api_key:
-                    logger.info(f"Google API Key 已載入: {google_api_key[:10]}...")
-                    print(f"INFO - Google API Key 已載入: {google_api_key[:10]}...")
+                    logger.info("Google API Key 已載入")
                 else:
                     error_msg = "Google API Key 未設定，無法初始化 Gemini"
                     logger.error(error_msg)
-                    print(f"ERROR - {error_msg}")
                     return False
             elif ai_provider == "claude":
                 if anthropic_api_key:
-                    logger.info(
-                        f"Anthropic API Key 已載入: {anthropic_api_key[:10]}..."
-                    )
-                    print(
-                        f"INFO - Anthropic API Key 已載入: {anthropic_api_key[:10]}..."
-                    )
+                    logger.info("Anthropic API Key 已載入")
                 else:
                     error_msg = "Anthropic API Key 未設定，無法初始化 Claude"
                     logger.error(error_msg)
-                    print(f"ERROR - {error_msg}")
                     return False
 
             # 根據提供者初始化對應的 LLM
@@ -331,7 +321,6 @@ class AIService:
             if llm is None:
                 error_msg = f"{ai_provider.upper()} LLM 初始化失敗"
                 logger.error(error_msg)
-                print(f"ERROR - {error_msg}")
                 return False
 
             # 建立工具清單
@@ -347,10 +336,9 @@ class AIService:
             search_status = (
                 "啟用" if SEARCH_AVAILABLE and self.search_enabled else "停用"
             )
-            # 輸出到控制台和日誌檔案
+            # 記錄初始化成功
             init_success_message = f"AI system initialized successfully (提供者: {ai_provider.upper()}, 搜尋功能: {search_status})"
             logger.info(init_success_message)
-            print(f"INFO - {init_success_message}")
 
             # 記錄到 AI 專用日誌
             ai_logger.info(
@@ -377,10 +365,9 @@ class AIService:
             llm = ChatAnthropic(
                 model=claude_model, temperature=0, anthropic_api_key=api_key
             )
-            # 輸出到控制台和日誌檔案
+            # 記錄初始化資訊
             init_message = f"使用 Claude AI 作為主要 AI 提供者 - 模型: {claude_model}"
             logger.info(init_message)
-            print(f"INFO - {init_message}")
             return llm
         except Exception as e:
             logger.error(f"Claude AI 初始化失敗: {e}")
@@ -392,48 +379,41 @@ class AIService:
         if not api_key:
             error_msg = "GOOGLE_API_KEY 未設定，Gemini AI 功能不可用"
             logger.warning(error_msg)
-            print(f"WARNING - {error_msg}")
             return None
 
         try:
             # 從 Settings 讀取 Gemini 模型
             gemini_model = settings.GEMINI_MODEL
 
-            # 輸出詳細初始化資訊
+            # 記錄初始化資訊
             init_start_msg = f"開始初始化 Gemini AI - 模型: {gemini_model}"
             logger.info(init_start_msg)
-            print(f"INFO - {init_start_msg}")
 
             llm = ChatGoogleGenerativeAI(
                 model=gemini_model, temperature=0, google_api_key=api_key
             )
 
-            # 輸出成功訊息
+            # 記錄成功訊息
             success_msg = f"Gemini AI 初始化成功 - 模型: {gemini_model}"
             logger.info(success_msg)
-            print(f"INFO - {success_msg}")
             return llm
 
         except Exception as e:
             error_msg = f"Gemini AI 初始化失敗: {type(e).__name__}: {str(e)}"
             logger.error(error_msg)
-            print(f"ERROR - {error_msg}")
 
-            # 輸出詳細的錯誤診斷
+            # 詳細的錯誤診斷
             if "429" in str(e) or "quota" in str(e).lower():
                 quota_msg = "可能是 API 配額已用完或請求頻率過高"
                 logger.error(quota_msg)
-                print(f"ERROR - {quota_msg}")
             elif "401" in str(e) or "unauthorized" in str(e).lower():
                 auth_msg = "API Key 可能無效或權限不足"
                 logger.error(auth_msg)
-                print(f"ERROR - {auth_msg}")
             elif "import" in str(e).lower() or "module" in str(e).lower():
                 import_msg = (
                     "可能缺少必要的套件，請檢查 langchain-google-genai 是否正確安裝"
                 )
                 logger.error(import_msg)
-                print(f"ERROR - {import_msg}")
 
             return None
 
