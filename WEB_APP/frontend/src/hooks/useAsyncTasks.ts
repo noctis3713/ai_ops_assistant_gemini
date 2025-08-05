@@ -388,9 +388,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       cleanup();
     }
   }, [
-    pollInterval,
-    maxPollInterval,
-    timeout,
+    validateTaskId,
     setCurrentTask,
     setTaskPollingActive,
     updateTaskProgress,
@@ -399,7 +397,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     cleanup,
     createProgressHandler,
     handleFinalTaskResult,
-    options,
+    pollInterval,
+    maxPollInterval,
+    timeout,
   ]);
 
   /**
@@ -534,6 +534,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       }
     }
   }, [
+    setCurrentTask,
+    setStatus,
     setStoreExecuting,
     setIsAsyncMode,
     setExecutionStartTime,
@@ -746,7 +748,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
    */
   const stopPolling = useCallback(() => {
     cleanup();
-  }, [cleanup, isPolling, currentTask?.task_id]);
+  }, [cleanup]);
 
   /**
    * 取消當前任務

@@ -277,19 +277,19 @@ export const getAIStatus = async (): Promise<{
   }
   
   // 直接格式（向後兼容）
-  const directData = response.data as any;
+  const directData = response.data as Record<string, unknown>;
   return {
-    ai_available: directData.ai_available || false,
-    ai_initialized: directData.ai_initialized || false,
-    ai_provider: directData.ai_provider || 'unknown',
-    parser_version: directData.parser_version || 'unknown',
-    search_enabled: directData.search_enabled || false,
-    api_keys: directData.api_keys || {
+    ai_available: Boolean(directData.ai_available),
+    ai_initialized: Boolean(directData.ai_initialized),
+    ai_provider: String(directData.ai_provider || 'unknown'),
+    parser_version: String(directData.parser_version || 'unknown'),
+    search_enabled: Boolean(directData.search_enabled),
+    api_keys: (directData.api_keys && typeof directData.api_keys === 'object') ? directData.api_keys as { gemini_configured: boolean; claude_configured: boolean; current_provider: string; } : {
       gemini_configured: false,
       claude_configured: false,
       current_provider: 'unknown'
     },
-    recommendations: directData.recommendations || []
+    recommendations: Array.isArray(directData.recommendations) ? directData.recommendations as string[] : []
   };
 };
 
@@ -872,7 +872,7 @@ export const executeAsyncBatchAndWait = async (
 ): Promise<BatchExecutionResponse> => {
   // 使用新的 TaskPoller 類別，但保持向後兼容的接口
   const enhancedOptions = {
-    onProgress: options.onProgress ? (task: TaskResponse, _meta: PollMeta) => {
+    onProgress: options.onProgress ? (task: TaskResponse) => {
       options.onProgress!(task);
     } : undefined,
     pollInterval: options.pollInterval,
@@ -976,7 +976,7 @@ export const getFrontendLogConfig = async (): Promise<FrontendLogConfig> => {
   try {
     const response = await apiClient.get<FrontendLogConfig>('/api/frontend-log-config');
     return response.data;
-  } catch (error) {
+  } catch {
     // 如果無法獲取配置，返回預設配置
     // 無法獲取日誌配置，使用預設配置
     

@@ -87,7 +87,7 @@ export interface AppActions {
    * 處理任務完成的統一函數
    * 集中處理所有任務完成後需要的狀態更新
    */
-  handleTaskCompletion: (taskResult: any) => void;
+  handleTaskCompletion: (taskResult: unknown) => void;
   
   /**
    * 處理執行開始的統一函數

@@ -20,7 +20,7 @@ const BatchOutputDisplay = ({
       // 只在首次有結果且當前沒有展開項目時自動展開
       setExpandedItems(new Set(results.map(r => r.deviceIp)));
     }
-  }, [results.length]);
+  }, [results.length, expandedItems.size, results]);
 
   if (results.length === 0) {
     return null;

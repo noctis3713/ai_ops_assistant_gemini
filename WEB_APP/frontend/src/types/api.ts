@@ -28,7 +28,8 @@ export interface DevicesResponse {
 // 設備群組列表回應介面
 // 注意：後端 BaseResponse.data 直接包含 DeviceGroup[]，不需要 groups 包裝
 // 此介面已過時，後端 BaseResponse.data 直接是 DeviceGroup[] 陣列
-export interface DeviceGroupsResponse extends Array<DeviceGroup> {}
+// 使用聯合類型而非空介面
+export type DeviceGroupsResponse = DeviceGroup[];
 
 // 單一設備指令執行請求介面（保持向後相容）
 export interface ExecuteRequest {
@@ -86,7 +87,7 @@ export interface APIError {
  * 統一的 API 回應格式 - 與後端 BaseResponse 對齊
  * 所有 API 端點都使用此格式包裝回應資料
  */
-export interface BaseResponse<T = any> {
+export interface BaseResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
@@ -139,7 +140,7 @@ export type ExtractData<T> = T extends BaseResponse<infer U> ? U : never;
 export interface APIErrorDetail extends APIError {
   error_code?: string;
   timestamp?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -190,7 +191,7 @@ export type TaskType = 'batch_execute' | 'ai_query' | 'health_check';
 export interface TaskProgress {
   percentage: number;       // 進度百分比 (0-100)
   current_stage: string;    // 當前階段描述
-  details: Record<string, any>;  // 其他進度細節
+  details: Record<string, unknown>;  // 其他進度細節
 }
 
 // 任務建立回應

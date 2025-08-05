@@ -215,13 +215,13 @@ export const useAppStore = create<AppStore>()(
         const { setBatchResults, setStatus, hideBatchProgress, setIsExecuting, setIsBatchExecution, clearExecutionStartTime } = get();
         
         // 設定批次結果
-        if (taskResult && taskResult.results) {
+        if (taskResult && typeof taskResult === 'object' && 'results' in taskResult && Array.isArray(taskResult.results)) {
           setBatchResults(taskResult.results);
         }
         
         // 更新狀態訊息
-        const successCount = taskResult?.summary?.successful || 0;
-        const failedCount = taskResult?.summary?.failed || 0;
+        const successCount = (taskResult && typeof taskResult === 'object' && 'summary' in taskResult && taskResult.summary && typeof taskResult.summary === 'object' && 'successful' in taskResult.summary) ? Number(taskResult.summary.successful) : 0;
+        const failedCount = (taskResult && typeof taskResult === 'object' && 'summary' in taskResult && taskResult.summary && typeof taskResult.summary === 'object' && 'failed' in taskResult.summary) ? Number(taskResult.summary.failed) : 0;
         setStatus(`執行完成: ${successCount} 成功, ${failedCount} 失敗`, 'success');
         
         // 隱藏進度並清除執行狀態
@@ -276,7 +276,7 @@ export const useAppStore = create<AppStore>()(
         } else if (error instanceof Error) {
           errorMessage = error.message;
         } else if (error && typeof error === 'object' && 'message' in error) {
-          errorMessage = String((error as any).message);
+          errorMessage = String((error as Record<string, unknown>).message);
         }
         
         // 根據上下文調整錯誤訊息

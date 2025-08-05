@@ -62,7 +62,7 @@ function App() {
           command: inputValue,
           mode: mode === 'ai' ? 'ai' : 'command',
         });
-      } catch (error) {
+      } catch {
         // 非同步執行錯誤由 executeAsyncAndWait 內部處理
       }
     } else {

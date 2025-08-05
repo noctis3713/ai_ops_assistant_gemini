@@ -184,8 +184,7 @@ export class ErrorHandler {
    */
   static async handleError(
     error: unknown, 
-    context?: string,
-    _onRetry?: () => Promise<void> | void
+    context?: string
   ): Promise<UnifiedError> {
     const unifiedError = ErrorClassifier.classify(error, context);
 
@@ -198,7 +197,7 @@ export class ErrorHandler {
       retryable: unifiedError.retryable,
       timestamp: unifiedError.timestamp,
       originalError: unifiedError.originalError?.stack,
-    }, unifiedError.originalError);
+    });
 
     return unifiedError;
   }
@@ -208,10 +207,9 @@ export class ErrorHandler {
    */
   static async handleApiError(
     error: unknown,
-    apiContext: string,
-    onRetry?: () => Promise<void>
+    apiContext: string
   ): Promise<UnifiedError> {
-    return this.handleError(error, `API: ${apiContext}`, onRetry);
+    return this.handleError(error, `API: ${apiContext}`);
   }
 
   /**
@@ -228,7 +226,7 @@ export class ErrorHandler {
 /**
  * 錯誤處理裝飾器工具
  */
-export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
+export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   context?: string
 ): T {

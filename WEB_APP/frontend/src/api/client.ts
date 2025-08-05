@@ -8,7 +8,7 @@ import { type APIError } from '@/types';
 
 // 請求去重機制
 class RequestDeduplicator {
-  private pendingRequests = new Map<string, Promise<any>>();
+  private pendingRequests = new Map<string, Promise<AxiosResponse<unknown>>>();
 
   /**
    * 生成請求的唯一標識
@@ -50,7 +50,7 @@ class RequestDeduplicator {
     
     // 如果相同請求正在進行中，直接返回結果
     if (this.pendingRequests.has(requestKey)) {
-      return this.pendingRequests.get(requestKey)!;
+      return this.pendingRequests.get(requestKey)! as Promise<AxiosResponse<T>>;
     }
 
     // 創建新請求
@@ -103,7 +103,7 @@ export const apiClient = axios.create({
 
 // 重寫 axios 實例的 request 方法以支援去重
 const originalRequest = apiClient.request.bind(apiClient);
-(apiClient.request as any) = <T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
+(apiClient.request as unknown) = <T = unknown>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
   return requestDeduplicator.deduplicateRequest(
     config,
     () => originalRequest<T>(config)
@@ -213,16 +213,16 @@ function getErrorMessage(error: AxiosError): string {
     
     // 檢查是否為 BaseResponse 格式的錯誤回應
     if (responseData && typeof responseData === 'object') {
-      const baseResponse = responseData as any;
+      const baseResponse = responseData as Record<string, unknown>;
       
       // BaseResponse 格式：{ success: false, message: "...", error_code: "..." }
-      if (baseResponse.success === false && baseResponse.message) {
+      if (typeof baseResponse === 'object' && 'success' in baseResponse && baseResponse.success === false && 'message' in baseResponse && baseResponse.message) {
         logError('API 回傳 BaseResponse 錯誤格式', {
           status,
           message: baseResponse.message,
           error_code: baseResponse.error_code,
         });
-        return baseResponse.message;
+        return String(baseResponse.message);
       }
       
       // 處理巢狀的錯誤訊息結構

@@ -63,9 +63,9 @@ export const createProgressCallback = (onProgress: (update: {
   percentage?: number;
   stage?: ProgressStage;
   message?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }) => void) => ({
-  updateStage: (stage: ProgressStage, message?: string, details?: Record<string, any>) => {
+  updateStage: (stage: ProgressStage, message?: string, details?: Record<string, unknown>) => {
     const percentage = PROGRESS_PERCENTAGES[stage];
     const defaultMessage = message || PROGRESS_STAGE_TEXT[stage];
     onProgress({ 
@@ -75,10 +75,10 @@ export const createProgressCallback = (onProgress: (update: {
       details 
     });
   },
-  updateProgress: (percentage: number, message?: string, details?: Record<string, any>) => {
+  updateProgress: (percentage: number, message?: string, details?: Record<string, unknown>) => {
     onProgress({ percentage, message, details });
   },
-  updateMessage: (message: string, details?: Record<string, any>) => {
+  updateMessage: (message: string, details?: Record<string, unknown>) => {
     onProgress({ message, details });
   }
 });

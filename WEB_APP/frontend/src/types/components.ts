@@ -22,7 +22,7 @@ export interface ProgressCallback {
     percentage?: number;
     stage?: ProgressStage;
     message?: string;
-    details?: Record<string, any>;
+    details?: Record<string, unknown>;
   }): void;
 }
 
