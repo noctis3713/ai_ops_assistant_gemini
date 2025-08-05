@@ -1,6 +1,7 @@
 /**
  * 非同步任務管理 Hook
  * 提供任務建立、輪詢、取消等完整的非同步任務管理功能
+ * 重構版本：拆分複雜函數，提升可維護性
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
@@ -188,7 +189,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
 
     if (task.status === 'completed' && task.result) {
       // 處理成功結果
-      const results = task.result.results || [];
+      const results = typeof task.result === 'object' && 'results' in task.result 
+        ? task.result.results || [] 
+        : [];
       setBatchResults(results);
       
       // 顯示完成階段
@@ -249,28 +252,35 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   }, [cleanup]);
 
   /**
-   * 錯誤處理 - 改善用戶體驗
+   * 錯誤訊息轉換器 - 提取為獨立函數以便測試
+   */
+  const transformErrorMessage = useCallback((errorMessage: string): string => {
+    if (errorMessage.includes('無效的任務 ID') || errorMessage.includes('undefined')) {
+      return '任務初始化失敗，請稍後再試';
+    }
+    if (errorMessage.includes('網路') || errorMessage.includes('Network')) {
+      return '網路連線異常，請檢查網路狀態';
+    }
+    if (errorMessage.includes('超時') || errorMessage.includes('timeout')) {
+      return '操作超時，請稍後再試';
+    }
+    if (errorMessage.includes('404') || errorMessage.includes('不存在')) {
+      return '任務已結束或不存在';
+    }
+    return errorMessage;
+  }, []);
+
+  /**
+   * 錯誤處理 - 拆分為更小的函數
    */
   const handleError = useCallback((error: unknown, context: string) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    // 根據錯誤類型提供更友善的訊息
-    let userFriendlyMessage = errorMessage;
-    
-    if (errorMessage.includes('無效的任務 ID') || errorMessage.includes('undefined')) {
-      userFriendlyMessage = '任務初始化失敗，請稍後再試';
-    } else if (errorMessage.includes('網路') || errorMessage.includes('Network')) {
-      userFriendlyMessage = '網路連線異常，請檢查網路狀態';
-    } else if (errorMessage.includes('超時') || errorMessage.includes('timeout')) {
-      userFriendlyMessage = '操作超時，請稍後再試';
-    } else if (errorMessage.includes('404') || errorMessage.includes('不存在')) {
-      userFriendlyMessage = '任務已結束或不存在';
-    }
+    const userFriendlyMessage = transformErrorMessage(errorMessage);
     
     setError(`${context}: ${userFriendlyMessage}`);
     setStatus(userFriendlyMessage, 'error');
     
-    // 使用日誌系統記錄詳細錯誤（用於診斷）
+    // 記錄詳細錯誤
     logError(`${context} failed`, {
       originalError: errorMessage,
       userFriendlyMessage,
@@ -279,22 +289,32 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       currentTaskId: currentTask?.task_id,
       timestamp: new Date().toISOString(),
     });
-  }, [setStatus, isPolling, currentTask?.task_id]);
+  }, [transformErrorMessage, setStatus, isPolling, currentTask?.task_id]);
+
+  /**
+   * 任務 ID 驗證 - 提取為獨立函數
+   */
+  const validateTaskId = useCallback((taskId: string, context: string): boolean => {
+    if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
+      const errorMsg = `無效的任務 ID: '${taskId}'，${context}`;
+      logError('Invalid task ID provided', { 
+        taskId, 
+        type: typeof taskId,
+        isEmpty: !taskId,
+        isUndefinedString: taskId === 'undefined',
+        context
+      });
+      handleError(new Error(errorMsg), '任務 ID 驗證失敗');
+      return false;
+    }
+    return true;
+  }, [handleError]);
 
   /**
    * 輪詢任務狀態（重構版，使用服務層輪詢函數）
    */
   const pollTask = useCallback(async (taskId: string) => {
-    // 強化任務 ID 驗證 - 防止 undefined 或空字串
-    if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
-      const errorMsg = `無效的任務 ID: '${taskId}'，跳過輪詢`;
-      logError('Invalid task ID provided to pollTask', { 
-        taskId, 
-        type: typeof taskId,
-        isEmpty: !taskId,
-        isUndefinedString: taskId === 'undefined'
-      });
-      handleError(new Error(errorMsg), '任務 ID 驗證失敗');
+    if (!validateTaskId(taskId, '跳過輪詢')) {
       return;
     }
 

@@ -1,15 +1,85 @@
 /**
  * API 客戶端配置
  * 提供統一的 HTTP 客戶端和錯誤處理
+ * 包含請求去重機制以提升性能
  */
-import axios, { type AxiosResponse, type AxiosError } from 'axios';
+import axios, { type AxiosResponse, type AxiosError, type AxiosRequestConfig } from 'axios';
 import { type APIError } from '@/types';
+
+// 請求去重機制
+class RequestDeduplicator {
+  private pendingRequests = new Map<string, Promise<any>>();
+
+  /**
+   * 生成請求的唯一標識
+   */
+  private generateRequestKey(config: AxiosRequestConfig): string {
+    const { method = 'get', url = '', params, data } = config;
+    const paramsStr = params ? JSON.stringify(params) : '';
+    const dataStr = data ? JSON.stringify(data) : '';
+    return `${method.toUpperCase()}:${url}:${paramsStr}:${dataStr}`;
+  }
+
+  /**
+   * 檢查是否為應該去重的請求
+   */
+  private shouldDeduplicate(config: AxiosRequestConfig): boolean {
+    const method = config.method?.toUpperCase();
+    const url = config.url || '';
+    
+    // 只對GET請求和特定的查詢API進行去重
+    return method === 'GET' || 
+           url.includes('/devices') ||
+           url.includes('/device-groups') ||
+           url.includes('/ai-status') ||
+           url.includes('/health');
+  }
+
+  /**
+   * 獲取或創建請求
+   */
+  async deduplicateRequest<T>(
+    config: AxiosRequestConfig,
+    executeRequest: () => Promise<AxiosResponse<T>>
+  ): Promise<AxiosResponse<T>> {
+    if (!this.shouldDeduplicate(config)) {
+      return executeRequest();
+    }
+
+    const requestKey = this.generateRequestKey(config);
+    
+    // 如果相同請求正在進行中，直接返回結果
+    if (this.pendingRequests.has(requestKey)) {
+      return this.pendingRequests.get(requestKey)!;
+    }
+
+    // 創建新請求
+    const requestPromise = executeRequest().finally(() => {
+      // 請求完成後移除緩存
+      this.pendingRequests.delete(requestKey);
+    });
+
+    this.pendingRequests.set(requestKey, requestPromise);
+    return requestPromise;
+  }
+
+  /**
+   * 清除所有待處理請求
+   */
+  clearAll(): void {
+    this.pendingRequests.clear();
+  }
+}
+
+// 全局請求去重器
+const requestDeduplicator = new RequestDeduplicator();
 
 // 擴展 axios 配置，添加 metadata 屬性
 declare module 'axios' {
   export interface InternalAxiosRequestConfig {
     metadata?: {
       startTime?: number;
+      deduplicated?: boolean;
     };
   }
 }
@@ -30,6 +100,15 @@ export const apiClient = axios.create({
     'Accept': REQUEST_HEADERS.ACCEPT,
   },
 });
+
+// 重寫 axios 實例的 request 方法以支援去重
+const originalRequest = apiClient.request.bind(apiClient);
+(apiClient.request as any) = <T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
+  return requestDeduplicator.deduplicateRequest(
+    config,
+    () => originalRequest<T>(config)
+  );
+};
 
 // 請求攔截器
 apiClient.interceptors.request.use(
@@ -202,7 +281,7 @@ function getErrorMessage(error: AxiosError): string {
 
 /**
  * 創建可重試的請求
- * 對特定錯誤類型進行自動重試
+ * 對特定錯誤類型進行自動重試，支援請求去重
  */
 export const createRetryableRequest = <T>(
   requestFn: () => Promise<T>,
@@ -227,7 +306,12 @@ export const createRetryableRequest = <T>(
               API_CONFIG.RETRY.MAX_DELAY
             );
             
-            // 重試延遲
+            logApi(`API 請求重試`, {
+              attempt: retryCount + 1,
+              maxRetries,
+              delay,
+              error: error.message
+            });
             
             setTimeout(() => attempt(retryCount + 1), delay);
           } else {
@@ -238,4 +322,12 @@ export const createRetryableRequest = <T>(
     
     attempt(0);
   });
+};
+
+/**
+ * 清除所有請求緩存
+ * 用於錯誤恢復或狀態重置
+ */
+export const clearRequestCache = (): void => {
+  requestDeduplicator.clearAll();
 };

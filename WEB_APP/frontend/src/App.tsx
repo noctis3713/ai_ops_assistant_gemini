@@ -1,4 +1,5 @@
 // 主要應用程式組件
+import { useCallback, useMemo } from 'react';
 import { useAppStore } from '@/store';
 import { 
   useDevices, 
@@ -40,7 +41,7 @@ function App() {
   } = useAppStore();
 
   // API Hooks
-  const { data: devices = [], isLoading: devicesLoading } = useDevices();
+  const { data: devices = [], isLoading: devicesLoading, error: devicesError } = useDevices();
   const { executeBatch, isBatchExecuting } = useBatchExecution();
   const { 
     executeAsyncAndWait, 
@@ -49,8 +50,8 @@ function App() {
     isPolling 
   } = useAsyncTasks();
 
-  // 統一執行邏輯 - 支援同步和非同步模式
-  const handleExecute = async () => {
+  // 統一執行邏輯 - 支援同步和非同步模式 (使用 useCallback 避免重新創建)
+  const handleExecute = useCallback(async () => {
     if (selectedDevices.length === 0) return;
 
     if (isAsyncMode) {
@@ -62,34 +63,39 @@ function App() {
           mode: mode === 'ai' ? 'ai' : 'command',
         });
       } catch (error) {
-        console.error('非同步執行失敗:', error);
+        // 非同步執行錯誤由 executeAsyncAndWait 內部處理
       }
     } else {
       // 同步模式執行
       executeBatch(selectedDevices, inputValue);
     }
-  };
+  }, [selectedDevices, isAsyncMode, executeAsyncAndWait, inputValue, mode, executeBatch]);
 
-  // 手動清空結果 - 同時清除執行時間戳和進度條狀態
-  const handleClearResults = () => {
+
+  // 手動清空結果 - 同時清除執行時間戳和進度條狀態 (使用 useCallback 避免重新創建)
+  const handleClearResults = useCallback(() => {
     clearBatchResults();
     clearExecutionStartTime();
     hideProgress();
     hideBatchProgress();
     clearStatus();
-  };
+  }, [clearBatchResults, clearExecutionStartTime, hideProgress, hideBatchProgress, clearStatus]);
 
-  // 鍵盤快捷鍵
-  useKeyboardShortcuts({
+  // 鍵盤快捷鍵 (使用 useMemo 避免每次重新創建選項物件)
+  const keyboardShortcutsOptions = useMemo(() => ({
     onExecute: handleExecute,
     isExecuting: isBatchExecuting,
-  });
+  }), [handleExecute, isBatchExecuting]);
+  
+  useKeyboardShortcuts(keyboardShortcutsOptions);
 
-  // 檢查當前執行狀態
-  const currentlyExecuting = isAsyncMode ? (isAsyncExecuting || isPolling) : isBatchExecuting;
+  // 檢查當前執行狀態 (使用 useMemo 避免每次重新計算)
+  const currentlyExecuting = useMemo(() => {
+    return isAsyncMode ? (isAsyncExecuting || isPolling) : isBatchExecuting;
+  }, [isAsyncMode, isAsyncExecuting, isPolling, isBatchExecuting]);
 
-  // 判斷當前狀態的輔助函數
-  const getCurrentStatus = () => {
+  // 判斷當前狀態的輔助函數 (使用 useMemo 避免每次重新計算)
+  const currentStatus = useMemo(() => {
     if (batchResults.length > 0) {
       return 'has_results';
     }
@@ -100,12 +106,11 @@ function App() {
       return 'input_command';
     }
     return 'waiting_result';
-  };
+  }, [batchResults.length, selectedDevices.length, inputValue]);
 
-  // 獲取狀態提示文字
-  const getStatusText = () => {
-    const status = getCurrentStatus();
-    switch (status) {
+  // 獲取狀態提示文字 (使用 useMemo 避免每次重新計算)
+  const statusText = useMemo(() => {
+    switch (currentStatus) {
       case 'select_device':
         return DEFAULT_TEXT.RESULT_STATUS.SELECT_DEVICE;
       case 'input_command':
@@ -115,12 +120,11 @@ function App() {
       default:
         return '';
     }
-  };
+  }, [currentStatus]);
 
-  // 獲取狀態提示的CSS類別
-  const getStatusClassName = () => {
-    const status = getCurrentStatus();
-    switch (status) {
+  // 獲取狀態提示的CSS類別 (使用 useMemo 避免每次重新計算)
+  const statusClassName = useMemo(() => {
+    switch (currentStatus) {
       case 'select_device':
       case 'input_command':
       case 'waiting_result':
@@ -128,7 +132,7 @@ function App() {
       default:
         return 'status-hint';
     }
-  };
+  }, [currentStatus]);
 
 
   return (
@@ -177,6 +181,35 @@ function App() {
                   onExecutionModeChange={setMode}
                   isLoading={devicesLoading}
                 />
+                
+                {/* 設備載入錯誤提示 */}
+                {devicesError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-red-600 mt-1">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-sm font-medium text-red-800 mb-2">
+                          設備 API 連線失敗
+                        </h3>
+                        <div className="text-sm text-red-700">
+                          {devicesError.message}
+                        </div>
+                        <div className="mt-3">
+                          <button
+                            onClick={() => window.location.reload()}
+                            className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded hover:bg-red-200 transition-colors"
+                          >
+                            重新載入
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <CommandInput
                   value={inputValue}
@@ -232,8 +265,8 @@ function App() {
               <BatchOutputDisplay
                 results={batchResults}
                 onClear={handleClearResults}
-                statusText={getStatusText()}
-                statusClassName={getStatusClassName()}
+                statusText={statusText}
+                statusClassName={statusClassName}
               />
             </section>
           </ErrorBoundary>

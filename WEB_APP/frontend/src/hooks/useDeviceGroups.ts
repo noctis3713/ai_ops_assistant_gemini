@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getDeviceGroups } from '@/api';
 import { type DeviceGroup } from '@/types';
 import { logError, logSystem } from '@/utils/SimpleLogger';
+import { ErrorHandler } from '@/utils/errorHandler';
 
 export const useDeviceGroups = () => {
   return useQuery<DeviceGroup[], Error>({
@@ -45,9 +46,7 @@ export const useDeviceGroups = () => {
         return validGroups;
         
       } catch (error) {
-        logError('載入設備群組失敗', { 
-          error: error instanceof Error ? error.message : String(error) 
-        });
+        await ErrorHandler.handleApiError(error, '載入設備群組');
         
         // 返回空陣列而非讓查詢失敗，確保 UI 不會崩潰
         return [];

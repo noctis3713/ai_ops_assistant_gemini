@@ -199,17 +199,31 @@ export interface TaskCreationResponse {
   message: string;
 }
 
+// 任務參數類型定義
+export interface TaskParams {
+  devices: string[];
+  command: string;
+  mode: 'command' | 'ai';
+  [key: string]: unknown; // 允許其他額外參數
+}
+
+// 任務結果類型定義
+export type TaskResult = 
+  | BatchExecutionResponse  // 批次執行結果
+  | string                  // AI 查詢結果
+  | null;                   // 尚未完成
+
 // 任務狀態回應
 export interface TaskResponse {
   task_id: string;
   task_type: TaskType;
   status: TaskStatus;
-  params: Record<string, any>;
+  params: TaskParams;
   created_at: string;
   started_at?: string;
   completed_at?: string;
   progress: TaskProgress;
-  result?: any;
+  result?: TaskResult;
   error?: string;
   execution_time?: number;
 }

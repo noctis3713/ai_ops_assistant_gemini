@@ -27,13 +27,22 @@ export const LogCategory = {
 
 export type LogCategory = typeof LogCategory[keyof typeof LogCategory];
 
+// 日誌資料類型定義
+export type LogData = 
+  | Record<string, unknown>  // 物件類型資料
+  | string                   // 字串類型資料
+  | number                   // 數字類型資料
+  | boolean                  // 布林類型資料
+  | null                     // 空值
+  | undefined;               // 未定義
+
 // 日誌條目介面
 export interface LogEntry {
   timestamp: string;
   level: LogLevel;
   category: LogCategory;
   message: string;
-  data?: any;
+  data?: LogData;
   stack?: string;
   sessionId?: string;
 }
@@ -93,7 +102,7 @@ class SimpleLoggerService {
   /**
    * 記錄日誌（私有方法）
    */
-  private log(level: LogLevel, category: LogCategory, message: string, data?: any, error?: Error): void {
+  private log(level: LogLevel, category: LogCategory, message: string, data?: LogData, error?: Error): void {
     const logEntry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
@@ -140,42 +149,45 @@ class SimpleLoggerService {
       await sendFrontendLogs(request);
     } catch (error) {
       // 發送失敗時靜默處理，不影響主要功能
-      console.warn('Failed to send logs to backend:', error);
+      // 只在開發環境顯示警告
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to send logs to backend:', error);
+      }
     }
   }
 
   /**
    * 記錄錯誤日誌
    */
-  public logError(message: string, data?: any, error?: Error): void {
+  public logError(message: string, data?: LogData, error?: Error): void {
     this.log(LogLevel.ERROR, LogCategory.ERROR, message, data, error);
   }
 
   /**
    * 記錄 API 相關日誌
    */
-  public logApi(message: string, data?: any): void {
+  public logApi(message: string, data?: LogData): void {
     this.log(LogLevel.INFO, LogCategory.API, message, data);
   }
 
   /**
    * 記錄使用者操作日誌
    */
-  public logUser(message: string, data?: any): void {
+  public logUser(message: string, data?: LogData): void {
     this.log(LogLevel.INFO, LogCategory.USER, message, data);
   }
 
   /**
    * 記錄系統事件日誌
    */
-  public logSystem(message: string, data?: any): void {
+  public logSystem(message: string, data?: LogData): void {
     this.log(LogLevel.INFO, LogCategory.SYSTEM, message, data);
   }
 
   /**
    * 記錄效能相關日誌
    */
-  public logPerformance(message: string, data?: any): void {
+  public logPerformance(message: string, data?: LogData): void {
     this.log(LogLevel.INFO, LogCategory.PERFORMANCE, message, data);
   }
 
@@ -202,23 +214,23 @@ class SimpleLoggerService {
 export const simpleLogger = SimpleLoggerService.getInstance();
 
 // 匯出便利函數
-export const logError = (message: string, data?: any, error?: Error): void => {
+export const logError = (message: string, data?: LogData, error?: Error): void => {
   simpleLogger.logError(message, data, error);
 };
 
-export const logApi = (message: string, data?: any): void => {
+export const logApi = (message: string, data?: LogData): void => {
   simpleLogger.logApi(message, data);
 };
 
-export const logUser = (message: string, data?: any): void => {
+export const logUser = (message: string, data?: LogData): void => {
   simpleLogger.logUser(message, data);
 };
 
-export const logSystem = (message: string, data?: any): void => {
+export const logSystem = (message: string, data?: LogData): void => {
   simpleLogger.logSystem(message, data);
 };
 
-export const logPerformance = (message: string, data?: any): void => {
+export const logPerformance = (message: string, data?: LogData): void => {
   simpleLogger.logPerformance(message, data);
 };
 

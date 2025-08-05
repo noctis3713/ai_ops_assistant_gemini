@@ -4,7 +4,7 @@
  * 內含折疊顯示、模糊搜尋、群組選擇功能
  */
 import { useState, useMemo } from 'react';
-import { type MultiDeviceSelectorProps } from '@/types';
+import { type MultiDeviceSelectorProps, type DeviceGroup } from '@/types';
 import { useDeviceGroups } from '@/hooks';
 
 const MultiDeviceSelector = ({
@@ -18,6 +18,15 @@ const MultiDeviceSelector = ({
   
   // 獲取設備群組資料 - 強化容錯處理
   const { data: deviceGroups = [], isLoading: groupsLoading, error: groupsError } = useDeviceGroups();
+
+  // 檢查設備資料是否為空的原因
+  const getEmptyDevicesReason = () => {
+    if (isLoading) return '正在載入設備資料...';
+    if (devices.length === 0) {
+      return '無法從後端 API 獲取設備資料。請檢查：\n1. 後端服務是否正常運行 (http://localhost:8000)\n2. 網路連線是否正常\n3. 設備配置檔案是否存在';
+    }
+    return null;
+  };
 
   const handleDeviceToggle = (deviceIp: string) => {
     const newSelection = selectedDevices.includes(deviceIp)
@@ -99,16 +108,58 @@ const MultiDeviceSelector = ({
     );
   }
 
-  // 添加調試日誌
-  console.log('MultiDeviceSelector 收到的設備資料:', {
-    devicesLength: devices.length,
-    devices: devices.map(d => ({ ip: d.ip, name: d.name }))
-  });
 
-  if (devices.length === 0) {
+  // 設備資料為空的詳細處理
+  const emptyReason = getEmptyDevicesReason();
+  if (emptyReason) {
     return (
-      <div className="text-terminal-text-secondary text-center py-4">
-        沒有可用的設備 (設備陣列長度: {devices.length})
+      <div className="space-y-4">
+        {/* 錯誤提示卡片 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <div className="text-amber-600 mt-1">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-amber-800 mb-2">
+                設備資料載入問題
+              </h3>
+              <div className="text-sm text-amber-700 whitespace-pre-line">
+                {emptyReason}
+              </div>
+              <div className="mt-3 flex space-x-2">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-3 py-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded hover:bg-amber-200 transition-colors"
+                >
+                  重新載入頁面
+                </button>
+                <a
+                  href="http://localhost:8000/api/devices"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded hover:bg-amber-200 transition-colors"
+                >
+                  測試後端 API
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 除錯資訊 */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="bg-gray-50 border border-gray-200 rounded p-3">
+            <h4 className="text-xs font-medium text-gray-700 mb-2">除錯資訊</h4>
+            <div className="text-xs text-gray-600 space-y-1">
+              <div>設備陣列長度: {devices.length}</div>
+              <div>載入狀態: {isLoading ? '載入中' : '已完成'}</div>
+              <div>API 基礎 URL: {import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}</div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -186,8 +237,11 @@ const MultiDeviceSelector = ({
           <div className="flex flex-wrap gap-2">
             <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
             {deviceGroups
-              .filter((group: any) => group && group.name) // 額外過濾確保資料有效
-              .map((group: any) => {
+              .filter((group): group is DeviceGroup => {
+                // 使用類型守衛確保資料有效
+                return group != null && typeof group === 'object' && 'name' in group && typeof group.name === 'string';
+              })
+              .map((group: DeviceGroup) => {
                 try {
                   const isSelected = isGroupSelected(group.name);
                   return (
@@ -207,7 +261,9 @@ const MultiDeviceSelector = ({
                     </button>
                   );
                 } catch (error) {
-                  console.warn('渲染群組按鈕時發生錯誤:', error, group);
+                  if (process.env.NODE_ENV === 'development') {
+                    console.warn('渲染群組按鈕時發生錯誤:', error, group);
+                  }
                   return null; // 跳過有問題的群組，不影響其他群組
                 }
               })

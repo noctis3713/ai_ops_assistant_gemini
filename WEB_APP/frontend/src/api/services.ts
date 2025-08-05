@@ -24,6 +24,8 @@ import {
 
 // 匯入統一的日誌條目介面，取代原本的重複定義
 import type { LogEntry } from '@/utils/SimpleLogger';
+// 匯入日誌函數
+import { logApi, logError } from '@/utils/SimpleLogger';
 
 /**
  * 獲取設備列表
@@ -41,11 +43,10 @@ export const getDevices = async (): Promise<Device[]> => {
     // 後端 BaseResponse.data 直接包含 Device[] 陣列
     const devices = response.data.data || [];
     
-    // 添加詳細日誌以幫助診斷
-    console.log('getDevices API 回應:', {
+    // API 回應記錄到日誌系統
+    logApi('getDevices API 回應', {
       success: response.data.success,
-      deviceCount: devices.length,
-      devices: devices.map(d => ({ ip: d.ip, name: d.name }))
+      deviceCount: devices.length
     });
     
     return devices;
@@ -358,7 +359,7 @@ export const getTaskStatus = async (taskId: string): Promise<TaskResponse> => {
   // 基本格式驗證（可選，根據任務 ID 格式調整）
   const taskIdPattern = /^task_\d+_[a-zA-Z0-9]+$/;
   if (!taskIdPattern.test(taskId)) {
-    console.warn(`任務 ID 格式可能不正確: '${taskId}'，但仍然嘗試查詢`);
+    logError('任務 ID 格式可能不正確', { taskId });
   }
   
   const response = await apiClient.get<{ success: boolean; data?: TaskResponse; message?: string; error_code?: string }>(
@@ -950,7 +951,7 @@ export const sendFrontendLogs = async (request: RemoteLogRequest): Promise<Remot
   } catch (error) {
     // 日誌發送失敗不應該影響主要功能
     // 在控制台記錄錯誤但不拋出異常
-    console.warn('Failed to send frontend logs to backend:', error);
+    // 日誌發送失敗不應影響主要功能，靜默處理
     
     // 返回失敗響應而不是拋出錯誤
     return {
@@ -995,7 +996,7 @@ export const getFrontendLogConfig = async (): Promise<FrontendLogConfig> => {
     return response.data;
   } catch (error) {
     // 如果無法獲取配置，返回預設配置
-    console.warn('Failed to fetch frontend log config, using defaults:', error);
+    // 無法獲取日誌配置，使用預設配置
     
     return {
       enableRemoteLogging: false,

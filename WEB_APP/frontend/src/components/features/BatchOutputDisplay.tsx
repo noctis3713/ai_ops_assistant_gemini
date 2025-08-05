@@ -38,8 +38,7 @@ const BatchOutputDisplay = ({
 
   const copyToClipboard = (content: string) => {
     navigator.clipboard.writeText(content).then(() => {
-      // 可以添加一個簡單的通知
-      console.log('已複製到剪貼板');
+      // 複製成功，可以在未來添加通知組件
     });
   };
 

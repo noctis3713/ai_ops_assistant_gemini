@@ -20,7 +20,7 @@ const BatchResultItem = ({
   
   // 根據 IP 查找設備描述
   const getDeviceDescription = (deviceIp: string) => {
-    const device = devices?.find((d: any) => d.ip === deviceIp);
+    const device = devices?.find((d) => d.ip === deviceIp);
     return device?.description || '';
   };
   const handleCopyOutput = () => {
