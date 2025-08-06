@@ -30,12 +30,7 @@ try:
 except ImportError:
     AI_AVAILABLE = False
 
-try:
-    from ddgs import DDGS
-
-    SEARCH_AVAILABLE = True
-except ImportError:
-    SEARCH_AVAILABLE = False
+# 移除外部搜尋功能 - ddgs 套件不再需要
 
 from core.nornir_integration import batch_command_wrapper, set_device_scope_restriction
 from core.prompt_manager import get_prompt_manager
@@ -45,71 +40,7 @@ from models.ai_response import NetworkAnalysisResponse
 logger = logging.getLogger(__name__)
 
 
-def build_ai_system_prompt_for_pydantic(search_enabled: bool = False) -> str:
-    """建立結構化、適用於 PydanticOutputParser 的 AI 系統提示詞
-
-    專為 PydanticOutputParser 設計的提示詞，要求 AI 輸出結構化的 JSON 格式
-
-    Args:
-        search_enabled: 搜尋功能是否啟用（用於動態調整工具說明）
-
-    Returns:
-        str: 適用於 PydanticOutputParser 的結構化提示詞
-    """
-    base_prompt = """<role>
-你是一名專業的網路工程師和 AI 助理，專精於 Cisco 設備診斷和網路分析。
-你具備 CCIE 級別的專業知識，能夠準確分析設備狀態並提供專業建議。
-</role>
-
-<security_rules>
-**絕對安全限制**：
-1. 只能執行 show 類指令（如 show version, show interface, show environment 等）
-2. 禁止執行任何配置變更指令（configure, write, delete, shutdown 等）
-3. 所有指令都會被安全驗證，危險指令將被自動阻止
-4. 專注於分析和診斷，絕不進行配置修改
-</security_rules>
-
-<tools_guide>
-你有一個強大的工具：**BatchCommandRunner**
-
-**BatchCommandRunner** 用途：
-- 在指定的網路設備上執行安全的 show 指令
-- 自動驗證指令安全性
-- 支援單設備或多設備批次執行
-- 返回結構化的執行結果和錯誤分析
-
-**使用格式**：
-- 單設備: "device_ip: command"
-- 多設備: "device_ip1,device_ip2: command"  
-- 所有設備: "command"
-
-**重要**：工具會返回 JSON 格式結果，包含 successful_results 和 failed_results 兩個關鍵陣列。
-</tools_guide>
-
-<workflow>
-**標準工作流程**：
-1. **理解需求**：分析用戶查詢，確定需要執行的指令
-2. **選擇工具**：使用 BatchCommandRunner 執行相關 show 指令
-3. **分析結果**：深入分析設備輸出，識別關鍵資訊和異常
-4. **結構化回應**：將分析結果組織成結構化的 JSON 格式
-   - **特別是**在處理多設備時，你**必須**從 BatchCommandRunner 回傳結果的 `summary` 物件中，提取 `successful_devices` 和 `failed_devices` 的數值，並填入到最終 JSON 回應的 `successful_device_count` 和 `failed_device_count` 欄位中
-   - 不可猜測或計算這些數值，必須從工具回傳的確切數據中提取
-</workflow>
-
-<output_format>
-**關鍵要求**：你的最終回答必須是有效的 JSON 物件，嚴格遵循以下格式規範。
-
-{{format_instructions}}
-
-**注意事項**：
-- 不要在 JSON 前後添加 Markdown 標記（如 ```json）
-- 確保 JSON 格式完全有效
-- analysis_type 根據設備數量自動判斷：1台設備="single_device"，多台="multi_device"
-- 如果沒有異常，anomalies 欄位應為空陣列 []
-- 所有建議都應該具體可操作
-</output_format>"""
-
-    return base_prompt
+# 移除 build_ai_system_prompt_for_pydantic 函數 - 已由 PromptManager.render_system_prompt() 取代
 
 
 # 內部思考鏈範例函數
@@ -132,14 +63,7 @@ def _get_react_examples() -> str:
 我想知道 202.3.182.202 這台設備的溫度狀況
 </user_query>
 
-Thought: 使用者想要查詢設備溫度，但我不確定具體應該使用哪個 show 指令來獲取溫度資訊。根據 workflow，我應該先使用 CiscoCommandSearch 搜尋正確的指令。
-
-Action: CiscoCommandSearch
-Action Input: cisco device temperature monitoring command
-
-Observation: 搜尋結果顯示可以使用 `show environment all` 或 `show environment temperature` 來查看設備溫度狀態。
-
-Thought: 很好，我已經找到了適合的指令。現在我可以使用 BatchCommandRunner 在指定設備上執行 `show environment all` 來獲取完整的環境資訊。
+Thought: 使用者想要查詢設備溫度。根據我的 Cisco 知識，我知道可以使用 `show environment all` 或 `show environment temperature` 來查看設備溫度狀態。我將使用 BatchCommandRunner 執行 `show environment all` 來獲取完整的環境資訊。
 
 Action: BatchCommandRunner  
 Action Input: 202.3.182.202: show environment all
@@ -201,14 +125,7 @@ Final Answer:
 檢查設備的 BGP 狀態
 </user_query>
 
-Thought: 使用者要求檢查 BGP 狀態，但沒有指定設備。我需要先搜尋適當的 BGP 狀態檢查指令。
-
-Action: CiscoCommandSearch
-Action Input: BGP status monitoring commands
-
-Observation: 搜尋結果建議使用 `show ip bgp summary` 來查看 BGP 狀態摘要。
-
-Thought: 我找到了指令，但使用者沒有指定設備。根據 device_context，我應該對所有可用設備執行指令。
+Thought: 使用者要求檢查 BGP 狀態，但沒有指定設備。根據我的 Cisco 知識，`show ip bgp summary` 是查看 BGP 狀態摘要的標準指令。我將對所有可用設備執行此指令。
 
 Action: BatchCommandRunner
 Action Input: show ip bgp summary
@@ -265,7 +182,6 @@ class AIService:
 
     def __init__(self):
         self.agent_executor = None
-        self.search_enabled = settings.ENABLE_DOCUMENT_SEARCH
         self.ai_initialized = False
 
         # 初始化 PydanticOutputParser
@@ -333,16 +249,13 @@ class AIService:
                 agent=agent, tools=tools, verbose=False, handle_parsing_errors=True
             )
 
-            search_status = (
-                "啟用" if SEARCH_AVAILABLE and self.search_enabled else "停用"
-            )
             # 記錄初始化成功
-            init_success_message = f"AI system initialized successfully (提供者: {ai_provider.upper()}, 搜尋功能: {search_status})"
+            init_success_message = f"AI system initialized successfully (提供者: {ai_provider.upper()})"
             logger.info(init_success_message)
 
             # 記錄到 AI 專用日誌
             ai_logger.info(
-                f"[{ai_provider.upper()}] AI 系統初始化成功 - 模型: {llm.__class__.__name__}, 搜尋功能: {search_status}"
+                f"[{ai_provider.upper()}] AI 系統初始化成功 - 模型: {llm.__class__.__name__}"
             )
 
             self.ai_initialized = True
@@ -474,39 +387,7 @@ class AIService:
             )
         ]
 
-        # 如果搜尋功能可用且已啟用，新增網路搜尋工具
-        if SEARCH_AVAILABLE and self.search_enabled:
-            tools.append(
-                Tool(
-                    name="CiscoCommandSearch",
-                    func=self._web_search_wrapper,
-                    description="""
-                    Cisco Network Command Search Tool
-                    
-                    Use this tool to search for the latest Cisco documentation and community 
-                    recommendations when you're unsure which specific command to use for a function.
-                    
-                    **When to Use This Tool**:
-                    - When user queries about functionality and you're unsure of the corresponding Cisco command
-                    - Need to find specific hardware model's dedicated commands
-                    - Want to confirm the latest syntax or parameters of a command
-                    - Need to find troubleshooting or monitoring best practice commands
-                    
-                    **Input Format**:
-                    Directly input what you want to search for, examples:
-                    - "temperature monitoring commands"
-                    - "ASR 1001-X environment status"
-                    - "BGP troubleshooting commands"
-                    - "interface utilization monitoring"
-                    
-                    **Usage Workflow**:
-                    1. When encountering unfamiliar query requirements, use this tool to search first
-                    2. Determine appropriate commands based on search results
-                    3. Then use NetworkShowCommandRunner to execute commands
-                    4. Provide professional advice combining searched best practices
-                    """,
-                )
-            )
+        # 移除外部搜尋工具 - AI 將只使用自身的 Cisco 知識
 
         return tools
 
@@ -523,9 +404,9 @@ class AIService:
             "}", "}}"
         )
 
-        # 使用新的提示詞管理器獲取系統提示詞
+        # 使用新的提示詞管理器獲取系統提示詞（移除搜尋功能）
         base_prompt = self.prompt_manager.render_system_prompt(
-            search_enabled=self.search_enabled,
+            search_enabled=False,
             format_instructions=escaped_format_instructions,
         )
 
@@ -564,79 +445,7 @@ Question: {{input}}
             },
         )
 
-    def _web_search_wrapper(self, query: str) -> str:
-        """Cisco 文檔搜尋工具包裝函式"""
-        if not SEARCH_AVAILABLE or not self.search_enabled:
-            reason = (
-                "套件未安裝"
-                if not SEARCH_AVAILABLE
-                else "環境變數 ENABLE_DOCUMENT_SEARCH 未啟用"
-            )
-            return f"""搜尋功能目前不可用（{reason}）。
-
-請依據以下常用指令類別選擇適當的 show 指令：
-
-**系統狀態檢查**:
-- `show version` - 系統版本和硬體資訊
-- `show environment` - 溫度、電源、風扇狀態
-- `show processes cpu` - CPU 使用率
-- `show memory` - 記憶體使用狀況
-
-**介面狀態檢查**:
-- `show ip interface brief` - 介面 IP 和狀態概覽
-- `show interface` - 詳細介面資訊
-- `show interface status` - 介面連結狀態
-
-**路由和網路**:
-- `show ip route` - 路由表
-- `show ip bgp summary` - BGP 鄰居狀態
-- `show ip ospf neighbor` - OSPF 鄰居資訊
-
-**安全和存取**:
-- `show access-lists` - 存取控制清單
-- `show crypto session` - VPN 會話狀態
-
-請根據使用者需求選擇最合適的指令。"""
-
-        try:
-            # Use stable version of DuckDuckGo search
-            with DDGS() as ddgs:
-                # Enhance query with Cisco-specific keywords for better accuracy
-                enhanced_query = f"Cisco IOS-XE {query} command documentation"
-                results = list(ddgs.text(enhanced_query, max_results=3))
-
-                if results:
-                    formatted_results = "\n".join(
-                        [
-                            f"• {result['title']}\n  {result['body'][:200]}...\n  Link: {result['href']}\n"
-                            for result in results
-                        ]
-                    )
-                    return f"Search Results:\n{formatted_results}"
-                else:
-                    return """未找到相關搜尋結果。
-
-請參考以下常用 Cisco IOS-XE 指令：
-- `show version` - 系統版本資訊
-- `show environment` - 環境狀態（溫度、電源、風扇）
-- `show ip interface brief` - 介面狀態概覽
-- `show interface` - 詳細介面資訊
-- `show ip route` - 路由表
-- `show processes cpu` - CPU 使用率
-
-請根據需求選擇合適的 show 指令。"""
-
-        except Exception as e:
-            logger.error(f"Web search error: {e}")
-            return f"""搜尋服務發生錯誤: {str(e)}
-
-請使用標準 Cisco 指令繼續操作：
-- 系統檢查: `show version`, `show environment`
-- 介面檢查: `show ip interface brief`, `show interface`
-- 網路檢查: `show ip route`, `show ip bgp summary`
-- 效能檢查: `show processes cpu`, `show memory`
-
-建議聯繫系統管理員檢查搜尋服務配置。"""
+    # 移除 _web_search_wrapper 方法 - 不再需要外部搜尋功能
 
     async def query_ai(
         self,
@@ -900,34 +709,13 @@ Question: {{input}}
         """
         ai_provider = settings.AI_PROVIDER
 
-        # 詳細的搜尋功能狀態分析
-        search_status_detail = {
-            "package_installed": SEARCH_AVAILABLE,
-            "env_var_enabled": self.search_enabled,
-            "fully_enabled": SEARCH_AVAILABLE and self.search_enabled,
-            "status_message": "",
-        }
-
-        if not SEARCH_AVAILABLE:
-            search_status_detail["status_message"] = "搜尋套件未安裝 (需要安裝 ddgs)"
-        elif not self.search_enabled:
-            search_status_detail["status_message"] = (
-                "搜尋功能未啟用 (ENABLE_DOCUMENT_SEARCH=false)"
-            )
-        else:
-            search_status_detail["status_message"] = "搜尋功能完全啟用"
-
-        # 移除解析器版本配置，因為已使用 PydanticOutputParser
+        # 簡化狀態回傳，移除所有搜尋相關配置
         return {
             "ai_available": AI_AVAILABLE,
             "ai_initialized": self.ai_initialized,
             "ai_provider": ai_provider,
             "pydantic_parser_enabled": True,
-            "search_enabled": self.search_enabled and SEARCH_AVAILABLE,
-            "search_available": SEARCH_AVAILABLE,
-            "search_detail": search_status_detail,
             "environment_config": {
-                "ENABLE_DOCUMENT_SEARCH": str(settings.ENABLE_DOCUMENT_SEARCH).lower(),
                 "PARSER_VERSION": settings.PARSER_VERSION,
             },
         }

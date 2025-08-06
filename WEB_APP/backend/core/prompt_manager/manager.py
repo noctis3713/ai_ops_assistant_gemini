@@ -46,7 +46,7 @@ class PromptManager:
     使用範例：
     ```python
     manager = PromptManager()
-    system_prompt = manager.render_system_prompt(search_enabled=True)
+    system_prompt = manager.render_system_prompt()
     react_examples = manager.render_react_examples()
     ```
     """
@@ -263,19 +263,19 @@ class PromptManager:
         except Exception:
             return []
 
-    def render_system_prompt(self, search_enabled: bool = False, **kwargs) -> str:
+    def render_system_prompt(self, **kwargs) -> str:
         """渲染系統提示詞 - 取代原有的 build_ai_system_prompt_for_pydantic
+        移除搜尋功能支援，簡化模板渲染
 
         Args:
-            search_enabled: 是否啟用搜尋功能
-            **kwargs: 其他模板變數
+            **kwargs: 模板變數
 
         Returns:
             str: 渲染後的系統提示詞
         """
         context = {
-            "search_enabled": search_enabled,
-            "tools": self._get_enabled_tools(search_enabled),
+            "search_enabled": False,  # 固定為 False，不再支援搜尋
+            "tools": self._get_enabled_tools(),
             **kwargs,
         }
 
@@ -294,21 +294,18 @@ class PromptManager:
 
         return self.render("react_examples.j2", **context)
 
-    def _get_enabled_tools(self, search_enabled: bool) -> List[Dict[str, Any]]:
-        """取得啟用的工具列表
-
-        Args:
-            search_enabled: 是否啟用搜尋功能
+    def _get_enabled_tools(self) -> List[Dict[str, Any]]:
+        """取得啟用的工具列表 - 移除搜尋相關工具
 
         Returns:
-            List[Dict[str, Any]]: 啟用的工具列表
+            List[Dict[str, Any]]: 啟用的工具列表（不含 CiscoCommandSearch）
         """
         all_tools = self.tools_config.get("tools", [])
         enabled_tools = []
 
         for tool in all_tools:
-            # 檢查工具是否應該啟用
-            if tool.get("name") == "CiscoCommandSearch" and not search_enabled:
+            # 過濾掉 CiscoCommandSearch，不再支援外部搜尋
+            if tool.get("name") == "CiscoCommandSearch":
                 continue
             enabled_tools.append(tool)
 

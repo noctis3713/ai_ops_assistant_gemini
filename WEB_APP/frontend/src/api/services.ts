@@ -227,7 +227,7 @@ export const getAIStatus = async (): Promise<{
   ai_initialized: boolean;
   ai_provider: string;
   parser_version: string;
-  search_enabled: boolean;
+  // 移除 search_enabled - 不再支援搜尋功能
   api_keys: {
     gemini_configured: boolean;
     claude_configured: boolean;
@@ -242,7 +242,7 @@ export const getAIStatus = async (): Promise<{
       ai_initialized: boolean;
       ai_provider: string;
       parser_version: string;
-      search_enabled: boolean;
+      // 移除 search_enabled - 不再支援搜尋功能
       api_keys: {
         gemini_configured: boolean;
         claude_configured: boolean;
@@ -267,7 +267,7 @@ export const getAIStatus = async (): Promise<{
       ai_initialized: false,
       ai_provider: 'unknown',
       parser_version: 'unknown',
-      search_enabled: false,
+      // 移除 search_enabled 預設值,
       api_keys: {
         gemini_configured: false,
         claude_configured: false,
@@ -284,7 +284,7 @@ export const getAIStatus = async (): Promise<{
     ai_initialized: Boolean(directData.ai_initialized),
     ai_provider: String(directData.ai_provider || 'unknown'),
     parser_version: String(directData.parser_version || 'unknown'),
-    search_enabled: Boolean(directData.search_enabled),
+    // 移除 search_enabled 處理,
     api_keys: (directData.api_keys && typeof directData.api_keys === 'object') ? directData.api_keys as { gemini_configured: boolean; claude_configured: boolean; current_provider: string; } : {
       gemini_configured: false,
       claude_configured: false,

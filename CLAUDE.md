@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-06 (v2.5.3 - 文件與程式碼現況完全一致性更新)  
+> 📅 **最後更新**: 2025-08-06 (v2.6.0 - 移除外部搜尋功能，簡化 AI 系統)  
 
 ---
 
@@ -26,7 +26,7 @@
 
 - **核心功能**: 網路設備指令執行、AI智能分析、批次操作管理
 - **技術架構**: FastAPI 後端 + React TypeScript 前端
-- **AI 能力**: 支援 Google Gemini 和 Claude AI 雙引擎
+- **AI 能力**: 支援 Google Gemini 和 Claude AI 雙引擎（移除外部文檔搜尋功能）
 - **自動化**: 基於 Netmiko 和 Nornir 的網路自動化框架
 - **用戶目標**: CCIE 級網路工程師的專業運維工具
 
@@ -124,7 +124,7 @@ WEB_APP/backend/
 
 **AI 工具整合**:
 - `BatchCommandRunner`: 網路設備指令執行工具
-- `CiscoCommandSearch`: Cisco 文檔搜尋工具 (可選)
+# 移除 CiscoCommandSearch - AI 現在只使用自身的 Cisco 知識庫
 
 ### 🏗️ 模組化路由系統 (`routers/`) ✨ v2.3.0
 
@@ -364,7 +364,7 @@ GEMINI_MODEL=gemini-1.5-flash-latest
 CLAUDE_MODEL=claude-3-haiku-20240307
 
 # 功能開關
-ENABLE_DOCUMENT_SEARCH=false
+# 移除 ENABLE_DOCUMENT_SEARCH - 不再支援外部文檔搜尋
 PARSER_VERSION=original
 
 # 管理配置
@@ -479,11 +479,11 @@ INFO (正常操作記錄)、WARNING (非致命性問題)、ERROR (錯誤和例�
 #### 🎯 AI 功能動態開關系統 ✨ v2.5.3 新增
 
 **最新實現功能**:
-- **動態功能控制**: 支援 AI 查詢、文檔搜尋、摘要功能的即時開關
+- **動態功能控制**: 支援 AI 查詢、摘要功能的即時開關（移除文檔搜尋）
 - **YAML 配置整合**: 透過 backend_settings.yaml 統一管理 AI 功能開關
 - **前端同步**: 前端自動同步後端 AI 功能狀態
 - **熱重載支援**: 無需重啟服務即可調整 AI 功能配置
-- **功能項目**: enableAiQuery, enableDocumentSearch, enableSummarization
+- **功能項目**: enableAiQuery, enableSummarization（移除 enableDocumentSearch）
 - **行為配置**: 重試機制、超時設定、效能監控
 
 ### ⚡ 非同步任務系統

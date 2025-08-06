@@ -773,7 +773,6 @@ async def get_frontend_config_endpoint(
                         "success": True,
                         "data": {
                             "ai": {
-                                "enableDocumentSearch": False,
                                 "parserVersion": "original",
                                 "enableSummarization": False
                             },

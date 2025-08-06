@@ -1,19 +1,12 @@
-# ReAct 思考鏈範例配置
+# ReAct 思考鏈範例配置 - 移除搜尋功能版本
 # 提供完整的思考過程範例，幫助 AI 學習正確的工作流程
 
 react_examples:
-  - title: "搜尋型查詢示範 - 環境監控類"
+  - title: "環境監控查詢示範 - 使用 AI 自身知識"
     query: "我想知道 {TARGET_DEVICE} 這台設備的溫度狀況"
     steps:
       - type: "thought"
-        content: "使用者想要查詢設備溫度，但我不確定具體應該使用哪個 show 指令來獲取溫度資訊。根據 workflow，我應該先使用 CiscoCommandSearch 搜尋正確的指令。"
-      - type: "action"
-        action: "CiscoCommandSearch"
-        input: "cisco device temperature monitoring command"
-      - type: "observation"
-        content: "搜尋結果顯示可以使用 `show environment all` 或 `show environment temperature` 來查看設備溫度狀態。"
-      - type: "thought"
-        content: "很好，我已經找到了適合的指令。現在我可以使用 BatchCommandRunner 在指定設備上執行 `show environment all` 來獲取完整的環境資訊。"
+        content: "使用者想要查詢設備溫度。根據我的 Cisco 知識，我知道可以使用 `show environment all` 或 `show environment temperature` 來查看設備溫度狀態。我將使用 BatchCommandRunner 執行 `show environment all` 來獲取完整的環境資訊。"
       - type: "action"
         action: "BatchCommandRunner"
         input: "{TARGET_DEVICE}: show environment all"
@@ -22,11 +15,11 @@ react_examples:
       - type: "thought"
         content: "我已經成功執行了 `show environment all` 指令並獲得了設備的環境資訊。根據觀察到的實際輸出，我現在將分析溫度狀態、風扇運行情況和電源狀態，然後按照 output_format 要求構建我的 JSON 格式回應。這是單一設備查詢，analysis_type 應設為 'single_device'。"
 
-  - title: "直接執行示範 - 多設備狀態查詢類"
+  - title: "多設備狀態查詢示範"
     query: "請幫我查看 {DEVICE_LIST} 這些設備的系統資訊"
     steps:
       - type: "thought"
-        content: "使用者明確要求查詢系統資訊，這對應到 `show version` 指令，我不需要搜尋。這是多設備查詢，我可以直接使用 BatchCommandRunner 執行指令。"
+        content: "使用者明確要求查詢系統資訊，這對應到 `show version` 指令。這是多設備查詢，我可以直接使用 BatchCommandRunner 執行指令。"
       - type: "action"
         action: "BatchCommandRunner"
         input: "{DEVICE_LIST}: show version"
@@ -35,22 +28,41 @@ react_examples:
       - type: "thought"
         content: "我已經成功執行了 `show version` 指令並獲得了多台設備的詳細輸出。現在我將分析每台設備的系統版本、硬體資訊和運行狀態，並從 BatchCommandRunner 回傳的 summary 物件中提取 successful_devices 和 failed_devices 數量。根據設備數量，analysis_type 應設為 'multi_device'。我將構建符合 JSON schema 的結構化回應。"
 
-  - title: "錯誤處理示範 - 協定狀態查詢類"
-    query: "檢查 {NETWORK_DEVICES} 的路由協定狀態"
+  - title: "路由協定狀態查詢示範"
+    query: "檢查 {NETWORK_DEVICES} 的 BGP 狀態"
     steps:
       - type: "thought"
-        content: "使用者要求檢查路由協定狀態。我需要先搜尋適當的狀態檢查指令。"
-      - type: "action"
-        action: "CiscoCommandSearch"
-        input: "routing protocol status monitoring commands"
-      - type: "observation"
-        content: "搜尋結果建議使用 `show ip bgp summary` 或 `show ip route summary` 來查看路由協定狀態。"
-      - type: "thought"
-        content: "我找到了指令。現在對指定設備執行指令。"
+        content: "使用者要求檢查 BGP 狀態。根據我的 Cisco 知識，`show ip bgp summary` 是查看 BGP 狀態摘要的標準指令。我將對指定設備執行這個指令。"
       - type: "action"
         action: "BatchCommandRunner"
         input: "{NETWORK_DEVICES}: show ip bgp summary"
       - type: "observation"
-        content: "部分設備執行成功，但有設備返回錯誤，可能是因為該設備未配置該協定。"
+        content: "部分設備執行成功，但有設備返回錯誤，可能是因為該設備未配置 BGP。"
       - type: "thought"
-        content: "我已經執行了 `show ip bgp summary` 指令，結果顯示部分設備執行成功，部分設備失敗。這種混合結果需要我仔細分析成功的設備輸出以了解 BGP 狀態，同時解釋失敗設備的原因（可能是未配置 BGP 或設備不支援）。我將從 summary 物件中提取確切的成功和失敗設備數量，並構建包含異常分析的 JSON 回應。"
+        content: "執行過程中遇到了部分失敗，這是正常情況。我需要根據實際結果分析，並在報告中說明失敗原因。我將從 BatchCommandRunner 的回應中提取成功和失敗的設備數量，並構建包含異常處理的結構化回應。"
+
+# 工作流程指導原則 (移除搜尋相關流程)
+workflow_principles:
+  - "依賴 AI 自身的 Cisco 專業知識選擇正確指令"
+  - "直接使用 BatchCommandRunner 執行標準 Cisco show 指令"
+  - "從工具回應的 summary 中準確提取設備統計"
+  - "提供專業的網路設備分析和建議"
+  - "正確處理部分設備執行失敗的情況"
+
+# 常用 Cisco 指令參考
+common_cisco_commands:
+  system:
+    - "show version - 系統版本和硬體資訊"
+    - "show environment - 溫度、電源、風扇狀態"
+    - "show processes cpu - CPU 使用率"
+    - "show memory - 記憶體使用狀況"
+  
+  interfaces:
+    - "show ip interface brief - 介面 IP 和狀態概覽"
+    - "show interface - 詳細介面資訊"
+    - "show interface status - 介面連結狀態"
+  
+  routing:
+    - "show ip route - 路由表"
+    - "show ip bgp summary - BGP 鄰居狀態"
+    - "show ip ospf neighbor - OSPF 鄰居資訊"

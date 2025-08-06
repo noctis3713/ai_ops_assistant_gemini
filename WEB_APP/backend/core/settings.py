@@ -48,8 +48,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = Field(default="gemini-1.5-flash-latest", description="Gemini 模型版本")
     CLAUDE_MODEL: str = Field(default="claude-3-haiku-20240307", description="Claude 模型版本")
     
-    # AI 功能開關
-    ENABLE_DOCUMENT_SEARCH: bool = Field(default=False, description="啟用文檔搜尋功能")
+    # AI 功能開關 (移除 ENABLE_DOCUMENT_SEARCH - 不再支援外部文檔搜尋)
     PARSER_VERSION: str = Field(default="original", description="解析器版本")
     ENABLE_AI_SUMMARIZATION: bool = Field(default=False, description="啟用 AI 摘要功能")
     
@@ -512,8 +511,7 @@ class Settings(BaseSettings):
             ai_config = backend_config.get("ai", {})
             if ai_config:
                 # 功能開關覆蓋 (只在環境變數未設定時生效)
-                if not os.getenv("ENABLE_DOCUMENT_SEARCH") and "enableDocumentSearch" in ai_config:
-                    self.ENABLE_DOCUMENT_SEARCH = ai_config["enableDocumentSearch"]
+                # 移除 enableDocumentSearch 覆蓋邏輯 - 不再支援搜尋功能
                 
                 if not os.getenv("PARSER_VERSION") and "parserVersion" in ai_config:
                     self.PARSER_VERSION = ai_config["parserVersion"]

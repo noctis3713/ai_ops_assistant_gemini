@@ -47,7 +47,7 @@ export interface AIQueryRequest {
 // 對應後端 Pydantic 模型的 JSON 輸出格式
 export interface BackendConfig {
   ai: {
-    enableDocumentSearch?: boolean;
+    // 移除 enableDocumentSearch - 不再支援外部文檔搜尋
     parserVersion?: string;
     enableSummarization?: boolean;
     enableAiQuery?: boolean;  // AI 查詢功能開關

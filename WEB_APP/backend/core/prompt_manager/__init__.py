@@ -18,7 +18,7 @@
 from core.prompt_manager import get_prompt_manager
 
 prompt_manager = get_prompt_manager()
-system_prompt = prompt_manager.render_system_prompt(search_enabled=True)
+system_prompt = prompt_manager.render_system_prompt()
 ```
 """
 
