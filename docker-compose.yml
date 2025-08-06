@@ -43,11 +43,11 @@ services:
     deploy:
       resources:
         limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
 
   # =============================================================================
   # 服務二：後端應用 (FastAPI)
@@ -116,11 +116,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '1.0'
+          memory: 8G
+          cpus: '8.0'
         reservations:
-          memory: 512M
-          cpus: '0.5'
+          memory: 4G
+          cpus: '4.0'
 
   # =============================================================================  
   # 服務三：前端應用 (React + Nginx)
@@ -164,11 +164,11 @@ services:
     deploy:
       resources:
         limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
           memory: 256M
           cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.25'
 
 # =============================================================================
 # 網路配置
