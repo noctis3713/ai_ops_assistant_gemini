@@ -15,10 +15,9 @@ services:
     restart: unless-stopped
     
     ports:
-      # --- HTTPS-First 架構：只開放必要端口 ---
-      - "${HTTPS_PORT:-443}:443"      # Public HTTPS Port
+      # --- HTTP 架構：只開放必要端口 ---
+      - "${HTTP_PORT:-80}:80"      # Public HTTP Port
       - "${PROXY_ADMIN_PORT:-81}:81"  # NPM 管理介面 (僅限內部訪問)
-      # - "80:80"  # HTTP 端口已註解，強制所有流量走 HTTPS
     
     environment:
       # 設定預設管理員帳號 (首次啟動後請立即更改)
@@ -34,20 +33,20 @@ services:
       - ai-ops-network
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:81/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:81/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
           cpus: '1.0'
         reservations:
-          memory: 512M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
 
   # =============================================================================
   # 服務二：後端應用 (FastAPI)
@@ -92,6 +91,10 @@ services:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      
+      # 網路連線優化
+      - CONTAINER_NAME=backend
+      - NETWORK_MODE=bridge
     
     volumes:
       # 持久化重要資料
@@ -107,7 +110,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     
     depends_on:
       - proxy
@@ -115,11 +118,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
-          cpus: '8.0'
-        reservations:
           memory: 4G
-          cpus: '4.0'
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '2.0'
 
   # =============================================================================  
   # 服務三：前端應用 (React + Nginx)
@@ -129,7 +132,7 @@ services:
       context: ./WEB_APP/frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://backend:8000}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
         - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-production}
         - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
     
@@ -159,15 +162,17 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      proxy:
+        condition: service_started
     
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
           cpus: '1.0'
         reservations:
-          memory: 256M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
 
 # =============================================================================
 # 網路配置
