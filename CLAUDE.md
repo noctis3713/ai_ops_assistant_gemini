@@ -2,7 +2,7 @@
 
 > 📋 **目的**: 此文件是為Claude AI助理編寫的專案理解指南  
 > 🎯 **用途**: 每次對話初始化時快速掌握專案架構、功能模組和技術細節  
-> 📅 **最後更新**: 2025-08-05 (v2.5.2 - 前端代碼質量企業級提升 + 配置外部化系統完成)  
+> 📅 **最後更新**: 2025-08-06 (v2.5.3 - 文件與程式碼現況完全一致性更新)  
 
 ---
 
@@ -30,7 +30,7 @@
 - **自動化**: 基於 Netmiko 和 Nornir 的網路自動化框架
 - **用戶目標**: CCIE 級網路工程師的專業運維工具
 
-### 🏗️ 模組化技術架構 ✨ v2.5.2
+### 🏗️ 模組化技術架構 ✨ v2.5.3
 
 **三層架構**:
 - **前端層**: React + TypeScript，效能優化完成
@@ -82,12 +82,13 @@
 
 ```
 WEB_APP/backend/
-├── main.py                    # FastAPI 應用程式入口 (精簡至51行)
+├── main.py                    # FastAPI 應用程式入口 (模組化架構，211行)
 ├── background_tasks.py        # 背景任務處理模組
 ├── ai_service.py             # AI 服務核心模組
 ├── async_task_manager.py     # 非同步任務管理器
 ├── config_manager.py         # 統一配置檔案管理器
 ├── utils.py                  # 工具函數和日誌配置
+├── formatters.py             # 輸出格式化工具
 ├── routers/                  # 模組化路由系統
 │   ├── dependencies.py      # 共用依賴注入
 │   ├── device_routes.py     # 設備管理路由
@@ -96,12 +97,20 @@ WEB_APP/backend/
 │   └── admin_routes.py      # 管理功能路由
 ├── core/                     # 核心功能模組
 │   ├── settings.py          # 企業級 Pydantic Settings 配置管理
-│   ├── exceptions.py        # 服務層自訂異常系統  
+│   ├── exceptions.py        # 服務層自訂異常系統
+│   ├── error_codes.py       # 標準化錯誤代碼系統  
 │   ├── network_tools.py      # 網路工具核心
 │   ├── nornir_integration.py # Nornir 整合層
 │   └── prompt_manager/       # 企業級提示詞管理系統
+├── models/                   # 資料模型定義
+│   └── ai_response.py       # AI 回應模型和 BaseResponse
 ├── templates/prompts/        # Jinja2 提示詞模板系統
 ├── config/                  # 系統配置檔案
+│   ├── backend_settings.yaml # 後端動態配置 (212行)
+│   ├── frontend_settings.yaml # 前端動態配置
+│   ├── devices.json         # 設備清單配置
+│   ├── groups.json          # 設備群組配置
+│   └── security.json        # 安全規則配置
 └── logs/                    # 日誌檔案目錄
 ```
 
@@ -153,42 +162,49 @@ WEB_APP/backend/
 - POST /api/frontend-logs - 前端日誌收集
 
 **模組化優勢**:
-- **程式碼組織**: 從1747行單體分解為5個專業模組
+- **程式碼組織**: 從單體架構分解為5個專業路由模組 (211行主程式)
 - **關注點分離**: 每個模組專注特定業務領域
 - **並行開發**: 不同團隊可同時開發不同模組
 - **測試隔離**: 每個模組可獨立進行單元測試
 - **微服務準備**: 為未來微服務化奠定架構基礎
+- **全域異常處理**: 統一的 ServiceError 和通用 Exception 處理機制
 
-### 🏢 企業級配置管理系統 (`core/settings.py`) ✨ v2.2.0
+### 🏢 企業級配置管理系統 (`core/settings.py` + YAML配置) ✨ v2.5.3
 
-**核心特色**:
+**雙層配置架構**:
 - **Pydantic Settings**: 型別安全的環境變數管理
-- **集中化配置**: 60+ 個完整配置項目，涵蓋所有系統模組
-- **Fail Fast 機制**: 啟動時即驗證配置，快速發現問題
-- **FastAPI 依賴注入**: 原生整合 FastAPI 的依賴注入系統
+- **YAML 外部配置**: backend_settings.yaml (212行) 動態配置系統
+- **三層優先級**: 環境變數 > YAML 配置 > Pydantic 預設值
+- **熱重載支援**: 不重啟服務即可更新配置
 
-**整合進度** (v2.2.0 完整統一):
-- ✅ **完全整合完成**: 所有7個核心模組已完成 Pydantic Settings 整合
-- 🎯 **統一架構**: 徹底移除 `os.getenv()` 調用，實現完全型別安全的配置管理
+**YAML 配置檔案詳細內容** ✨ v2.5.3:
 
-**配置分類體系**:
-- **AI 服務配置** (15 項目): API 金鑰、模型設定、功能開關
-- **網路連線配置** (10 項目): 連線池、超時、設備認證
-- **日誌系統配置** (12 項目): 後端、前端日誌分別管理
-- **快取配置** (6 項目): 指令快取、輸出處理
-- **非同步任務配置** (6 項目): 任務管理、清理機制
-- **提示詞配置** (4 項目): 語言、模板路徑
-- **安全管理配置** (3 項目): 管理金鑰、驗證機制
+#### **backend_settings.yaml (212行) 完整配置**:
+- **AI 服務配置** (31行): 功能開關、模型配置、處理行為、重試機制
+- **網路連線配置** (23行): SSH 連線池、設備配置、Nornir 引擎配置
+- **快取配置** (20行): 指令快取、輸出處理、狀態快取
+- **日誌系統配置** (38行): 基礎日誌、模組日誌 (AI/網路/效能)、前端日誌
+- **非同步任務配置** (21行): 任務管理、執行配置、背景處理
+- **提示詞配置** (18行): 基礎配置、模板管理、Jinja2 引擎
+- **安全配置** (20行): API 安全、指令安全、設備認證
+- **效能監控配置** (19行): 系統資源、效能監控、最佳化配置
 
-### 🚨 全域異常處理系統 (`core/exceptions.py`) ✨ v2.2.0
+#### **frontend_settings.yaml** ✨ v2.5.0:
+- **前端動態配置**: 支援前端組件和功能的動態配置
+- **組件配置**: UI 元件行為、樣式、功能開關
+- **整合機制**: 透過 GET /api/backend-config 端點動態載入
+
+### 🚨 全域異常處理系統 (`core/exceptions.py` + `core/error_codes.py`) ✨ v2.5.3
 
 **設計理念**: 建立層次化的服務層異常系統，自動映射為標準化 HTTP 回應
 
-**關鍵特色**:
+**關鍵特色** ✨ v2.5.3 強化版:
 - **16 個專業異常類別**: 涵蓋配置、設備、指令、AI、任務、認證等所有業務領域
+- **標準化錯誤代碼**: 新增 `core/error_codes.py` 統一錯誤分類系統
 - **三個全域異常處理器**: ServiceError、HTTPException、通用 Exception
 - **自動 HTTP 映射**: 異常自動轉換為標準化 JSON 回應
 - **BaseResponse 格式**: 統一的 API 回應結構
+- **錯誤追蹤**: 完整的錯誤堆疊和時間戳記錄
 
 ### 🌐 網路自動化核心 (`core/network_tools.py` + `core/nornir_integration.py`)
 
@@ -229,21 +245,24 @@ WEB_APP/backend/
 
 ### 🎨 技術棧組成
 
-**核心框架**:
-- **React 19**: 最新版本的 React 框架
-- **TypeScript**: 完整的型別安全，100% 消除 any 類型使用 ✨ v2.5.2
-- **Vite**: 現代化的建構工具
-- **TailwindCSS**: 實用優先的 CSS 框架
+**核心框架** ✨ v2.5.3 最新技術棧:
+- **React 19.1.0**: 最新版本的 React 框架
+- **TypeScript 5.8.3**: 完整的型別安全，100% 消除 any 類型使用 ✨ v2.5.2
+- **Vite 7.0.4**: 現代化的建構工具，最新版本
+- **TailwindCSS 3.4.17**: 實用優先的 CSS 框架，最新版本
 
-**UI 組件系統** ✨ v2.5.0:
-- **shadcn/ui**: 現代化可重用組件庫
-- **Radix UI**: 無障礙設計的底層組件
-- **class-variance-authority**: 型別安全的組件變體系統
-- **clsx**: 條件樣式類別組合工具
+**UI 組件系統** ✨ v2.5.3 完整整合:
+- **shadcn/ui**: 現代化可重用組件庫，完整 components.json 配置
+- **Radix UI**: 無障礙設計的底層組件 (@radix-ui/react-slot 1.2.3)
+- **class-variance-authority 0.7.1**: 型別安全的組件變體系統
+- **clsx 2.1.1**: 條件樣式類別組合工具
+- **tailwind-merge 3.3.1**: Tailwind 類別智能合併
+- **tailwindcss-animate 1.0.7**: 動畫效果支援
 
-**狀態管理**:
-- **Zustand**: 輕量級全域狀態管理，集中化 Actions ✨ v2.5.0
-- **React Query (@tanstack/react-query)**: API 資料快取和同步
+**狀態管理** ✨ v2.5.3 優化版本:
+- **Zustand 5.0.6**: 輕量級全域狀態管理，集中化 Actions ✨ v2.5.0
+- **React Query 5.83.0**: API 資料快取和同步，最新版本
+- **axios 1.11.0**: HTTP 客戶端，最新穩定版
 
 ### 📁 精簡化前端檔案結構
 
@@ -296,14 +315,16 @@ WEB_APP/frontend/src/
 - 自動記錄錯誤資訊到日誌系統
 - 支援錯誤恢復和頁面重載功能
 
-**shadcn/ui 組件系統** ✨ v2.5.0:
+**shadcn/ui 組件系統** ✨ v2.5.3 完整實現:
 - **Button 組件 (`src/components/ui/button.tsx`)**: 型別安全的可重用按鈕組件
   - 支援多種變體：default, destructive, outline, secondary, ghost, link
   - 完整的尺寸支援：default, sm, lg, icon
   - 內建 loading 狀態和無障礙設計
   - forwardRef 支援，完美整合 React 生態
-- **組件配置 (`components.json`)**: shadcn/ui 生態系統配置
-- **TypeScript 路徑別名**: @/components 路徑簡化導入
+- **splash-cursor 組件**: 新增互動式游標效果組件
+- **組件配置 (`components.json`)**: shadcn/ui 生態系統完整配置 (new-york 風格)
+- **TypeScript 路徑別名**: @/components 和 @/lib/utils 路徑簡化導入
+- **Tailwind 整合**: 完整的 CSS 變數和動畫支援
 
 ### 🌐 API 整合層 (`api/client.ts` + `api/services.ts`) ✨ v2.4.0 效能優化
 
@@ -454,6 +475,16 @@ INFO (正常操作記錄)、WARNING (非致命性問題)、ERROR (錯誤和例�
 3. **動態時間戳記強制要求**: 實時查詢強制執行
 4. **設備範圍限制機制**: 防止 AI 越權操作設備
 5. **工具執行驗證機制**: 驗證 AI 是否確實執行了工具調用
+
+#### 🎯 AI 功能動態開關系統 ✨ v2.5.3 新增
+
+**最新實現功能**:
+- **動態功能控制**: 支援 AI 查詢、文檔搜尋、摘要功能的即時開關
+- **YAML 配置整合**: 透過 backend_settings.yaml 統一管理 AI 功能開關
+- **前端同步**: 前端自動同步後端 AI 功能狀態
+- **熱重載支援**: 無需重啟服務即可調整 AI 功能配置
+- **功能項目**: enableAiQuery, enableDocumentSearch, enableSummarization
+- **行為配置**: 重試機制、超時設定、效能監控
 
 ### ⚡ 非同步任務系統
 
@@ -712,7 +743,24 @@ FastAPI 後端 + React 前端架構、AI 雙引擎支援、網路設備自動化
 
 ## 📈 版本更新記錄
 
-### 🔧 v2.5.2 - 2025-08-05 (當前版本)
+### 🔧 v2.5.3 - 2025-08-06 (當前版本)
+
+**🎯 文件與程式碼現況完全一致性更新**：
+- ✅ **版本統一**: 統一所有版本號為 v2.5.3，消除版本不一致問題
+- ✅ **檔案結構更新**: 反映實際的後端 211 行主程式和完整檔案結構
+- ✅ **YAML 配置詳述**: 詳細記錄 backend_settings.yaml (212行) 完整配置內容
+- ✅ **技術棧更新**: 反映最新的依賴套件版本 (React 19.1.0, TypeScript 5.8.3, Vite 7.0.4)
+- ✅ **shadcn/ui 整合**: 完整記錄 components.json 配置和 splash-cursor 組件
+- ✅ **AI 動態開關**: 新增 AI 功能動態開關系統的詳細描述
+- ✅ **錯誤代碼系統**: 新增 core/error_codes.py 標準化錯誤分類描述
+
+**📊 文件一致性保證**:
+- 主程式行數: 更正為實際的 211 行 (非原先記錄的 51 行)
+- YAML 配置: 詳細記錄 backend_settings.yaml 的 8 大分類配置
+- 前端技術棧: 完整更新所有依賴套件的實際版本號
+- 功能實現: 反映最新 git 提交的實際功能狀況
+
+### 🔧 v2.5.2 - 2025-08-05
 
 **🎯 前端代碼質量企業級提升**：
 - ✅ **TypeScript 完全類型安全化**: 消除所有 15 個 `any` 類型使用，達到 100% 類型安全
@@ -815,6 +863,6 @@ FastAPI 後端 + React 前端基礎架構、AI 雙引擎支援、基礎網路設
 
 ---
 
-*📝 文件版本: v2.5.2*  
-*🔄 最後更新: 2025-08-05 (前端代碼質量企業級提升 + 配置外部化系統完成)*  
+*📝 文件版本: v2.5.3*  
+*🔄 最後更新: 2025-08-06 (文件與程式碼現況完全一致性更新)*  
 *👤 維護者: Claude AI Assistant*
