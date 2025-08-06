@@ -33,7 +33,8 @@
       "Bash(pip show:*)",
       "Bash(isort:*)",
       "Bash(ruff check:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
