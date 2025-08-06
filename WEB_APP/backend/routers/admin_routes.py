@@ -257,11 +257,9 @@ async def reload_config_endpoint(
             errors=errors if errors else None,
         )
         
-        return ReloadConfigResponseTyped(
-            success=True,
+        return ReloadConfigResponseTyped.success_response(
             data=config_data,
-            message="系統配置熱重載完成",
-            error_code=None
+            message="系統配置熱重載完成"
         )
 
     except Exception as e:
@@ -328,11 +326,9 @@ async def reload_prompts() -> PromptReloadResponseTyped:
             timestamp=datetime.now().isoformat()
         )
         
-        return PromptReloadResponseTyped(
-            success=True,
+        return PromptReloadResponseTyped.success_response(
             data=prompt_data,
-            message="AI 提示詞系統熱重載完成",
-            error_code=None
+            message="AI 提示詞系統熱重載完成"
         )
 
     except Exception as e:
@@ -415,11 +411,9 @@ async def receive_frontend_logs(request: FrontendLogRequest) -> FrontendLogRespo
 
         logger.info(f"前端日誌處理完成: {processing_result}")
         
-        return FrontendLogResponseTyped(
-            success=True,
+        return FrontendLogResponseTyped.success_response(
             data=response,
-            message="前端日誌批量處理完成",
-            error_code=None
+            message="前端日誌批量處理完成"
         )
 
     except Exception as e:
@@ -483,11 +477,9 @@ async def get_frontend_log_config_endpoint() -> FrontendLogConfigTyped:
 
         logger.info("成功回傳前端日誌配置")
         
-        return FrontendLogConfigTyped(
-            success=True,
+        return FrontendLogConfigTyped.success_response(
             data=config,
-            message="前端日誌配置獲取成功",
-            error_code=None
+            message="前端日誌配置獲取成功"
         )
 
     except Exception as e:
@@ -584,11 +576,9 @@ async def get_ai_status(
             current_provider=api_key_status["current_provider"]
         )
         
-        return AIStatusResponseTyped(
-            success=True,
+        return AIStatusResponseTyped.success_response(
             data=ai_status_data,
-            message="AI 服務狀態檢查完成",
-            error_code=None
+            message="AI 服務狀態檢查完成"
         )
 
     except Exception as e:
@@ -705,11 +695,9 @@ async def get_frontend_config_endpoint(
 
         logger.info("前端動態配置從配置檔案載入完成")
         
-        return FrontendConfigTyped(
-            success=True,
+        return FrontendConfigTyped.success_response(
             data=frontend_config,
-            message="前端配置獲取成功 (從 frontend_settings.yaml)",
-            error_code=None
+            message="前端配置獲取成功 (從 frontend_settings.yaml)"
         )
 
     except Exception as e:
@@ -816,11 +804,9 @@ async def get_backend_config_endpoint(
 
         logger.info("後端動態配置從配置檔案載入完成")
         
-        return BackendConfigTyped(
-            success=True,
+        return BackendConfigTyped.success_response(
             data=backend_config,
-            message="後端配置獲取成功 (從 backend_settings.yaml)",
-            error_code=None
+            message="後端配置獲取成功 (從 backend_settings.yaml)"
         )
 
     except Exception as e:

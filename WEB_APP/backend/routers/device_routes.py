@@ -154,11 +154,9 @@ async def get_devices(
             )
 
         logger.info(f"成功回傳 {len(devices)} 個設備")
-        return DeviceListResponse(
-            success=True,
-            data=devices, 
-            message=f"成功載入 {len(devices)} 個設備",
-            error_code=None
+        return DeviceListResponse.success_response(
+            data=devices,
+            message=f"成功載入 {len(devices)} 個設備"
         )
 
     except Exception as e:
@@ -246,11 +244,9 @@ async def get_device_groups(
             )
 
         logger.info(f"成功回傳 {len(groups)} 個設備群組")
-        return DeviceGroupListResponse(
-            success=True,
+        return DeviceGroupListResponse.success_response(
             data=groups,
-            message=f"成功載入 {len(groups)} 個設備群組",
-            error_code=None
+            message=f"成功載入 {len(groups)} 個設備群組"
         )
 
     except Exception as e:
@@ -364,11 +360,9 @@ async def get_devices_status(
             )
         )
         
-        return DevicesHealthResponse(
-            success=True,
+        return DevicesHealthResponse.success_response(
             data=status_data,
-            message=f"設備健康檢查完成: {online_count}/{total_count} 台設備在線",
-            error_code=None
+            message=f"設備健康檢查完成: {online_count}/{total_count} 台設備在線"
         )
 
     except Exception as e:
@@ -457,11 +451,9 @@ async def get_device_status(
         status_msg = "在線" if is_healthy else "離線"
         logger.info(f"設備 {device_ip} 狀態檢查完成: {status_msg}")
         
-        return DeviceStatusResponse(
-            success=True,
+        return DeviceStatusResponse.success_response(
             data=result,
-            message=f"設備 {device_ip} 狀態檢查完成: {status_msg}",
-            error_code=None
+            message=f"設備 {device_ip} 狀態檢查完成: {status_msg}"
         )
 
     except HTTPException:

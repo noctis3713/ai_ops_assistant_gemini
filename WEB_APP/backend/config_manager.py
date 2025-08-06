@@ -451,6 +451,20 @@ class ConfigManager:
         logger.warning(f"使用回退設備名稱: {device_ip} -> {fallback_name}")
         return fallback_name
 
+    def get_device_name_by_ip(self, device_ip: str) -> str:
+        """通過 IP 獲取設備名稱的便利方法
+        
+        將常用的設備配置查詢和名稱獲取邏輯合併為一步操作
+        
+        Args:
+            device_ip: 設備 IP 位址
+            
+        Returns:
+            str: 設備名稱（配置中的名稱或 IP 回退）
+        """
+        device_config = self.get_device_by_ip(device_ip)
+        return self.get_device_name_safe(device_config, device_ip) if device_config else device_ip
+
     def load_security_config(self) -> SecurityConfig:
         """載入安全配置檔案
 

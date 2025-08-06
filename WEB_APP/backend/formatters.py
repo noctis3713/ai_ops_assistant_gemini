@@ -28,12 +28,7 @@ def format_ai_results(
     results = []
 
     for device_ip in devices:
-        device_config = config_manager.get_device_by_ip(device_ip)
-        device_name = (
-            config_manager.get_device_name_safe(device_config, device_ip)
-            if device_config
-            else device_ip
-        )
+        device_name = config_manager.get_device_name_by_ip(device_ip)
 
         results.append(
             {
@@ -72,12 +67,7 @@ def format_command_results(batch_result) -> Dict[str, Any]:
 
     # 處理成功的設備
     for device_ip, device_output in batch_result.results.items():
-        device_config = config_manager.get_device_by_ip(device_ip)
-        device_name = (
-            config_manager.get_device_name_safe(device_config, device_ip)
-            if device_config
-            else device_ip
-        )
+        device_name = config_manager.get_device_name_by_ip(device_ip)
 
         results.append(
             {
@@ -93,12 +83,7 @@ def format_command_results(batch_result) -> Dict[str, Any]:
 
     # 處理失敗的設備
     for device_ip, error_msg in batch_result.errors.items():
-        device_config = config_manager.get_device_by_ip(device_ip)
-        device_name = (
-            config_manager.get_device_name_safe(device_config, device_ip)
-            if device_config
-            else device_ip
-        )
+        device_name = config_manager.get_device_name_by_ip(device_ip)
 
         # 格式化錯誤詳細資訊
         formatted_error = format_error_details(

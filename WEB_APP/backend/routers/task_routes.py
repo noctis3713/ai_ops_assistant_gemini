@@ -169,11 +169,9 @@ async def get_task_status(task_id: str) -> TaskResponseTyped:
         execution_time=task_dict["execution_time"],
     )
     
-    return TaskResponseTyped(
-        success=True,
+    return TaskResponseTyped.success_response(
         data=task_response,
-        message="任務狀態查詢成功",
-        error_code=None
+        message="任務狀態查詢成功"
     )
 
 @router.get(
@@ -291,11 +289,9 @@ async def list_tasks(
         filters_applied={"status": status, "task_type": task_type, "limit": limit}
     )
     
-    return TaskListResponseTyped(
-        success=True,
+    return TaskListResponseTyped.success_response(
         data=task_list_data,
-        message=f"成功獲取 {len(task_responses)} 個任務",
-        error_code=None
+        message=f"成功獲取 {len(task_responses)} 個任務"
     )
 
 @router.delete(
@@ -354,11 +350,9 @@ async def cancel_task(task_id: str) -> TaskCancelResponseTyped:
     # 構建標準化的 TaskCancelResponse
     cancel_data = TaskCancelResponse(message="任務已成功取消", task_id=task_id)
     
-    return TaskCancelResponseTyped(
-        success=True,
+    return TaskCancelResponseTyped.success_response(
         data=cancel_data,
-        message=f"任務 {task_id} 已成功取消",
-        error_code=None
+        message=f"任務 {task_id} 已成功取消"
     )
 
 @router.get(
@@ -416,9 +410,7 @@ async def get_task_manager_stats() -> TaskManagerStatsResponseTyped:
         }
     )
     
-    return TaskManagerStatsResponseTyped(
-        success=True,
+    return TaskManagerStatsResponseTyped.success_response(
         data=stats_data,
-        message="統計資訊獲取成功",
-        error_code=None
+        message="統計資訊獲取成功"
     )

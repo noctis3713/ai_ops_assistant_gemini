@@ -183,11 +183,9 @@ async def execute_command(
         logger.info(f"指令執行成功: {request.device_ip} -> {request.command}")
         
         # 返回標準化的 BaseResponse 格式
-        return BaseResponse[str](
-            success=True,
+        return BaseResponse[str].success_response(
             data=output,
-            message="指令執行成功",
-            error_code=None
+            message="指令執行成功"
         )
 
     except Exception as e:
@@ -279,11 +277,9 @@ async def ai_query(
         )
         
         # 返回標準化的 BaseResponse 格式
-        return BaseResponse[str](
-            success=True,
+        return BaseResponse[str].success_response(
             data=ai_result,
-            message="AI 分析完成",
-            error_code=None
+            message="AI 分析完成"
         )
         
     except Exception as e:
@@ -419,10 +415,7 @@ async def batch_execute(
             # 構建AI模式的回應格式 - 每個設備顯示相同的 AI 分析結果
             results = []
             for device_ip in request.devices:
-                device_config = config_manager.get_device_by_ip(device_ip)
-                device_name = config_manager.get_device_name_safe(
-                    device_config, device_ip
-                )
+                device_name = config_manager.get_device_name_by_ip(device_ip)
 
                 results.append(
                     BatchExecutionResult(
@@ -446,10 +439,7 @@ async def batch_execute(
             # 轉換 Nornir 結果格式為 API 回應格式
             results = []
             for device_ip, device_output in batch_result.results.items():
-                device_config = config_manager.get_device_by_ip(device_ip)
-                device_name = config_manager.get_device_name_safe(
-                    device_config, device_ip
-                )
+                device_name = config_manager.get_device_name_by_ip(device_ip)
 
                 results.append(
                     BatchExecutionResult(
@@ -465,10 +455,7 @@ async def batch_execute(
 
             # 處理失敗的設備
             for device_ip, error_msg in batch_result.errors.items():
-                device_config = config_manager.get_device_by_ip(device_ip)
-                device_name = config_manager.get_device_name_safe(
-                    device_config, device_ip
-                )
+                device_name = config_manager.get_device_name_by_ip(device_ip)
 
                 # 獲取詳細錯誤分類
                 error_detail = batch_result.error_details.get(device_ip, {})
@@ -525,11 +512,9 @@ async def batch_execute(
         # 構建標準化的 BatchExecuteResponse
         batch_data = BatchExecuteResponse(results=results, summary=summary)
         
-        return BatchExecuteResponseTyped(
-            success=True,
+        return BatchExecuteResponseTyped.success_response(
             data=batch_data,
-            message=f"批次執行完成: {successful} 成功, {failed} 失敗",
-            error_code=None
+            message=f"批次執行完成: {successful} 成功, {failed} 失敗"
         )
 
     except HTTPException:
@@ -667,11 +652,9 @@ async def batch_execute_async(
             message="任務已成功建立並在背景執行"
         )
         
-        return TaskCreationResponseTyped(
-            success=True,
+        return TaskCreationResponseTyped.success_response(
             data=task_data,
-            message=f"非同步批次任務已建立: {task.task_id}",
-            error_code=None
+            message=f"非同步批次任務已建立: {task.task_id}"
         )
 
     except Exception as e:

@@ -253,33 +253,6 @@ def format_device_execution_result(
     }
 
 
-def format_api_response(
-    success: bool, data: Any = None, message: str = None, error_code: str = None
-) -> Dict[str, Any]:
-    """格式化 API 回應
-
-    Args:
-        success: 操作是否成功
-        data: 回應資料
-        message: 回應訊息
-        error_code: 錯誤代碼
-
-    Returns:
-        Dict[str, Any]: 格式化的 API 回應
-    """
-    response = {"success": success, "timestamp": time.time()}
-
-    if data is not None:
-        response["data"] = data
-
-    if message:
-        response["message"] = message
-
-    if error_code:
-        response["error_code"] = error_code
-
-    return response
-
 
 def validate_ip_address(ip: str) -> bool:
     """驗證 IP 位址格式
@@ -851,7 +824,7 @@ def get_frontend_log_config():
         前端日誌配置物件
     """
     # 導入在函數內部避免循環導入
-    from main import FrontendLogConfig
+    from routers.admin_routes import FrontendLogConfig
 
     # 使用 Settings 的統一前端日誌配置方法
     config_dict = settings.get_frontend_log_config()

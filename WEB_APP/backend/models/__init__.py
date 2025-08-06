@@ -6,5 +6,6 @@ Models 模組 - AI 回應和數據結構定義
 """
 
 from .ai_response import NetworkAnalysisResponse
+from .common import BaseResponse
 
-__all__ = ["NetworkAnalysisResponse"]
+__all__ = ["NetworkAnalysisResponse", "BaseResponse"]
