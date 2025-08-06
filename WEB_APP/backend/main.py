@@ -33,6 +33,7 @@ from async_task_manager import get_task_manager, shutdown_task_manager
 # 導入新的模組化組件
 from config_manager import get_config_manager
 from core.exceptions import ServiceError
+from models.common import BaseResponse
 from utils import LoggerConfig, create_stream_handler
 
 # 導入路由模組
@@ -84,14 +85,11 @@ async def service_exception_handler(request: Request, exc: ServiceError):
     """
     logger.warning(f"服務層發生錯誤: {exc.detail} (路徑: {request.url.path})")
     
-    from models.ai_response import BaseResponse
     return JSONResponse(
         status_code=exc.status_code,
-        content=BaseResponse(
-            success=False,
+        content=BaseResponse.error_response(
             message=exc.detail,
-            error_code=exc.error_code,
-            timestamp=datetime.now().isoformat()
+            error_code=exc.error_code
         ).model_dump(exclude_unset=True),
     )
 
@@ -103,14 +101,11 @@ async def generic_exception_handler(request: Request, exc: Exception):
     """
     logger.error(f"發生未預期的全域錯誤: {exc} (路徑: {request.url.path})", exc_info=True)
     
-    from models.ai_response import BaseResponse
     return JSONResponse(
         status_code=500,
-        content=BaseResponse(
-            success=False,
+        content=BaseResponse.error_response(
             message="內部伺服器發生未預期錯誤，請聯繫管理員",
-            error_code="INTERNAL_SERVER_ERROR",
-            timestamp=datetime.now().isoformat()
+            error_code="INTERNAL_SERVER_ERROR"
         ).model_dump(exclude_unset=True),
     )
 

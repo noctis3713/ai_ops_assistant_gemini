@@ -27,8 +27,11 @@ from core.nornir_integration import get_nornir_manager
 
 # 導入 Pydantic 模型 (從 main.py 中複製，後續可考慮建立獨立的 models 模組)
 from pydantic import BaseModel
-from typing import Optional, TypeVar, Any, Generic
+from typing import Optional, Any
 from datetime import datetime
+
+# 導入統一的 BaseResponse 模型
+from models.common import BaseResponse
 
 # 設定日誌
 logger = logging.getLogger(__name__)
@@ -40,50 +43,8 @@ router = APIRouter(
 )
 
 # =============================================================================
-# Pydantic 模型定義 (設備相關) - 企業級 Generic[T] 型別安全
+# Pydantic 模型定義 (設備相關)
 # =============================================================================
-
-T = TypeVar("T")
-
-class BaseResponse(BaseModel, Generic[T]):
-    """統一的 API 回應格式 - 企業級 Generic[T] 實現
-    
-    特色功能:
-    - 完整的型別安全支援
-    - 自動時間戳記產生  
-    - 標準化錯誤代碼
-    - IDE 智能提示支援
-    """
-    success: bool = True
-    data: Optional[T] = None
-    message: Optional[str] = None
-    error_code: Optional[str] = None
-    timestamp: str = None
-
-    def __init__(self, **data):
-        # 自動產生時間戳記，確保每個回應都有時間資訊
-        if "timestamp" not in data or data["timestamp"] is None:
-            data["timestamp"] = datetime.now().isoformat()
-        super().__init__(**data)
-    
-    class Config:
-        """Pydantic 配置類別"""
-        # 啟用任意型別，增強相容性
-        arbitrary_types_allowed = True
-        # JSON 序列化優化
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-        }
-        # 產生 JSON Schema 用於 API 文件
-        schema_extra = {
-            "example": {
-                "success": True,
-                "data": "<Generic[T] type data>",
-                "message": "操作成功完成",
-                "error_code": None,
-                "timestamp": "2025-08-04T10:30:15.123456"
-            }
-        }
 
 
 class DeviceInfo(BaseModel):
