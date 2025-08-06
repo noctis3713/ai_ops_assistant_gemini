@@ -1,0 +1,130 @@
+# Docker Compose 開發環境覆蓋配置檔案
+# 此檔案會自動覆蓋 docker-compose.yml 中的配置，用於開發環境
+# 使用方式：docker-compose up 會自動載入此檔案
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # 開發環境：反向代理設定
+  # =============================================================================
+  proxy:
+    # 開發環境開放 HTTP 端口以便測試
+    ports:
+      - "80:80"          # 開發環境允許 HTTP 訪問
+      - "443:443"        # HTTPS 端口
+      - "81:81"          # 管理介面端口
+    
+    # 開發環境不限制資源
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+  # =============================================================================
+  # 開發環境：後端服務設定
+  # =============================================================================
+  backend:
+    # 開發環境直接掛載原始碼，支援即時更新
+    volumes:
+      - ./WEB_APP/backend:/app
+      - ${LOGS_PATH:-./logs}:/app/logs
+      - ${CONFIG_PATH:-./WEB_APP/backend/config}:/app/config
+      - /etc/localtime:/etc/localtime:ro
+    
+    # 開發環境環境變數
+    environment:
+      - LOG_LEVEL=DEBUG                    # 開發環境使用 DEBUG 級別
+      - ENABLE_VERBOSE_LOGGING=true        # 啟用詳細日誌
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      
+      # 開發環境 AI 服務配置
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENABLE_DOCUMENT_SEARCH=${ENABLE_DOCUMENT_SEARCH:-false}
+      - PARSER_VERSION=${PARSER_VERSION:-original}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-admin123}
+      - PROMPT_LANGUAGE=${PROMPT_LANGUAGE:-zh_TW}
+    
+    # 開發環境啟動指令，支援自動重載
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+    
+    # 開發環境暴露後端端口以便直接訪問
+    ports:
+      - "8000:8000"
+    
+    # 開發環境不限制資源
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+
+  # =============================================================================
+  # 開發環境：前端服務設定  
+  # =============================================================================
+  frontend:
+    # 開發環境使用 Vite 開發伺服器而非 Nginx
+    build:
+      context: ./WEB_APP/frontend
+      dockerfile: Dockerfile.dev
+      args:
+        - VITE_API_BASE_URL=http://localhost:8000  # 開發環境直接連接後端
+        - VITE_ENVIRONMENT=development
+    
+    # 開發環境掛載原始碼，支援 Hot Module Replacement
+    volumes:
+      - ./WEB_APP/frontend:/app
+      - /app/node_modules  # 避免覆蓋 node_modules
+      - /etc/localtime:/etc/localtime:ro
+    
+    # 開發環境暴露前端端口
+    ports:
+      - "5173:5173"        # Vite 開發伺服器端口
+    
+    # 開發環境啟動指令
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    
+    # 開發環境環境變數
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_ENVIRONMENT=development
+    
+    # 開發環境不限制資源
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+# =============================================================================
+# 開發環境額外服務 (可選)
+# =============================================================================
+  # 開發環境資料庫 (如果需要)
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: ai_ops_dev_db
+  #   environment:
+  #     - POSTGRES_DB=ai_ops_dev
+  #     - POSTGRES_USER=dev_user
+  #     - POSTGRES_PASSWORD=dev_password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./dev-data/postgres:/var/lib/postgresql/data
+  #   networks:
+  #     - ai-ops-network
+
+  # 開發環境 Redis (如果需要快取)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ai_ops_dev_redis
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - ai-ops-network

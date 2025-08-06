@@ -1,0 +1,34 @@
+# Dockerfile.dev for AI Ops Assistant Frontend (Development Environment)
+# 開發環境專用 - 支援 Hot Module Replacement 和即時更新
+
+FROM node:20-alpine
+
+# 設定工作目錄
+WORKDIR /app
+
+# 安裝開發工具
+RUN apk add --no-cache git curl
+
+# 複製 package 檔案
+COPY package*.json ./
+
+# 安裝所有依賴 (包含開發依賴)
+RUN npm install
+
+# 複製原始碼 (在 docker-compose.override.yml 中會被 volume 覆蓋)
+COPY . .
+
+# 設定開發環境變數
+ENV NODE_ENV=development
+ENV VITE_HMR_HOST=0.0.0.0
+ENV VITE_HMR_PORT=5173
+
+# 暴露 Vite 開發伺服器端口
+EXPOSE 5173
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5173/ || exit 1
+
+# 開發環境啟動指令
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
