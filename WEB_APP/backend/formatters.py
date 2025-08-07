@@ -113,12 +113,7 @@ def format_command_results(batch_result) -> Dict[str, Any]:
             "successful": successful,
             "failed": failed,
             "totalTime": total_time,
-            # 包含快取統計（如果有）
-            "cacheStats": (
-                _format_cache_stats(batch_result)
-                if hasattr(batch_result, "cache_hits")
-                else None
-            ),
+            # 移除快取統計 - 已不再使用快取功能
         },
     }
 
@@ -143,29 +138,7 @@ def format_error_details(error_msg: str, error_detail: Dict[str, Any]) -> str:
 
     return formatted_error
 
-
-def _format_cache_stats(batch_result) -> Optional[Dict[str, Any]]:
-    """
-    格式化快取統計資訊
-
-    Args:
-        batch_result: BatchResult 物件
-
-    Returns:
-        快取統計字典或 None
-    """
-    if not hasattr(batch_result, "cache_hits"):
-        return None
-
-    cache_hits = getattr(batch_result, "cache_hits", 0)
-    cache_misses = getattr(batch_result, "cache_misses", 0)
-    total_requests = cache_hits + cache_misses
-
-    return {
-        "hits": cache_hits,
-        "misses": cache_misses,
-        "hitRate": round((cache_hits / max(total_requests, 1)) * 100, 1),
-    }
+# 移除 _format_cache_stats 函數 - 已不再使用快取功能
 
 
 def create_unified_api_response(

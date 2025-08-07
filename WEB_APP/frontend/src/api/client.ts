@@ -219,7 +219,7 @@ function getErrorMessage(error: AxiosError): string {
       const baseResponse = responseData as Record<string, unknown>;
       
       // BaseResponse 格式：{ success: false, message: "...", error_code: "..." }
-      if (typeof baseResponse === 'object' && 'success' in baseResponse && baseResponse.success === false && 'message' in baseResponse && baseResponse.message) {
+      if (baseResponse.success === false && baseResponse.message) {
         logError('API 回傳 BaseResponse 錯誤格式', {
           status,
           message: baseResponse.message,
@@ -228,14 +228,12 @@ function getErrorMessage(error: AxiosError): string {
         return String(baseResponse.message);
       }
       
-      // 處理巢狀的錯誤訊息結構
-      if (baseResponse.detail && typeof baseResponse.detail === 'string') {
-        return baseResponse.detail;
-      }
-      
-      // 處理其他可能的錯誤訊息欄位
-      if (baseResponse.error && typeof baseResponse.error === 'string') {
-        return baseResponse.error;
+      // 處理其他常見的錯誤訊息欄位
+      const errorFields = ['detail', 'error'] as const;
+      for (const field of errorFields) {
+        if (baseResponse[field] && typeof baseResponse[field] === 'string') {
+          return String(baseResponse[field]);
+        }
       }
     }
     

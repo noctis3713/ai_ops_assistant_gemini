@@ -30,19 +30,19 @@ export const findByProperty = <T, K extends keyof T>(
  * 減少各組件中的重複邏輯
  */
 
-// 深拷貝函數
+// 深拷貝函數 - 強化類型安全
 export const deepClone = <T>(obj: T): T => {
   if (obj === null || typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T;
-  if (obj instanceof Array) return obj.map(item => deepClone(item)) as unknown as T;
+  if (obj instanceof Date) return new Date(obj.getTime()) as T;
+  if (Array.isArray(obj)) return obj.map(item => deepClone(item)) as T;
   if (typeof obj === 'object') {
-    const cloneObj = {} as T;
+    const cloneObj = {} as { [K in keyof T]: T[K] };
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
         cloneObj[key] = deepClone(obj[key]);
       }
     }
-    return cloneObj;
+    return cloneObj as T;
   }
   return obj;
 };
@@ -127,18 +127,20 @@ export const isArray = <T>(value: unknown): value is T[] => {
   return Array.isArray(value);
 };
 
-export const isEmpty = (value: unknown): boolean => {
+export const isEmpty = (value: unknown): value is null | undefined | '' | [] | Record<string, never> => {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string') return value.length === 0;
   if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === 'object') return Object.keys(value).length === 0;
+  if (typeof value === 'object' && value !== null) return Object.keys(value).length === 0;
   return false;
 };
 
-// 安全的 JSON 解析
-export const safeJSONParse = <T>(str: string, fallback: T): T => {
+// 安全的 JSON 解析 - 強化類型約束
+export const safeJSONParse = <T = unknown>(str: string, fallback: T): T => {
+  if (typeof str !== 'string') return fallback;
   try {
-    return JSON.parse(str) as T;
+    const parsed = JSON.parse(str);
+    return parsed as T;
   } catch {
     return fallback;
   }

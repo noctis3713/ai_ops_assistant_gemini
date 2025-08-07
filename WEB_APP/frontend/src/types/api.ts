@@ -18,18 +18,8 @@ export interface DeviceGroup {
   platform: string;
 }
 
-// 設備列表回應介面 - 純資料部分（會被 BaseResponse 包裝）  
-// 注意：後端 BaseResponse.data 直接包含 Device[]，不需要額外的介面包裝
-// 已棄用此介面，直接使用 Device[] 類型
-export interface DevicesResponse {
-  data: Device[];
-}
-
-// 設備群組列表回應介面
-// 注意：後端 BaseResponse.data 直接包含 DeviceGroup[]，不需要 groups 包裝
-// 此介面已過時，後端 BaseResponse.data 直接是 DeviceGroup[] 陣列
-// 使用聯合類型而非空介面
-export type DeviceGroupsResponse = DeviceGroup[];
+// 注意：設備和群組清單直接使用 Device[] 和 DeviceGroup[] 類型
+// 透過 BaseResponse<Device[]> 和 BaseResponse<DeviceGroup[]> 包裝
 
 // 單一設備指令執行請求介面（保持向後相容）
 export interface ExecuteRequest {
@@ -144,11 +134,7 @@ export interface BaseResponse<T = unknown> {
   timestamp: string;
 }
 
-/**
- * API 回應基礎類型 - 向後相容
- * @deprecated 建議使用 BaseResponse<T> 獲得更好的型別安全
- */
-export type APIResponse<T = string> = T;
+// API 回應統一使用 BaseResponse<T> 格式
 
 // 具體的 BaseResponse 型別別名，與後端格式完全對齊
 export type DevicesApiResponse = BaseResponse<Device[]>;

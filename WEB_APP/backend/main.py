@@ -58,7 +58,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 應用程式版本常數
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.6.6"
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(

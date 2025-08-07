@@ -254,9 +254,7 @@ def unified_network_command_task(task: Task, command: str) -> Result:
         # 清理資源
         try:
             connection_pool._remove_connection(device_ip)
-            from .network_tools import clear_cache_for_device
-
-            clear_cache_for_device(device_ip)
+            # 移除快取清理 - 已不再使用快取功能
         except:
             pass
 
@@ -621,12 +619,7 @@ class NornirManager:
 
         for device_ip in failed_devices:
             connection_pool._remove_connection(device_ip)
-            try:
-                from .network_tools import clear_cache_for_device
-
-                clear_cache_for_device(device_ip)
-            except:
-                pass
+            # 移除快取清理 - 已不再使用快取功能
 
         if failed_devices:
             logger.info(f"清理了 {len(failed_devices)} 台設備的失敗連線")

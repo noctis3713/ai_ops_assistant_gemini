@@ -77,61 +77,32 @@ export const useBatchExecution = () => {
     }, delay);
   }, [clearStatus, hideBatchProgress]);
 
-  // 智慧批次進度更新 - 動態防抖優化版本
+  // 簡化的進度模擬 - 減少複雜度，提升效能
   const simulateProgress = useCallback((deviceCount: number, executionMode: string) => {
-    let currentCompleted = 0;
-    
-    // 重置進度追蹤
+    let currentProgress = 0;
     lastProgressValueRef.current = -1;
     
-    // 根據執行模式調整最大進度目標
-    // AI 模式：目標到達約75%的設備數，為 AI_ANALYZING 階段(85%)預留空間
-    // 指令模式：目標到達約85%的設備數，為 COMPLETED 階段(100%)預留空間
-    const progressTargetRatio = executionMode === 'ai' ? 0.75 : 0.85;
-    const maxProgress = Math.max(0.5, deviceCount * progressTargetRatio);
-    
-    // 智慧步進計算：根據設備數量動態調整
-    const getSmartSteps = (count: number) => {
-      if (count <= 3) return 8;          // 少量設備：細粒度更新
-      if (count <= 10) return count * 2;  // 中等設備：平衡更新
-      return Math.min(count * 1.5, 20);   // 大量設備：粗粒度更新
-    };
-    
-    const totalSteps = getSmartSteps(deviceCount);
-    const incrementStep = maxProgress / totalSteps;
-    
-    // 智慧更新間隔：根據設備數量和執行模式動態調整
-    const getUpdateInterval = (count: number, mode: string) => {
-      const baseInterval = mode === 'ai' ? 600 : 500;
-      if (count <= 5) return Math.max(300, baseInterval - 100);    // 快速更新
-      if (count <= 15) return baseInterval;                        // 標準更新  
-      return Math.min(1200, baseInterval + count * 30);           // 節制更新
-    };
-    
-    const updateInterval = getUpdateInterval(deviceCount, executionMode);
+    // 根據模式設定目標進度和更新頻率
+    const maxProgress = Math.floor(deviceCount * (executionMode === 'ai' ? 0.75 : 0.85));
+    const increment = Math.max(1, Math.floor(maxProgress / 10));
+    const interval = executionMode === 'ai' ? 800 : 600;
     
     const progressInterval = setInterval(() => {
-      // 強化狀態檢查：確保執行狀態有效且進度未達到最大值
-      if (isExecutingRef.current && currentCompleted < maxProgress && progressIntervalRef.current) {
-        // 平滑遞增，確保進度自然前進但不會超過階段進度
-        currentCompleted = Math.min(currentCompleted + incrementStep, maxProgress);
-        const newProgressValue = Math.floor(currentCompleted);
+      if (isExecutingRef.current && currentProgress < maxProgress) {
+        currentProgress = Math.min(currentProgress + increment, maxProgress);
         
-        // 進度更新緩存：只有當進度值實際改變時才更新
-        if (newProgressValue !== lastProgressValueRef.current) {
-          lastProgressValueRef.current = newProgressValue;
-          updateBatchProgress(newProgressValue);
+        if (currentProgress !== lastProgressValueRef.current) {
+          lastProgressValueRef.current = currentProgress;
+          updateBatchProgress(currentProgress);
         }
       } else {
-        // 自動清理無效的間隔
         clearInterval(progressInterval);
         if (progressIntervalRef.current === progressInterval) {
           progressIntervalRef.current = null;
         }
       }
-    }, updateInterval);
+    }, interval);
     
-    // 存儲 interval ID 以便清理
     return progressInterval;
   }, [updateBatchProgress]);
 
@@ -340,21 +311,9 @@ export const useBatchExecution = () => {
     const now = Date.now();
     const DEBOUNCE_DELAY = 1000; // 1秒防抖延遲
 
-    // 防抖機制：防止用戶快速連續點擊
+    // 簡化防抖機制
     if (now - lastExecutionTimeRef.current < DEBOUNCE_DELAY) {
       setStatus('請勿快速重複點擊，請稍候...', 'warning');
-      
-      // 清除現有的防抖計時器
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-      
-      // 延遲執行
-      debounceTimeoutRef.current = setTimeout(() => {
-        lastExecutionTimeRef.current = Date.now();
-        executeBatch(deviceIps, command);
-      }, DEBOUNCE_DELAY - (now - lastExecutionTimeRef.current));
-      
       return;
     }
 

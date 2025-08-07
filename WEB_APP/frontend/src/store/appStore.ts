@@ -214,14 +214,15 @@ export const useAppStore = create<AppStore>()(
       handleTaskCompletion: (taskResult) => {
         const { setBatchResults, setStatus, hideBatchProgress, setIsExecuting, setIsBatchExecution, clearExecutionStartTime } = get();
         
-        // 設定批次結果
+        // 類型安全的結果設定
         if (taskResult && typeof taskResult === 'object' && 'results' in taskResult && Array.isArray(taskResult.results)) {
           setBatchResults(taskResult.results);
         }
         
-        // 更新狀態訊息
-        const successCount = (taskResult && typeof taskResult === 'object' && 'summary' in taskResult && taskResult.summary && typeof taskResult.summary === 'object' && 'successful' in taskResult.summary) ? Number(taskResult.summary.successful) : 0;
-        const failedCount = (taskResult && typeof taskResult === 'object' && 'summary' in taskResult && taskResult.summary && typeof taskResult.summary === 'object' && 'failed' in taskResult.summary) ? Number(taskResult.summary.failed) : 0;
+        // 類型安全的統計資訊取得
+        const summary = (taskResult && typeof taskResult === 'object' && 'summary' in taskResult) ? taskResult.summary as Record<string, unknown> : {};
+        const successCount = Number(summary?.successful) || 0;
+        const failedCount = Number(summary?.failed) || 0;
         setStatus(`執行完成: ${successCount} 成功, ${failedCount} 失敗`, 'success');
         
         // 隱藏進度並清除執行狀態
@@ -269,22 +270,16 @@ export const useAppStore = create<AppStore>()(
       handleExecutionError: (error, context) => {
         const { setStatus, hideBatchProgress, setIsExecuting, setIsBatchExecution } = get();
         
-        // 設定錯誤狀態
-        let errorMessage = '執行失敗';
-        if (typeof error === 'string') {
-          errorMessage = error;
-        } else if (error instanceof Error) {
-          errorMessage = error.message;
-        } else if (error && typeof error === 'object' && 'message' in error) {
-          errorMessage = String((error as Record<string, unknown>).message);
-        }
+        // 類型安全的錯誤訊息處理
+        const errorMessage = typeof error === 'string' ? error 
+          : error instanceof Error ? error.message 
+          : (error && typeof error === 'object' && 'message' in error) ? String((error as Record<string, unknown>).message) 
+          : '執行失敗';
         
         // 根據上下文調整錯誤訊息
-        if (context) {
-          errorMessage = `${context}: ${errorMessage}`;
-        }
+        const finalErrorMessage = context ? `${context}: ${errorMessage}` : errorMessage;
         
-        setStatus(errorMessage, 'error');
+        setStatus(finalErrorMessage, 'error');
         
         // 清除執行狀態
         hideBatchProgress();

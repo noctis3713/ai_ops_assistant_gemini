@@ -494,20 +494,7 @@ async def batch_execute(
             "totalTime": total_time,
         }
 
-        # 如果不是 AI 模式，加入快取統計
-        if request.mode != "ai" and "batch_result" in locals():
-            if hasattr(batch_result, "cache_hits") and hasattr(
-                batch_result, "cache_misses"
-            ):
-                cache_total = batch_result.cache_hits + batch_result.cache_misses
-                if cache_total > 0:
-                    summary["cacheStats"] = {
-                        "hits": batch_result.cache_hits,
-                        "misses": batch_result.cache_misses,
-                        "hitRate": round(
-                            (batch_result.cache_hits / cache_total) * 100, 1
-                        ),
-                    }
+        # 移除快取統計處理 - 已不再使用快取功能
 
         # 構建標準化的 BatchExecuteResponse
         batch_data = BatchExecuteResponse(results=results, summary=summary)
