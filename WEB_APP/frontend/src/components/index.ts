@@ -17,5 +17,5 @@ export { default as CommandInput } from './features/CommandInput';
 export { default as MultiDeviceSelector } from './features/MultiDeviceSelector';
 export { default as GroupSelector } from './features/GroupSelector';
 export { default as DeviceSelectionContainer } from './features/DeviceSelectionContainer';
-export { default as BatchOutputDisplay } from './features/BatchOutputDisplay';
+// BatchOutputDisplay 已移至懶載入，不再從此處匯出
 export { default as BatchResultItem } from './features/BatchResultItem';

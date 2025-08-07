@@ -3,12 +3,15 @@
  * 支援單選、多選、群組快速選擇
  * 內含折疊顯示、模糊搜尋、群組選擇功能
  */
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { type MultiDeviceSelectorProps, type DeviceGroup } from '@/types';
-import { useDeviceGroups, useTimer } from '@/hooks';
-import { WARNING_STYLES, INFO_STYLES, DEVICE_GROUPS, TIMER_DELAYS } from '@/constants';
+import React, { useState, useCallback } from 'react';
+import { type MultiDeviceSelectorProps } from '@/types';
+import { useDeviceGroups, useDeviceFilter } from '@/hooks';
+import { WARNING_STYLES, INFO_STYLES, DEVICE_GROUPS } from '@/constants';
 import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
 import { findDeviceByIp } from '@/utils/utils';
+import DeviceSearchBox from './DeviceSearchBox';
+import DeviceGroupSelector from './DeviceGroupSelector';
+import DeviceList from './DeviceList';
 
 const MultiDeviceSelector = ({
   devices,
@@ -23,9 +26,6 @@ const MultiDeviceSelector = ({
   // 獲取設備群組資料 - 強化容錯處理
   const { data: deviceGroups = [], isLoading: groupsLoading, error: groupsError } = useDeviceGroups();
   
-  // Timer 工具用於防抖
-  const { setTimeout: setTimeoutSafe, clearTimer } = useTimer();
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 檢查設備資料是否為空的原因
   const getEmptyDevicesReason = () => {
@@ -76,57 +76,32 @@ const MultiDeviceSelector = ({
     // 未來可以擴展其他群組的選擇邏輯
   }, [devices, isGroupSelected, onDevicesChange]);
 
-  // 防抖搜索邏輯 - 只有當用戶停止輸入後才執行實際搜索
-  useEffect(() => {
-    // 清除之前的定時器
-    if (searchTimeoutRef.current) {
-      clearTimer(searchTimeoutRef.current);
-    }
-    
-    // 設置新的防抖定時器
-    searchTimeoutRef.current = setTimeoutSafe(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, TIMER_DELAYS.DEBOUNCE_DEFAULT);
-    
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimer(searchTimeoutRef.current);
-      }
-    };
-  }, [searchTerm, setTimeoutSafe, clearTimer]);
 
-  // 模糊搜尋過濾設備 - 使用防抖後的搜索關鍵字
-  const filteredDevices = useMemo(() => {
-    if (!debouncedSearchTerm.trim()) return devices;
-    
-    const searchLower = debouncedSearchTerm.toLowerCase();
-    return devices.filter(device => 
-      device.name?.toLowerCase().includes(searchLower) ||
-      device.ip.toLowerCase().includes(searchLower) ||
-      device.model?.toLowerCase().includes(searchLower) ||
-      device.description?.toLowerCase().includes(searchLower)
-    );
-  }, [devices, debouncedSearchTerm]);
+  // 使用自定義 Hook 進行設備篩選
+  const { filteredDevices, filterStats } = useDeviceFilter(devices, debouncedSearchTerm);
 
-  // 處理搜尋輸入 - 優化版本帶防抖
+  // 處理搜尋輸入變更
   const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value);
-    // 當輸入搜尋關鍵字時自動展開列表（立即響應UI）
-    if (value.trim() && !isExpanded) {
+  }, []);
+
+  // 處理防抖搜尋變更
+  const handleDebouncedSearchChange = useCallback((value: string) => {
+    setDebouncedSearchTerm(value);
+  }, []);
+
+  // 清除搜尋
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+  }, []);
+
+  // 自動展開列表（當有搜尋內容時）
+  const handleAutoExpand = useCallback(() => {
+    if (!isExpanded) {
       setIsExpanded(true);
     }
   }, [isExpanded]);
-
-  // 清除搜尋 - 優化版本
-  const handleClearSearch = useCallback(() => {
-    setSearchTerm('');
-    setDebouncedSearchTerm(''); // 立即清除防抖搜索
-    // 清除防抖計時器
-    if (searchTimeoutRef.current) {
-      clearTimer(searchTimeoutRef.current);
-      searchTimeoutRef.current = null;
-    }
-  }, [clearTimer]);
 
   if (isLoading) {
     return (
@@ -186,7 +161,6 @@ const MultiDeviceSelector = ({
     );
   }
 
-  const devicesForDisplay = filteredDevices;
 
   return (
     <div className="space-y-3">
@@ -214,138 +188,31 @@ const MultiDeviceSelector = ({
       </div>
 
       {/* 搜尋框 */}
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="搜尋設備名稱、IP、型號或描述..."
-          value={searchTerm}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          className="form-input pr-10"
-        />
-        {searchTerm && (
-          <button
-            onClick={handleClearSearch}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-text-muted hover:text-terminal-text-secondary"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
+      <DeviceSearchBox
+        searchTerm={searchTerm}
+        onSearchChange={handleSearchChange}
+        onDebouncedSearchChange={handleDebouncedSearchChange}
+        onClearSearch={handleClearSearch}
+        onAutoExpand={handleAutoExpand}
+      />
 
-      {/* 群組快速選擇 - 強化容錯處理 */}
-      <div className="min-h-[2rem]">
-        {groupsLoading ? (
-          /* 載入中狀態 */
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-            <div className="flex gap-2">
-              {[1, 2].map((i) => (
-                <div key={i} className="animate-pulse bg-gray-200 rounded-full px-3 py-1 w-20 h-6"></div>
-              ))}
-            </div>
-          </div>
-        ) : groupsError ? (
-          /* 錯誤狀態 */
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-            <div className={WARNING_STYLES.BADGE}>
-              群組載入失敗，但不影響設備選擇功能
-            </div>
-          </div>
-        ) : deviceGroups && Array.isArray(deviceGroups) && deviceGroups.length > 0 ? (
-          /* 正常狀態 */
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-            {deviceGroups
-              .filter((group): group is DeviceGroup => {
-                // 使用類型守衛確保資料有效
-                return group != null && typeof group === 'object' && 'name' in group && typeof group.name === 'string';
-              })
-              .map((group: DeviceGroup) => {
-                try {
-                  const isSelected = isGroupSelected(group.name);
-                  return (
-                    <button
-                      key={group.name}
-                      onClick={() => handleGroupSelect(group.name)}
-                      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full transition-colors ${
-                        isSelected 
-                          ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {group.description || group.name}
-                      <span className={`ml-1 ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
-                        ({group.device_count || 0})
-                      </span>
-                    </button>
-                  );
-                } catch {
-                  return null; // 跳過有問題的群組，不影響其他群組
-                }
-              })
-              .filter(Boolean) // 移除 null 值
-            }
-          </div>
-        ) : (
-          /* 無資料狀態 */
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-            <span className="text-xs text-gray-500">暫無可用群組</span>
-          </div>
-        )}
-      </div>
+      {/* 群組快速選擇 */}
+      <DeviceGroupSelector
+        deviceGroups={deviceGroups}
+        groupsLoading={groupsLoading}
+        groupsError={groupsError}
+        isGroupSelected={isGroupSelected}
+        onGroupSelect={handleGroupSelect}
+      />
 
       {/* 設備列表 */}
-      {isExpanded && (
-        <div className={`
-          max-h-64 overflow-y-auto border border-gray-200 rounded-lg
-          transition-all duration-300 ease-in-out
-        `}>
-          {devicesForDisplay.length === 0 ? (
-            <div className="text-center py-8 text-terminal-text-secondary">
-              {searchTerm ? '沒有找到符合搜尋條件的設備' : '沒有可用的設備'}
-            </div>
-          ) : (
-            devicesForDisplay.map((device, index) => {
-              const isSelected = selectedDevices.includes(device.ip);
-              
-              return (
-                <label
-                  key={device.ip}
-                  className={`
-                    flex items-center space-x-3 p-3 cursor-pointer transition-colors
-                    ${isSelected ? INFO_STYLES.SELECTED : 'hover:bg-gray-50'}
-                    ${index !== devicesForDisplay.length - 1 ? 'border-b border-gray-100' : ''}
-                  `}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleDeviceToggle(device.ip)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-terminal-text-primary truncate">
-                        {device.name || device.ip}
-                      </p>
-                      <span className="text-xs text-terminal-text-secondary ml-2">
-                        {device.model}
-                      </span>
-                    </div>
-                    <p className="text-xs text-terminal-text-secondary truncate">
-                      {device.ip} • {device.description}
-                    </p>
-                  </div>
-                </label>
-              );
-            })
-          )}
-        </div>
-      )}
+      <DeviceList
+        devices={filteredDevices}
+        selectedDevices={selectedDevices}
+        isExpanded={isExpanded}
+        onDeviceToggle={handleDeviceToggle}
+        searchTerm={searchTerm}
+      />
 
       {/* 選擇狀態摘要 */}
       {selectedDevices.length > 0 && (
@@ -363,9 +230,9 @@ const MultiDeviceSelector = ({
       )}
 
       {/* 搜尋結果提示 */}
-      {searchTerm && isExpanded && (
+      {filterStats.hasFilter && isExpanded && (
         <div className="text-xs text-terminal-text-secondary text-center">
-          搜尋到 {filteredDevices.length} 個設備
+          搜尋到 {filterStats.filteredCount} 個設備（共 {filterStats.totalCount} 個）
         </div>
       )}
     </div>

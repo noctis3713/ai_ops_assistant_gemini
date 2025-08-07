@@ -1,7 +1,7 @@
 // 主要應用程式組件
 
 // React 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, lazy, Suspense } from 'react';
 
 // 本地導入
 import { useAppStore } from '@/store';
@@ -9,18 +9,23 @@ import {
   useDevices, 
   useBatchExecution,
   useKeyboardShortcuts,
-  useAsyncTasks
+  useAsyncTasks,
+  usePrefetchCoreData,
+  useBackgroundRefresh
 } from '@/hooks';
 import {
   Header,
   Footer,
   DeviceSelectionContainer,
   CommandInput,
-  BatchOutputDisplay,
   ErrorBoundary,
 } from '@/components';
 import { SplashCursor } from '@/components/ui/splash-cursor';
 import { DEFAULT_TEXT, ERROR_STYLES } from '@/constants';
+import DevPerformanceMonitor from '@/components/DevPerformanceMonitor';
+
+// 懒载入组件 - 減少初始 bundle 大小
+const BatchOutputDisplay = lazy(() => import('@/components/features/BatchOutputDisplay'));
 
 function App() {
   // 全域狀態
@@ -98,6 +103,12 @@ function App() {
   }), [handleExecute, isBatchExecuting]);
   
   useKeyboardShortcuts(keyboardShortcutsOptions);
+  
+  // 預取核心資料，提升首次載入體驗
+  usePrefetchCoreData();
+  
+  // 背景資料重新整理（僅在有執行中任務時啟用）
+  useBackgroundRefresh(isAsyncExecuting || isPolling);
 
   // 檢查當前執行狀態 (使用 useMemo 避免每次重新計算)
   const currentlyExecuting = useMemo(() => {
@@ -280,12 +291,21 @@ function App() {
             resetOnPropsChange={true}
           >
             <section className="flex-1 flex flex-col min-h-0">
-              <BatchOutputDisplay
-                results={batchResults}
-                onClear={handleClearResults}
-                statusText={statusText}
-                statusClassName={statusClassName}
-              />
+              <Suspense fallback={
+                <div className="card">
+                  <div className="card-body text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">載入結果顯示元件...</p>
+                  </div>
+                </div>
+              }>
+                <BatchOutputDisplay
+                  results={batchResults}
+                  onClear={handleClearResults}
+                  statusText={statusText}
+                  statusClassName={statusClassName}
+                />
+              </Suspense>
             </section>
           </ErrorBoundary>
         </main>
@@ -298,6 +318,9 @@ function App() {
           <Footer />
         </ErrorBoundary>
       </div>
+      
+      {/* 開發環境效能監控面板 */}
+      <DevPerformanceMonitor />
     </div>
   );
 }

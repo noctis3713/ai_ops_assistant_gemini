@@ -7,8 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 import { getDevices } from '@/api';
 import { type Device } from '@/types';
 import { logError, logApi } from '@/utils/SimpleLogger';
+import { getCacheStrategy } from '@/utils/cacheStrategies';
 
 export const useDevices = () => {
+  const cacheStrategy = getCacheStrategy('STATIC_DATA'); // 設備清單屬於靜態資料
+
   return useQuery<Device[], Error>({
     queryKey: ['devices'],
     queryFn: async () => {
@@ -43,21 +46,25 @@ export const useDevices = () => {
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000, // 5分鐘內認為資料是新鮮的
-    gcTime: 10 * 60 * 1000, // 10分鐘後清除快取 (原 cacheTime)
+    
+    // 使用優化的快取策略
+    ...cacheStrategy,
+    
+    // 提供空陣列作為 placeholder，改善初始載入體驗
+    placeholderData: [],
+    
+    // 設備清單是應用程式核心資料，提高重試容錯性
     retry: (failureCount, error) => {
-      // 如果是網路連線問題，重試3次
-      if (failureCount < 3) {
+      if (failureCount < cacheStrategy.retry) {
         try {
           logApi(`useDevices: 重試第 ${failureCount + 1} 次`, { error: String(error) });
         } catch {
-          // 如果日誌記錄失敗，不影響重試邏輯
           // 日誌記錄失敗時靜默處理
         }
         return true;
       }
       return false;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: cacheStrategy.retryDelay,
   });
 };

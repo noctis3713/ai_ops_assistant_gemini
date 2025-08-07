@@ -5,3 +5,7 @@ export * from './useBatchExecution';
 export * from './useKeyboardShortcuts';
 export * from './useAsyncTasks';
 export * from './useTimer';
+export * from './useDebounceSearch';
+export * from './useDeviceFilter';
+export * from './usePrefetch';
+export * from './usePerformanceMonitor';

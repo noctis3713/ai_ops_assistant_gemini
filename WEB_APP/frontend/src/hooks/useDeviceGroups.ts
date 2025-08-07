@@ -4,8 +4,11 @@ import { getDeviceGroups } from '@/api';
 import { type DeviceGroup } from '@/types';
 import { logError, logSystem } from '@/utils/SimpleLogger';
 import { ErrorHandler } from '@/utils/errorHandler';
+import { getCacheStrategy } from '@/utils/cacheStrategies';
 
 export const useDeviceGroups = () => {
+  const cacheStrategy = getCacheStrategy('STATIC_DATA'); // 群組資料也屬於靜態資料
+
   return useQuery<DeviceGroup[], Error>({
     queryKey: ['device-groups'],
     queryFn: async () => {
@@ -52,11 +55,14 @@ export const useDeviceGroups = () => {
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5分鐘內認為資料是新鮮的
-    gcTime: 10 * 60 * 1000, // 10分鐘後清除快取
+    
+    // 使用優化的快取策略
+    ...cacheStrategy,
+    
+    // 智能重試策略
     retry: (failureCount, error) => {
       // 限制重試次數，避免無限重試
-      if (failureCount >= 3) {
+      if (failureCount >= cacheStrategy.retry) {
         logError('設備群組載入重試次數已達上限', { 
           failureCount, 
           error: error?.message 
@@ -65,10 +71,9 @@ export const useDeviceGroups = () => {
       }
       return true;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: cacheStrategy.retryDelay,
     
     // 提供預設值，確保 UI 有資料可以渲染
     placeholderData: [],
-    
   });
 };
