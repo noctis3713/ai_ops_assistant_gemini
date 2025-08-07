@@ -29,7 +29,6 @@ from core.settings import settings
 
 from .network_tools import (
     CommandValidator,
-    command_cache,
     connection_pool,
     get_device_credentials,
     run_readonly_show_command,
@@ -207,14 +206,7 @@ def unified_network_command_task(task: Task, command: str) -> Result:
     device_config = task.host.data.get("device_config")
 
     try:
-        # 檢查快取
-        cacheable_commands = ["version", "inventory", "logging"]
-        if any(keyword in command.lower() for keyword in cacheable_commands):
-            cached_result = command_cache.get(device_ip, command)
-            if cached_result:
-                logger.info(f"從快取返回: {device_ip} -> {command}")
-                network_logger.info(f"從快取返回: {device_ip} -> {command}")
-                return Result(host=task.host, result=cached_result, failed=False)
+        # 移除快取檢查 - 每次都執行真實查詢
 
         # 執行指令
         result = run_readonly_show_command(
@@ -288,8 +280,7 @@ class BatchResult:
     execution_time: float
     errors: Dict[str, str]
     error_details: Dict[str, Dict[str, Any]]  # 詳細錯誤分類
-    cache_hits: int = 0  # 快取命中次數
-    cache_misses: int = 0  # 快取未命中次數
+    # 移除快取統計欄位 - 不再追蹤快取命中率
 
     def to_api_response(self) -> Dict[str, Any]:
         """
@@ -711,8 +702,6 @@ class NornirManager:
                 execution_time=0,
                 errors={"security": error_message},
                 error_details=error_details,
-                cache_hits=0,
-                cache_misses=0,
             )
 
         start_time = time.time()
@@ -737,8 +726,6 @@ class NornirManager:
                 execution_time=0,
                 errors={"filter": error_msg},
                 error_details=error_details,
-                cache_hits=0,
-                cache_misses=0,
             )
 
         logger.info(f"開始批次執行指令: {command}，目標設備: {total_devices} 台")
@@ -751,21 +738,7 @@ class NornirManager:
             except Exception as e:
                 logger.warning(f"連線預檢查失敗，繼續執行: {e}")
 
-        # 檢查是否為可快取指令，提前計算快取統計
-        cacheable_commands = ["version", "inventory", "logging"]
-        is_cacheable = any(keyword in command.lower() for keyword in cacheable_commands)
-        cache_hits = 0
-        cache_misses = 0
-
-        if is_cacheable:
-            # 預計算快取命中情況
-            for host in filtered_nr.inventory.hosts.values():
-                if command_cache.get(host.hostname, command):
-                    cache_hits += 1
-                else:
-                    cache_misses += 1
-        else:
-            cache_misses = total_devices
+        # 移除快取統計計算 - 不再使用快取機制
 
         # 執行批次指令 - 使用統一的任務函式
         try:
@@ -815,8 +788,6 @@ class NornirManager:
                 execution_time=execution_time,
                 errors=errors,
                 error_details=error_details,
-                cache_hits=cache_hits,
-                cache_misses=cache_misses,
             )
 
         except Exception as e:
@@ -834,8 +805,6 @@ class NornirManager:
                 execution_time=execution_time,
                 errors={"batch_execution": error_msg},
                 error_details=error_details,
-                cache_hits=0,
-                cache_misses=total_devices,
             )
 
     def run_group_command(self, command: str, group_name: str) -> BatchResult:
@@ -860,8 +829,6 @@ class NornirManager:
                 execution_time=0,
                 errors={"nornir": error_msg},
                 error_details=error_details,
-                cache_hits=0,
-                cache_misses=0,
             )
 
         # 篩選群組設備
@@ -881,8 +848,6 @@ class NornirManager:
                     execution_time=0,
                     errors={"group": error_msg},
                     error_details=error_details,
-                    cache_hits=0,
-                    cache_misses=0,
                 )
 
             logger.info(
@@ -903,8 +868,6 @@ class NornirManager:
                 execution_time=0,
                 errors={"group_execution": error_msg},
                 error_details=error_details,
-                cache_hits=0,
-                cache_misses=0,
             )
 
 
@@ -983,7 +946,6 @@ def format_batch_result_for_ai(result: BatchResult) -> str:
             "successful_devices": result.successful_devices,
             "failed_devices": result.failed_devices,
             "execution_time_seconds": round(result.execution_time, 2),
-            "cache_stats": {"hits": result.cache_hits, "misses": result.cache_misses},
         },
         "successful_results": [],
         "failed_results": [],
@@ -1040,12 +1002,7 @@ def format_batch_result(result: BatchResult) -> str:
     output += f"  失敗設備：{result.failed_devices} 台\n"
     output += f"  執行時間：{result.execution_time:.2f} 秒\n"
 
-    # 顯示快取統計
-    if hasattr(result, "cache_hits") and hasattr(result, "cache_misses"):
-        total_cache_requests = result.cache_hits + result.cache_misses
-        if total_cache_requests > 0:
-            cache_hit_rate = (result.cache_hits / total_cache_requests) * 100
-            output += f"  快取效能：命中 {result.cache_hits} 次，未命中 {result.cache_misses} 次（命中率：{cache_hit_rate:.1f}%）\n"
+    # 移除快取統計顯示 - 不再追蹤快取命中率
     output += "\n"
 
     # 優先顯示成功結果 - 明確標示執行成功

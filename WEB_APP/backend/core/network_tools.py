@@ -477,45 +477,8 @@ class ConnectionPool:
 connection_pool = ConnectionPool()
 
 
-class CommandCache:
-    """指令結果快取管理器 - 減少重複查詢"""
-
-    def __init__(self, max_size: int = None, ttl: int = None):
-        self.cache = {}
-        self.timestamps = {}
-        self.max_size = settings.CACHE_MAX_SIZE if max_size is None else max_size
-        self.ttl = settings.CACHE_TTL if ttl is None else ttl
-        self.lock = threading.Lock()
-
-    def get(self, device_ip: str, command: str) -> Optional[str]:
-        key = f"{device_ip}:{command}"
-        current_time = time.time()
-
-        with self.lock:
-            if key in self.cache:
-                if current_time - self.timestamps[key] < self.ttl:
-                    return self.cache[key]
-                else:
-                    del self.cache[key]
-                    del self.timestamps[key]
-        return None
-
-    def set(self, device_ip: str, command: str, result: str):
-        key = f"{device_ip}:{command}"
-        current_time = time.time()
-
-        with self.lock:
-            if len(self.cache) >= self.max_size:
-                oldest_key = min(self.timestamps, key=self.timestamps.get)
-                del self.cache[oldest_key]
-                del self.timestamps[oldest_key]
-
-            self.cache[key] = result
-            self.timestamps[key] = current_time
-
-
-# 全域指令快取實例
-command_cache = CommandCache()
+# 移除 CommandCache 類別 - 每次執行都必須是真實結果
+# 不再使用快取，確保每次查詢都返回最新的設備狀態
 
 
 def _process_long_output(
@@ -586,13 +549,7 @@ def run_readonly_show_command(device_ip: str, command: str, device_config=None) 
         logger.warning(f"拒絕執行不安全指令: {command}, 原因: {error_message}")
         return f"錯誤：{error_message}"
 
-    # 檢查可快取的指令類型
-    cacheable_commands = ["version", "inventory", "logging"]
-    if any(keyword in command.lower() for keyword in cacheable_commands):
-        cached_result = command_cache.get(device_ip, command)
-        if cached_result:
-            logger.info(f"從快取返回結果: {command}")
-            return cached_result
+    # 移除快取檢查 - 每次都執行真實查詢
 
     logger.info(f"執行指令: {device_ip} -> {command}")
 
@@ -609,25 +566,14 @@ def run_readonly_show_command(device_ip: str, command: str, device_config=None) 
                 command, output, enable_ai_summary=False, execution_mode="device"
             )
 
-            # 將處理後的結果加入快取（針對特定指令類型）
-            if any(keyword in command.lower() for keyword in cacheable_commands):
-                output_to_cache = processed_output
-                # 對於超長輸出進行截斷處理（使用環境變數控制）
-                output_max_size = settings.OUTPUT_MAX_SIZE
-                if len(processed_output) > output_max_size:
-                    output_to_cache = (
-                        processed_output[:output_max_size]
-                        + "\n\n[輸出已截斷，如需完整內容請重新查詢]"
-                    )
-                command_cache.set(device_ip, command, output_to_cache)
+            # 移除快取儲存邏輯 - 不再快取任何結果
 
             return processed_output
 
         except Exception as e:
             logger.error(f"指令執行失敗: {command}, 錯誤: {e}")
-            # 移除有問題的連線並清理相關快取
+            # 移除有問題的連線
             connection_pool._remove_connection(device_ip)
-            clear_cache_for_device(device_ip)
             return f"錯誤：執行指令時發生錯誤: {e}"
 
     return _direct_connection_fallback(device_ip, command, device_config)
@@ -667,15 +613,7 @@ def _direct_connection_fallback(
         return error_msg
 
 
-def clear_cache_for_device(device_ip: str):
-    """清理特定設備快取"""
-    with command_cache.lock:
-        keys_to_remove = [
-            key for key in command_cache.cache.keys() if key.startswith(f"{device_ip}:")
-        ]
-        for key in keys_to_remove:
-            del command_cache.cache[key]
-            del command_cache.timestamps[key]
+# 移除 clear_cache_for_device 函數 - 不再需要快取清理
 
 
 def is_ai_summary_available() -> bool:

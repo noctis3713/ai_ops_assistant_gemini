@@ -77,9 +77,7 @@ class Settings(BaseSettings):
     # 快取和輸出配置
     # =============================================================================
     
-    # 指令快取配置
-    CACHE_MAX_SIZE: int = Field(default=512, description="快取最大項目數")
-    CACHE_TTL: int = Field(default=300, description="快取存活時間 (秒)")
+    # 移除指令快取配置 - 每次執行都必須是真實結果
     
     # 輸出處理配置
     DEVICE_OUTPUT_MAX_LENGTH: int = Field(default=50000, description="設備輸出最大長度")
@@ -237,12 +235,7 @@ class Settings(BaseSettings):
             "health_check_interval": self.HEALTH_CHECK_INTERVAL,
         }
     
-    def get_cache_config(self) -> dict:
-        """取得快取配置字典"""
-        return {
-            "max_size": self.CACHE_MAX_SIZE,
-            "ttl": self.CACHE_TTL,
-        }
+    # 移除 get_cache_config 方法 - 不再使用快取
     
     def get_task_manager_config(self) -> dict:
         """取得任務管理器配置字典"""
@@ -550,23 +543,12 @@ class Settings(BaseSettings):
                 if not os.getenv("NORNIR_WORKERS") and "workers" in nornir_config:
                     self.NORNIR_WORKERS = nornir_config["workers"]
             
-            # 快取配置覆蓋
-            cache_config = backend_config.get("cache", {})
-            command_cache = cache_config.get("command", {})
-            if command_cache:
-                if not os.getenv("CACHE_MAX_SIZE") and "maxSize" in command_cache:
-                    self.CACHE_MAX_SIZE = command_cache["maxSize"]
-                
-                if not os.getenv("CACHE_TTL") and "ttlSeconds" in command_cache:
-                    self.CACHE_TTL = command_cache["ttlSeconds"]
-            
-            output_cache = cache_config.get("output", {})
-            if output_cache:
-                if not os.getenv("DEVICE_OUTPUT_MAX_LENGTH") and "maxLength" in output_cache:
-                    self.DEVICE_OUTPUT_MAX_LENGTH = output_cache["maxLength"]
-                
-                if not os.getenv("OUTPUT_MAX_SIZE") and "maxCacheSize" in output_cache:
-                    self.OUTPUT_MAX_SIZE = output_cache["maxCacheSize"]
+            # 輸出處理配置覆蓋
+            output_config = backend_config.get("output", {})
+            output_processing = output_config.get("processing", {})
+            if output_processing:
+                if not os.getenv("DEVICE_OUTPUT_MAX_LENGTH") and "maxLength" in output_processing:
+                    self.DEVICE_OUTPUT_MAX_LENGTH = output_processing["maxLength"]
             
             # 日誌配置覆蓋
             logging_config = backend_config.get("logging", {})

@@ -54,27 +54,14 @@ network:
     numWorkers: 5              # Nornir 內部工作執行緒
 
 # =============================================================================
-# 快取和效能配置
+# 輸出處理配置
 # =============================================================================
-cache:
-  # 指令快取配置
-  command:
-    maxSize: 512               # 快取最大項目數
-    ttlSeconds: 300            # 快取存活時間 (秒)
-    enableCompression: false   # 啟用快取內容壓縮
-    maxItemSize: 1048576       # 單項最大大小 (1MB)
-  
-  # 輸出處理快取
-  output:
+output:
+  # 輸出處理設定
+  processing:
     maxLength: 50000           # 設備輸出最大長度
-    maxCacheSize: 50000        # 輸出快取最大大小
     enableTruncation: true     # 自動截斷過長輸出
     truncationSuffix: "... [輸出已截斷]"
-  
-  # 連線狀態快取
-  status:
-    deviceStatusTTL: 60        # 設備狀態快取時間 (秒)
-    healthCheckCacheTTL: 30    # 健康檢查快取時間 (秒)
 
 # =============================================================================
 # 日誌系統配置
