@@ -1,5 +1,9 @@
 // 設備管理 Hook (使用 TanStack Query)
+
+// 第三方庫
 import { useQuery } from '@tanstack/react-query';
+
+// 本地導入
 import { getDevices } from '@/api';
 import { type Device } from '@/types';
 import { logError, logApi } from '@/utils/SimpleLogger';
@@ -11,8 +15,8 @@ export const useDevices = () => {
       try {
         try {
           logApi('useDevices: 開始獲取設備列表', {});
-        } catch (logErr) {
-          console.warn('日誌記錄失敗:', logErr);
+        } catch {
+          // 日誌記錄失敗時靜默處理
         }
         
         const devices = await getDevices();
@@ -22,8 +26,8 @@ export const useDevices = () => {
             deviceCount: devices.length,
             deviceIps: devices.map(d => d.ip)
           });
-        } catch (logErr) {
-          console.warn('日誌記錄失敗:', logErr);
+        } catch {
+          // 日誌記錄失敗時靜默處理
         }
         
         return devices;
@@ -33,8 +37,8 @@ export const useDevices = () => {
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined
           }, error instanceof Error ? error : new Error(String(error)));
-        } catch (logErr) {
-          console.warn('錯誤日誌記錄失敗:', logErr);
+        } catch {
+          // 日誌記錄失敗時靜默處理
         }
         throw error;
       }
@@ -46,9 +50,9 @@ export const useDevices = () => {
       if (failureCount < 3) {
         try {
           logApi(`useDevices: 重試第 ${failureCount + 1} 次`, { error: String(error) });
-        } catch (logErr) {
+        } catch {
           // 如果日誌記錄失敗，不影響重試邏輯
-          console.warn('日誌記錄失敗:', logErr);
+          // 日誌記錄失敗時靜默處理
         }
         return true;
       }

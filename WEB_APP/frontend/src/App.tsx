@@ -1,5 +1,9 @@
 // 主要應用程式組件
+
+// React 
 import { useCallback, useMemo } from 'react';
+
+// 本地導入
 import { useAppStore } from '@/store';
 import { 
   useDevices, 
@@ -16,7 +20,7 @@ import {
   ErrorBoundary,
 } from '@/components';
 import { SplashCursor } from '@/components/ui/splash-cursor';
-import { DEFAULT_TEXT } from '@/constants';
+import { DEFAULT_TEXT, ERROR_STYLES } from '@/constants';
 
 function App() {
   // 全域狀態
@@ -50,6 +54,11 @@ function App() {
     isExecuting: isAsyncExecuting, 
     isPolling 
   } = useAsyncTasks();
+
+  // 統一重載處理函數 - 避免重複的重載邏輯 (使用 useCallback 避免重新創建)
+  const handleReload = useCallback(() => {
+    window.location.reload();
+  }, []);
 
   // 統一執行邏輯 - 支援同步和非同步模式 (使用 useCallback 避免重新創建)
   const handleExecute = useCallback(async () => {
@@ -148,7 +157,7 @@ function App() {
       />
       <div className="max-w-6xl mx-auto p-6 min-h-screen flex flex-col">
         <ErrorBoundary fallback={
-          <div className="text-center py-4 bg-red-50 border border-red-200 rounded">
+          <div className={`text-center py-4 ${ERROR_STYLES.CONTAINER_ROUNDED}`}>
             <p className="text-red-700">標題載入失敗，請重新載入頁面</p>
           </div>
         }>
@@ -169,7 +178,7 @@ function App() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">設備選擇功能發生錯誤</h3>
                   <p className="text-gray-600 mb-4">無法載入設備選擇介面，這可能是由於網路問題或後端服務異常</p>
                   <button 
-                    onClick={() => window.location.reload()} 
+                    onClick={handleReload} 
                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                   >
                     重新載入頁面
@@ -193,7 +202,7 @@ function App() {
                 
                 {/* 設備載入錯誤提示 */}
                 {devicesError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className={ERROR_STYLES.CONTAINER_ROUNDED_PADDED}>
                     <div className="flex items-start space-x-3">
                       <div className="text-red-600 mt-1">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,8 +218,8 @@ function App() {
                         </div>
                         <div className="mt-3">
                           <button
-                            onClick={() => window.location.reload()}
-                            className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded hover:bg-red-200 transition-colors"
+                            onClick={handleReload}
+                            className={ERROR_STYLES.BUTTON}
                           >
                             重新載入
                           </button>
@@ -258,7 +267,7 @@ function App() {
                       清空結果
                     </button>
                     <button 
-                      onClick={() => window.location.reload()} 
+                      onClick={handleReload} 
                       className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
                     >
                       重新載入

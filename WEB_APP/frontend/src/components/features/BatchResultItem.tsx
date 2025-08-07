@@ -2,9 +2,12 @@
  * 結果項目組件
  * 顯示單個設備的執行結果
  */
+import React from 'react';
 import { type BatchResultItemProps } from '@/types';
 import { useAppStore } from '@/store';
 import { useDevices } from '@/hooks';
+import { ERROR_STYLES, NEUTRAL_STYLES } from '@/constants';
+import { findDeviceByIp } from '@/utils/utils';
 
 const BatchResultItem = ({ 
   result, 
@@ -20,7 +23,7 @@ const BatchResultItem = ({
   
   // 根據 IP 查找設備描述
   const getDeviceDescription = (deviceIp: string) => {
-    const device = devices?.find((d) => d.ip === deviceIp);
+    const device = devices ? findDeviceByIp(devices, deviceIp) : undefined;
     return device?.description || '';
   };
   const handleCopyOutput = () => {
@@ -80,7 +83,7 @@ const BatchResultItem = ({
                 hour12: false
               }).replace(/\//g, '-') : '執行時間未知'}
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded p-3 text-sm font-mono text-terminal-text-primary whitespace-pre-wrap">
+            <div className={NEUTRAL_STYLES.CODE_BLOCK}>
               {result.output || '(無輸出)'}
             </div>
           </div>
@@ -89,7 +92,7 @@ const BatchResultItem = ({
           {result.error && (
             <div>
               <div className="text-sm font-medium text-red-700 mb-1">錯誤信息:</div>
-              <div className="bg-red-50 border border-red-200 rounded p-3 text-sm font-mono text-red-800 whitespace-pre-wrap">
+              <div className={ERROR_STYLES.CODE_BLOCK}>
                 {result.error}
               </div>
             </div>
@@ -101,4 +104,4 @@ const BatchResultItem = ({
   );
 };
 
-export default BatchResultItem;
+export default React.memo(BatchResultItem);

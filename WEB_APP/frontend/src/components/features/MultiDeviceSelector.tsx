@@ -3,9 +3,12 @@
  * 支援單選、多選、群組快速選擇
  * 內含折疊顯示、模糊搜尋、群組選擇功能
  */
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { type MultiDeviceSelectorProps, type DeviceGroup } from '@/types';
-import { useDeviceGroups } from '@/hooks';
+import { useDeviceGroups, useTimer } from '@/hooks';
+import { WARNING_STYLES, INFO_STYLES, DEVICE_GROUPS, TIMER_DELAYS } from '@/constants';
+import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
+import { findDeviceByIp } from '@/utils/utils';
 
 const MultiDeviceSelector = ({
   devices,
@@ -15,46 +18,51 @@ const MultiDeviceSelector = ({
 }: MultiDeviceSelectorProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   
   // 獲取設備群組資料 - 強化容錯處理
   const { data: deviceGroups = [], isLoading: groupsLoading, error: groupsError } = useDeviceGroups();
+  
+  // Timer 工具用於防抖
+  const { setTimeout: setTimeoutSafe, clearTimer } = useTimer();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 檢查設備資料是否為空的原因
   const getEmptyDevicesReason = () => {
     if (isLoading) return '正在載入設備資料...';
     if (devices.length === 0) {
-      return '無法從後端 API 獲取設備資料。請檢查：\n1. 後端服務是否正常運行 (http://localhost:8000)\n2. 網路連線是否正常\n3. 設備配置檔案是否存在';
+      return `無法從後端 API 獲取設備資料。請檢查：\n1. 後端服務是否正常運行 (${API_CONFIG.BASE_URL})\n2. 網路連線是否正常\n3. 設備配置檔案是否存在`;
     }
     return null;
   };
 
-  const handleDeviceToggle = (deviceIp: string) => {
+  const handleDeviceToggle = useCallback((deviceIp: string) => {
     const newSelection = selectedDevices.includes(deviceIp)
       ? selectedDevices.filter(ip => ip !== deviceIp)
       : [...selectedDevices, deviceIp];
     
     onDevicesChange(newSelection);
-  };
+  }, [selectedDevices, onDevicesChange]);
 
-  const handleClearSelection = () => {
+  const handleClearSelection = useCallback(() => {
     onDevicesChange([]);
-  };
+  }, [onDevicesChange]);
 
-  // 判斷群組是否被完全選取
-  const isGroupSelected = (groupName: string) => {
-    if (groupName === 'cisco_xe_devices') {
+  // 判斷群組是否被完全選取 - 使用 useCallback 優化
+  const isGroupSelected = useCallback((groupName: string) => {
+    if (groupName === DEVICE_GROUPS.ALL_DEVICES) {
       const allDeviceIps = devices.map(device => device.ip);
       return allDeviceIps.every(ip => selectedDevices.includes(ip)) && 
              allDeviceIps.length === selectedDevices.length;
     }
     // 未來可以擴展其他群組的選擇邏輯
     return false;
-  };
+  }, [devices, selectedDevices]);
 
-  // 群組快速選擇函數
-  const handleGroupSelect = (groupName: string) => {
-    // 對於 cisco_xe_devices 群組，實現切換選擇邏輯
-    if (groupName === 'cisco_xe_devices') {
+  // 群組快速選擇函數 - 添加節流優化防止快速點擊
+  const handleGroupSelect = useCallback((groupName: string) => {
+    // 對於所有設備群組，實現切換選擇邏輯
+    if (groupName === DEVICE_GROUPS.ALL_DEVICES) {
       const allDeviceIps = devices.map(device => device.ip);
       
       if (isGroupSelected(groupName)) {
@@ -66,34 +74,59 @@ const MultiDeviceSelector = ({
       }
     }
     // 未來可以擴展其他群組的選擇邏輯
-  };
+  }, [devices, isGroupSelected, onDevicesChange]);
 
-  // 模糊搜尋過濾設備
-  const filteredDevices = useMemo(() => {
-    if (!searchTerm.trim()) return devices;
+  // 防抖搜索邏輯 - 只有當用戶停止輸入後才執行實際搜索
+  useEffect(() => {
+    // 清除之前的定時器
+    if (searchTimeoutRef.current) {
+      clearTimer(searchTimeoutRef.current);
+    }
     
-    const searchLower = searchTerm.toLowerCase();
+    // 設置新的防抖定時器
+    searchTimeoutRef.current = setTimeoutSafe(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, TIMER_DELAYS.DEBOUNCE_DEFAULT);
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimer(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm, setTimeoutSafe, clearTimer]);
+
+  // 模糊搜尋過濾設備 - 使用防抖後的搜索關鍵字
+  const filteredDevices = useMemo(() => {
+    if (!debouncedSearchTerm.trim()) return devices;
+    
+    const searchLower = debouncedSearchTerm.toLowerCase();
     return devices.filter(device => 
       device.name?.toLowerCase().includes(searchLower) ||
       device.ip.toLowerCase().includes(searchLower) ||
       device.model?.toLowerCase().includes(searchLower) ||
       device.description?.toLowerCase().includes(searchLower)
     );
-  }, [devices, searchTerm]);
+  }, [devices, debouncedSearchTerm]);
 
-  // 處理搜尋輸入
-  const handleSearchChange = (value: string) => {
+  // 處理搜尋輸入 - 優化版本帶防抖
+  const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value);
-    // 當輸入搜尋關鍵字時自動展開列表
+    // 當輸入搜尋關鍵字時自動展開列表（立即響應UI）
     if (value.trim() && !isExpanded) {
       setIsExpanded(true);
     }
-  };
+  }, [isExpanded]);
 
-  // 清除搜尋
-  const handleClearSearch = () => {
+  // 清除搜尋 - 優化版本
+  const handleClearSearch = useCallback(() => {
     setSearchTerm('');
-  };
+    setDebouncedSearchTerm(''); // 立即清除防抖搜索
+    // 清除防抖計時器
+    if (searchTimeoutRef.current) {
+      clearTimer(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+  }, [clearTimer]);
 
   if (isLoading) {
     return (
@@ -115,7 +148,7 @@ const MultiDeviceSelector = ({
     return (
       <div className="space-y-4">
         {/* 錯誤提示卡片 */}
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className={WARNING_STYLES.CONTAINER_ROUNDED_PADDED}>
           <div className="flex items-start space-x-3">
             <div className="text-amber-600 mt-1">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -132,12 +165,12 @@ const MultiDeviceSelector = ({
               <div className="mt-3 flex space-x-2">
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-3 py-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded hover:bg-amber-200 transition-colors"
+                  className={WARNING_STYLES.BUTTON}
                 >
                   重新載入頁面
                 </button>
                 <a
-                  href="http://localhost:8000/api/devices"
+                  href={`${API_CONFIG.BASE_URL}${API_ENDPOINTS.DEVICES}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded hover:bg-amber-200 transition-colors"
@@ -153,7 +186,7 @@ const MultiDeviceSelector = ({
     );
   }
 
-  const devicesForDisplay = searchTerm ? filteredDevices : devices;
+  const devicesForDisplay = filteredDevices;
 
   return (
     <div className="space-y-3">
@@ -217,7 +250,7 @@ const MultiDeviceSelector = ({
           /* 錯誤狀態 */
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-terminal-text-secondary">群組快選：</span>
-            <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+            <div className={WARNING_STYLES.BADGE}>
               群組載入失敗，但不影響設備選擇功能
             </div>
           </div>
@@ -249,10 +282,7 @@ const MultiDeviceSelector = ({
                       </span>
                     </button>
                   );
-                } catch (error) {
-                  if (process.env.NODE_ENV === 'development') {
-                    console.warn('渲染群組按鈕時發生錯誤:', error, group);
-                  }
+                } catch {
                   return null; // 跳過有問題的群組，不影響其他群組
                 }
               })
@@ -287,7 +317,7 @@ const MultiDeviceSelector = ({
                   key={device.ip}
                   className={`
                     flex items-center space-x-3 p-3 cursor-pointer transition-colors
-                    ${isSelected ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'hover:bg-gray-50'}
+                    ${isSelected ? INFO_STYLES.SELECTED : 'hover:bg-gray-50'}
                     ${index !== devicesForDisplay.length - 1 ? 'border-b border-gray-100' : ''}
                   `}
                 >
@@ -319,13 +349,13 @@ const MultiDeviceSelector = ({
 
       {/* 選擇狀態摘要 */}
       {selectedDevices.length > 0 && (
-        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className={`mt-2 ${INFO_STYLES.CONTAINER_ROUNDED_PADDED}`}>
           <div className="text-xs text-blue-800 font-medium mb-1">
             已選擇 {selectedDevices.length} 個設備
           </div>
           <div className="text-xs text-blue-600">
             {selectedDevices.map(ip => {
-              const device = devices.find(d => d.ip === ip);
+              const device = findDeviceByIp(devices, ip);
               return device?.name || ip;
             }).join(', ')}
           </div>
@@ -342,4 +372,4 @@ const MultiDeviceSelector = ({
   );
 };
 
-export default MultiDeviceSelector;
+export default React.memo(MultiDeviceSelector);

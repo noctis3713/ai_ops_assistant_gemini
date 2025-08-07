@@ -2,7 +2,7 @@
  * 輸出顯示組件
  * 顯示多設備執行結果的詳細信息
  */
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { type BatchOutputDisplayProps } from '@/types';
 import BatchResultItem from './BatchResultItem';
 import Button from '@/components/common/Button';
@@ -22,11 +22,8 @@ const BatchOutputDisplay = ({
     }
   }, [results.length, expandedItems.size, results]);
 
-  if (results.length === 0) {
-    return null;
-  }
-
-  const toggleExpanded = (deviceIp: string) => {
+  // React Hooks 必須在組件頂層調用，在任何條件判斷之前
+  const toggleExpanded = useCallback((deviceIp: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(deviceIp)) {
       newExpanded.delete(deviceIp);
@@ -34,22 +31,31 @@ const BatchOutputDisplay = ({
       newExpanded.add(deviceIp);
     }
     setExpandedItems(newExpanded);
-  };
+  }, [expandedItems]);
 
-  const copyToClipboard = (content: string) => {
+  const copyToClipboard = useCallback((content: string) => {
     navigator.clipboard.writeText(content).then(() => {
       // 複製成功，可以在未來添加通知組件
     });
-  };
+  }, []);
 
-  const filteredResults = results.filter(result => {
-    if (filterStatus === 'success') return result.success;
-    if (filterStatus === 'failed') return !result.success;
-    return true;
-  });
+  const filteredResults = useMemo(() => {
+    return results.filter(result => {
+      if (filterStatus === 'success') return result.success;
+      if (filterStatus === 'failed') return !result.success;
+      return true;
+    });
+  }, [results, filterStatus]);
 
-  const successCount = results.filter(r => r.success).length;
-  const failedCount = results.filter(r => !r.success).length;
+  const { successCount, failedCount } = useMemo(() => ({
+    successCount: results.filter(r => r.success).length,
+    failedCount: results.filter(r => !r.success).length
+  }), [results]);
+
+  // 條件渲染必須在所有 Hooks 之後
+  if (results.length === 0) {
+    return null;
+  }
 
   return (
     <div className="card">
@@ -134,4 +140,4 @@ const BatchOutputDisplay = ({
   );
 };
 
-export default BatchOutputDisplay;
+export default React.memo(BatchOutputDisplay);

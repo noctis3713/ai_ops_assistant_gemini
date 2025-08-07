@@ -1,6 +1,6 @@
 // 按鈕組件
 import React from 'react';
-import { cn } from '@/utils/utils';
+import { cn } from '@/lib/utils';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'small' | 'ghost';

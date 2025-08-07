@@ -57,11 +57,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# 應用程式版本常數
+APP_VERSION = "2.0.0"
+
 # 初始化 FastAPI 應用程式
 app = FastAPI(
     title="AI 網路維運助理 API",
     description="網路設備指令執行與 AI 智能分析 Web 介面 - 模組化架構",
-    version="2.0.0",
+    version=APP_VERSION,
 )
 
 # 設定 CORS 中間件
@@ -166,7 +169,7 @@ async def root():
     """根路徑，提供API資訊"""
     return {
         "message": "Web CLI API 服務運行中 - 模組化架構",
-        "version": "2.0.0", 
+        "version": APP_VERSION, 
         "architecture": "模組化路由架構",
         "modules": {
             "device_management": "設備管理 (/api/devices, /api/device-groups, /api/devices/status)",
@@ -175,7 +178,6 @@ async def root():
             "system_admin": "系統管理 (/api/admin/*, /api/ai-status)"
         },
         "ai_provider": settings.AI_PROVIDER,
-        "endpoints_count": 16,
         "documentation": "/docs"
     }
 
@@ -185,7 +187,7 @@ async def health_check():
     return {
         "status": "healthy", 
         "message": "API 服務運行正常 - 模組化架構",
-        "version": "2.0.0",
+        "version": APP_VERSION,
         "timestamp": datetime.now().isoformat()
     }
 

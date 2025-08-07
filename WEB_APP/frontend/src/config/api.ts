@@ -43,23 +43,27 @@ export const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   TIMEOUT: 408,
+  UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
+  GATEWAY_TIMEOUT: 504,
 } as const;
 
-// 錯誤訊息對應
+// 錯誤訊息對應 - 統一管理所有 HTTP 狀態碼錯誤訊息
 export const ERROR_MESSAGES = {
-  [HTTP_STATUS.BAD_REQUEST]: '請求參數錯誤',
-  [HTTP_STATUS.UNAUTHORIZED]: '認證失敗，請檢查設備憑證設定',
-  [HTTP_STATUS.FORBIDDEN]: 'API 權限不足，請檢查權限設定',
-  [HTTP_STATUS.NOT_FOUND]: '設備不在配置列表中',
-  [HTTP_STATUS.TIMEOUT]: 'AI 分析超時，請簡化問題或稍後重試',
-  [HTTP_STATUS.TOO_MANY_REQUESTS]: 'AI 服務配額已用完，請稍後再試或聯繫管理員',
-  [HTTP_STATUS.INTERNAL_SERVER_ERROR]: '伺服器內部錯誤',
-  [HTTP_STATUS.BAD_GATEWAY]: 'Google AI 服務暫時不可用，請稍後再試',
-  [HTTP_STATUS.SERVICE_UNAVAILABLE]: '服務暫時不可用或網路連接問題，請稍後重試',
+  [HTTP_STATUS.BAD_REQUEST]: '請求參數錯誤，請檢查輸入內容',
+  [HTTP_STATUS.UNAUTHORIZED]: '認證失敗，請檢查憑證設定',
+  [HTTP_STATUS.FORBIDDEN]: '權限不足，無法執行此操作',
+  [HTTP_STATUS.NOT_FOUND]: '請求的資源不存在',
+  [HTTP_STATUS.TIMEOUT]: '請求超時，請稍後再試',
+  [HTTP_STATUS.UNPROCESSABLE_ENTITY]: '資料驗證失敗，請檢查輸入格式',
+  [HTTP_STATUS.TOO_MANY_REQUESTS]: 'API 呼叫頻率過高，請稍後再試',
+  [HTTP_STATUS.INTERNAL_SERVER_ERROR]: '伺服器內部錯誤，請聯繫管理員',
+  [HTTP_STATUS.BAD_GATEWAY]: '網路閘道器錯誤，請稍後再試',
+  [HTTP_STATUS.SERVICE_UNAVAILABLE]: '服務暫時不可用，請稍後再試',
+  [HTTP_STATUS.GATEWAY_TIMEOUT]: '網路閘道器超時，請稍後再試',
   DEFAULT: '未知錯誤',
   NETWORK_ERROR: '網路連接失敗，請檢查網路連接或稍後重試',
 } as const;

@@ -4,6 +4,7 @@
  */
 import React, { Component, type ReactNode } from 'react';
 import { logError } from '@/utils/SimpleLogger';
+import { ERROR_STYLES } from '@/constants';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -60,12 +61,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       this.props.onError(error, errorInfo);
     }
 
-    // 在開發環境中也記錄到控制台
+    // 在開發環境中也記錄詳細的錯誤信息
     if (process.env.NODE_ENV === 'development') {
-      console.group('🚨 React Error Boundary');
-      console.error('Error:', error);
-      console.error('Error Info:', errorInfo);
-      console.groupEnd();
+      logError('🚨 React Error Boundary - 詳細錯誤信息', {
+        error: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+        isDevelopment: true
+      });
     }
   }
 
@@ -148,7 +151,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
               {/* 錯誤訊息 */}
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+                <div className={`mb-4 p-3 ${ERROR_STYLES.CONTAINER_ROUNDED}`}>
                   <p className="text-sm text-red-700 font-medium mb-1">錯誤詳情:</p>
                   <p className="text-xs text-red-600 font-mono break-all">
                     {error.message}

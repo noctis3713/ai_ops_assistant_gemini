@@ -211,12 +211,10 @@ async def reload_config_endpoint(
         # 重載指定的配置類型
         for config_type in request.reload_configs:
             try:
-                if config_type == "devices":
+                if config_type in ["devices", "groups"]:
+                    # 基本配置重載：devices 和 groups 使用相同的處理邏輯
                     config_manager.refresh_config()
-                    reloaded_configs.append("devices")
-                elif config_type == "groups":
-                    config_manager.refresh_config()
-                    reloaded_configs.append("groups")
+                    reloaded_configs.append(config_type)
                 elif config_type == "security":
                     # 重載安全配置時，也需要刷新指令驗證器的快取
                     from core.network_tools import CommandValidator

@@ -3,6 +3,8 @@
  * 允許用戶選擇設備群組進行操作
  */
 import { type GroupSelectorProps } from '@/types';
+import { INFO_STYLES } from '@/constants';
+import { findGroupByName } from '@/utils/utils';
 
 const GroupSelector = ({
   groups,
@@ -47,9 +49,9 @@ const GroupSelector = ({
       </select>
 
       {selectedGroup && (
-        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+        <div className={`mt-3 ${INFO_STYLES.CONTAINER_ROUNDED_PADDED}`}>
           {(() => {
-            const group = groups.find(g => g.name === selectedGroup);
+            const group = findGroupByName(groups, selectedGroup);
             if (!group) return null;
             
             return (

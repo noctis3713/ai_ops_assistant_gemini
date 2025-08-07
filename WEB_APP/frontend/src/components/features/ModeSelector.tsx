@@ -88,4 +88,4 @@ const ModeSelector: React.FC<ModeSelectorProps> = ({
   );
 };
 
-export default ModeSelector;
+export default React.memo(ModeSelector);

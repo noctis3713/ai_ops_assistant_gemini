@@ -169,10 +169,45 @@ export const AI_QUICK_COMMANDS = [
   },
 ] as const;
 
+// 設備群組常數
+export const DEVICE_GROUPS = {
+  ALL_DEVICES: 'cisco_xe_devices',
+} as const;
+
 // React Query 快取配置
 export const CACHE_CONFIG = {
   STALE_TIME: 2 * 60 * 1000,  // 2分鐘
   CACHE_TIME: 5 * 60 * 1000,  // 5分鐘（gcTime）
   DEVICES_STALE_TIME: 5 * 60 * 1000,  // 設備列表 5分鐘
   DEVICES_CACHE_TIME: 10 * 60 * 1000, // 設備列表 10分鐘
+} as const;
+
+// Timer 延遲時間配置 - 統一管理所有延遲時間常數
+export const TIMER_DELAYS = {
+  // 快速響應
+  IMMEDIATE: 0,
+  FAST: 100,
+  QUICK: 300,
+  
+  // 一般延遲
+  SHORT: 500,
+  MEDIUM: 1000,
+  LONG: 2000,
+  
+  // 長延遲
+  VERY_LONG: 5000,
+  ERROR_DISPLAY: 8000,
+  WARNING_DISPLAY: 12000,
+  
+  // 特定用途
+  DEBOUNCE_DEFAULT: 300,
+  THROTTLE_DEFAULT: 1000,
+  PROGRESS_UPDATE: 500,
+  STATUS_CLEAR: 3000,
+  
+  // 進度模擬延遲
+  PROGRESS_INTERVAL: 600,
+  BATCH_BASE_DELAY: 200,
+  CONNECTING_DELAY: 300,
+  EXECUTING_DELAY: 500,
 } as const;

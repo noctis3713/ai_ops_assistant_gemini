@@ -36,6 +36,7 @@ export const useBatchExecution = () => {
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastExecutionTimeRef = useRef<number>(0);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProgressValueRef = useRef<number>(-1); // 追蹤上次進度值，避免重複更新
 
   // 創建進度回調處理器
   const createProgressHandler = useCallback(() => {
@@ -76,9 +77,12 @@ export const useBatchExecution = () => {
     }, delay);
   }, [clearStatus, hideBatchProgress]);
 
-  // 模擬批次進度更新 - 根據執行模式調整目標進度，避免與階段進度衝突
+  // 智慧批次進度更新 - 動態防抖優化版本
   const simulateProgress = useCallback((deviceCount: number, executionMode: string) => {
     let currentCompleted = 0;
+    
+    // 重置進度追蹤
+    lastProgressValueRef.current = -1;
     
     // 根據執行模式調整最大進度目標
     // AI 模式：目標到達約75%的設備數，為 AI_ANALYZING 階段(85%)預留空間
@@ -86,16 +90,38 @@ export const useBatchExecution = () => {
     const progressTargetRatio = executionMode === 'ai' ? 0.75 : 0.85;
     const maxProgress = Math.max(0.5, deviceCount * progressTargetRatio);
     
-    const totalSteps = Math.max(8, Math.min(deviceCount * 2, 15)); // 動態步數，根據設備數量調整
+    // 智慧步進計算：根據設備數量動態調整
+    const getSmartSteps = (count: number) => {
+      if (count <= 3) return 8;          // 少量設備：細粒度更新
+      if (count <= 10) return count * 2;  // 中等設備：平衡更新
+      return Math.min(count * 1.5, 20);   // 大量設備：粗粒度更新
+    };
+    
+    const totalSteps = getSmartSteps(deviceCount);
     const incrementStep = maxProgress / totalSteps;
-    const updateInterval = Math.max(400, Math.min(1000, 600 + deviceCount * 50)); // 動態間隔時間
+    
+    // 智慧更新間隔：根據設備數量和執行模式動態調整
+    const getUpdateInterval = (count: number, mode: string) => {
+      const baseInterval = mode === 'ai' ? 600 : 500;
+      if (count <= 5) return Math.max(300, baseInterval - 100);    // 快速更新
+      if (count <= 15) return baseInterval;                        // 標準更新  
+      return Math.min(1200, baseInterval + count * 30);           // 節制更新
+    };
+    
+    const updateInterval = getUpdateInterval(deviceCount, executionMode);
     
     const progressInterval = setInterval(() => {
       // 強化狀態檢查：確保執行狀態有效且進度未達到最大值
       if (isExecutingRef.current && currentCompleted < maxProgress && progressIntervalRef.current) {
         // 平滑遞增，確保進度自然前進但不會超過階段進度
         currentCompleted = Math.min(currentCompleted + incrementStep, maxProgress);
-        updateBatchProgress(Math.floor(currentCompleted));
+        const newProgressValue = Math.floor(currentCompleted);
+        
+        // 進度更新緩存：只有當進度值實際改變時才更新
+        if (newProgressValue !== lastProgressValueRef.current) {
+          lastProgressValueRef.current = newProgressValue;
+          updateBatchProgress(newProgressValue);
+        }
       } else {
         // 自動清理無效的間隔
         clearInterval(progressInterval);

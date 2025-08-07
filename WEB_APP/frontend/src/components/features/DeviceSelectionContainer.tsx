@@ -2,6 +2,7 @@
  * 設備選擇容器
  * 提供統一的設備選擇界面
  */
+import React from 'react';
 import { type DeviceSelectionContainerProps } from '@/types';
 import MultiDeviceSelector from './MultiDeviceSelector';
 import ModeSelector from './ModeSelector';
@@ -38,4 +39,4 @@ const DeviceSelectionContainer = ({
   );
 };
 
-export default DeviceSelectionContainer;
+export default React.memo(DeviceSelectionContainer);

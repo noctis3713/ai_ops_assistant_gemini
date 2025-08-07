@@ -2,7 +2,7 @@
  * 指令輸入組件
  * 提供指令/問題輸入和執行功能
  */
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { type CommandInputProps } from '@/types';
 import { DEFAULT_TEXT, ELEMENT_IDS, QUICK_COMMANDS, AI_QUICK_COMMANDS } from '@/constants';
 import Button from '@/components/common/Button';
@@ -24,23 +24,35 @@ const CommandInput: React.FC<CommandInputProps> = ({
   taskPollingActive,
 }) => {
   // 處理 Enter 鍵執行
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isExecuting) {
       onExecute();
     }
-  };
+  }, [isExecuting, onExecute]);
 
   // 獲取輸入標籤文字
-  const inputLabel = DEFAULT_TEXT.INPUT_LABEL[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.INPUT_LABEL];
+  const inputLabel = useMemo(() => 
+    DEFAULT_TEXT.INPUT_LABEL[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.INPUT_LABEL], 
+    [mode]
+  );
   
   // 獲取輸入佔位符
-  const inputPlaceholder = placeholder || 
-    DEFAULT_TEXT.INPUT_PLACEHOLDER[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.INPUT_PLACEHOLDER];
+  const inputPlaceholder = useMemo(() => placeholder || 
+    DEFAULT_TEXT.INPUT_PLACEHOLDER[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.INPUT_PLACEHOLDER], 
+    [mode, placeholder]
+  );
   
   // 獲取按鈕文字
-  const buttonText = isExecuting 
+  const buttonText = useMemo(() => isExecuting 
     ? DEFAULT_TEXT.BUTTON_TEXT[`${mode.toUpperCase()}_EXECUTING` as keyof typeof DEFAULT_TEXT.BUTTON_TEXT]
-    : DEFAULT_TEXT.BUTTON_TEXT[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.BUTTON_TEXT];
+    : DEFAULT_TEXT.BUTTON_TEXT[mode.toUpperCase() as keyof typeof DEFAULT_TEXT.BUTTON_TEXT], 
+    [mode, isExecuting]
+  );
+
+  // 清空輸入處理器
+  const handleClearInput = useCallback(() => {
+    onChange('');
+  }, [onChange]);
 
   return (
     <>
@@ -65,7 +77,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
           />
           {value && (
             <button
-              onClick={() => onChange('')}
+              onClick={handleClearInput}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-gray-800 cursor-pointer z-10"
               type="button"
               disabled={isExecuting}
@@ -173,4 +185,4 @@ const CommandInput: React.FC<CommandInputProps> = ({
   );
 };
 
-export default CommandInput;
+export default React.memo(CommandInput);

@@ -3,8 +3,18 @@
  * 提供統一的 HTTP 客戶端和錯誤處理
  * 包含請求去重機制以提升性能
  */
+// 第三方庫
 import axios, { type AxiosResponse, type AxiosError, type AxiosRequestConfig } from 'axios';
+
+// 本地導入
 import { type APIError } from '@/types';
+import { 
+  API_CONFIG, 
+  ERROR_MESSAGES, 
+  RETRYABLE_STATUS_CODES,
+  REQUEST_HEADERS 
+} from '@/config/api';
+import { logApi, logError } from '@/utils/SimpleLogger';
 
 // 請求去重機制
 class RequestDeduplicator {
@@ -83,13 +93,6 @@ declare module 'axios' {
     };
   }
 }
-import { 
-  API_CONFIG, 
-  ERROR_MESSAGES, 
-  RETRYABLE_STATUS_CODES,
-  REQUEST_HEADERS 
-} from '@/config/api';
-import { logApi, logError } from '@/utils/SimpleLogger';
 
 // 建立 axios 實例
 export const apiClient = axios.create({
@@ -241,33 +244,8 @@ function getErrorMessage(error: AxiosError): string {
       return responseData;
     }
     
-    // 針對特定狀態碼提供更友善的錯誤訊息
-    switch (status) {
-      case 400:
-        return '請求參數錯誤，請檢查輸入內容';
-      case 401:
-        return '認證失敗，請檢查憑證設定';
-      case 403:
-        return '權限不足，無法執行此操作';
-      case 404:
-        return '請求的資源不存在';
-      case 408:
-        return '請求超時，請稍後再試';
-      case 422:
-        return '資料驗證失敗，請檢查輸入格式';
-      case 429:
-        return 'API 呼叫頻率過高，請稍後再試';
-      case 500:
-        return '伺服器內部錯誤，請聯繫管理員';
-      case 502:
-        return '網路閘道器錯誤，請稍後再試';
-      case 503:
-        return '服務暫時不可用，請稍後再試';
-      case 504:
-        return '網路閘道器超時，請稍後再試';
-      default:
-        return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES] || ERROR_MESSAGES.DEFAULT;
-    }
+    // 使用統一的錯誤訊息映射，替換長 switch 語句
+    return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES] || ERROR_MESSAGES.DEFAULT;
   }
   
   // 網路請求錯誤
