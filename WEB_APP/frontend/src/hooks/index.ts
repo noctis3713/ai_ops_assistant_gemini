@@ -8,4 +8,3 @@ export * from './useTimer';
 export * from './useDebounceSearch';
 export * from './useDeviceFilter';
 export * from './usePrefetch';
-export * from './usePerformanceMonitor';

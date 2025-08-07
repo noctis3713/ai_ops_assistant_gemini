@@ -22,7 +22,6 @@ import {
 } from '@/components';
 import { SplashCursor } from '@/components/ui/splash-cursor';
 import { DEFAULT_TEXT, ERROR_STYLES } from '@/constants';
-import DevPerformanceMonitor from '@/components/DevPerformanceMonitor';
 
 // 懒载入组件 - 減少初始 bundle 大小
 const BatchOutputDisplay = lazy(() => import('@/components/features/BatchOutputDisplay'));
@@ -319,8 +318,6 @@ function App() {
         </ErrorBoundary>
       </div>
       
-      {/* 開發環境效能監控面板 */}
-      <DevPerformanceMonitor />
     </div>
   );
 }

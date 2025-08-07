@@ -34,7 +34,8 @@
       "Bash(isort:*)",
       "Bash(ruff check:*)",
       "Bash(npx:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }
