@@ -28,10 +28,10 @@ interface TimerOptions {
  * const { setTimeout, setInterval, clearAllTimers } = useTimer();
  * 
  * // 設定延遲執行
- * setTimeout(() => console.log('Hello'), 1000);
+ * setTimeout(() => handleDelayedAction(), 1000);
  * 
  * // 設定重複執行
- * const intervalId = setInterval(() => console.log('Tick'), 1000);
+ * const intervalId = setInterval(() => handlePeriodicTask(), 1000);
  * 
  * // 清除所有計時器
  * clearAllTimers();

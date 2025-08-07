@@ -44,7 +44,7 @@ interface UseDebounceSearchReturn {
  * } = useDebounceSearch({
  *   delay: 500,
  *   onAutoExpand: () => setExpanded(true),
- *   onDebouncedChange: (value) => console.log('搜尋:', value)
+ *   onDebouncedChange: (value) => performSearch(value)
  * });
  * ```
  */

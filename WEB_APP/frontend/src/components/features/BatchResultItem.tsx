@@ -29,7 +29,7 @@ const BatchResultItem = ({
   };
   const handleCopyOutput = async () => {
     if (onCopy) {
-      const content = `設備: ${result.deviceName} • ${result.deviceIp} • ${getDeviceDescription(result.deviceIp)}\n\n輸出:\n${result.output}${result.error ? `\n\n錯誤:\n${result.error}` : ''}`;
+      const content = `設備: ${result.deviceName} • ${result.deviceIp} • ${getDeviceDescription(result.deviceIp)}\n\n輸出:\n${result.output || '(無輸出)'}${result.error ? `\n\n錯誤:\n${result.error}` : ''}`;
       const success = await handleCopyToClipboard(content);
       if (success && onCopy) {
         onCopy(content); // 保持原有的回調行為

@@ -95,7 +95,7 @@ export interface BatchExecutionResult {
   deviceName: string;
   deviceIp: string;
   success: boolean;
-  output: string;
+  output?: string;  // 與後端保持一致，改為可選
   error?: string;
   executionTime: number;
 }

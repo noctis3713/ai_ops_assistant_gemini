@@ -3,6 +3,8 @@
  * 抽取組件間重複的處理邏輯，提升代碼復用性
  */
 
+import { logError } from './SimpleLogger';
+
 /**
  * 頁面重載處理器
  * 統一的頁面重載邏輯，可以在未來添加更多功能（如確認對話框等）
@@ -32,7 +34,7 @@ export const handleCopyToClipboard = async (content: string): Promise<boolean> =
     await navigator.clipboard.writeText(content);
     return true;
   } catch (error) {
-    console.error('複製失敗:', error);
+    logError('複製失敗', { error: error instanceof Error ? error.message : String(error) });
     // 降級方案：使用傳統方法
     try {
       const textArea = document.createElement('textarea');
@@ -43,7 +45,7 @@ export const handleCopyToClipboard = async (content: string): Promise<boolean> =
       document.body.removeChild(textArea);
       return true;
     } catch (fallbackError) {
-      console.error('降級複製也失敗:', fallbackError);
+      logError('降級複製也失敗', { error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) });
       return false;
     }
   }
