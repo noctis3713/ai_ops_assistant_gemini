@@ -26,12 +26,36 @@ export default defineConfig({
     // 優化建構設定
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks: (id) => {
           // 將大型第三方庫分離到單獨的 chunk
-          vendor: ['react', 'react-dom'],
-          ui: ['@radix-ui/react-slot', 'class-variance-authority', 'clsx', 'tailwind-merge'],
-          state: ['zustand', '@tanstack/react-query'],
-          http: ['axios']
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor';
+          }
+          if (id.includes('@radix-ui') || id.includes('class-variance-authority') || 
+              id.includes('clsx') || id.includes('tailwind-merge')) {
+            return 'ui';
+          }
+          if (id.includes('zustand') || id.includes('@tanstack/react-query')) {
+            return 'state';
+          }
+          if (id.includes('axios')) {
+            return 'http';
+          }
+          
+          // 將大型常數和工具文件分離
+          if (id.includes('/constants/') || id.includes('/config/')) {
+            return 'constants';
+          }
+          
+          // 將 hooks 分離到單獨的 chunk
+          if (id.includes('/hooks/') && !id.includes('BatchOutputDisplay')) {
+            return 'hooks';
+          }
+          
+          // 將大型組件分離（除了已經懶載入的 BatchOutputDisplay）
+          if (id.includes('/components/features/') && !id.includes('BatchOutputDisplay')) {
+            return 'components';
+          }
         }
       }
     },

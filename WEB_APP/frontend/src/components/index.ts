@@ -19,3 +19,11 @@ export { default as GroupSelector } from './features/GroupSelector';
 export { default as DeviceSelectionContainer } from './features/DeviceSelectionContainer';
 // BatchOutputDisplay 已移至懶載入，不再從此處匯出
 export { default as BatchResultItem } from './features/BatchResultItem';
+
+// 設備選擇子組件
+export { default as DeviceSearchBox } from './features/DeviceSearchBox';
+export { default as DeviceGroupSelector } from './features/DeviceGroupSelector';
+export { default as DeviceList } from './features/DeviceList';
+export { default as DeviceSelectionSummary } from './features/DeviceSelectionSummary';
+export { default as SearchResultHint } from './features/SearchResultHint';
+export { default as VirtualizedResultList } from './features/VirtualizedResultList';

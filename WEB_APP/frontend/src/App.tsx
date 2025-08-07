@@ -13,6 +13,7 @@ import {
   usePrefetchCoreData,
   useBackgroundRefresh
 } from '@/hooks';
+import { useAppStatus } from '@/hooks/useAppStatus';
 import {
   Header,
   Footer,
@@ -21,7 +22,7 @@ import {
   ErrorBoundary,
 } from '@/components';
 import { SplashCursor } from '@/components/ui/splash-cursor';
-import { DEFAULT_TEXT, ERROR_STYLES } from '@/constants';
+import { ERROR_STYLES } from '@/constants';
 
 // 懒载入组件 - 減少初始 bundle 大小
 const BatchOutputDisplay = lazy(() => import('@/components/features/BatchOutputDisplay'));
@@ -109,50 +110,16 @@ function App() {
   // 背景資料重新整理（僅在有執行中任務時啟用）
   useBackgroundRefresh(isAsyncExecuting || isPolling);
 
-  // 檢查當前執行狀態 (使用 useMemo 避免每次重新計算)
-  const currentlyExecuting = useMemo(() => {
-    return isAsyncMode ? (isAsyncExecuting || isPolling) : isBatchExecuting;
-  }, [isAsyncMode, isAsyncExecuting, isPolling, isBatchExecuting]);
-
-  // 判斷當前狀態的輔助函數 (使用 useMemo 避免每次重新計算)
-  const currentStatus = useMemo(() => {
-    if (batchResults.length > 0) {
-      return 'has_results';
-    }
-    if (selectedDevices.length === 0) {
-      return 'select_device';
-    }
-    if (inputValue.trim() === '') {
-      return 'input_command';
-    }
-    return 'waiting_result';
-  }, [batchResults.length, selectedDevices.length, inputValue]);
-
-  // 獲取狀態提示文字 (使用 useMemo 避免每次重新計算)
-  const statusText = useMemo(() => {
-    switch (currentStatus) {
-      case 'select_device':
-        return DEFAULT_TEXT.RESULT_STATUS.SELECT_DEVICE;
-      case 'input_command':
-        return DEFAULT_TEXT.RESULT_STATUS.INPUT_COMMAND;
-      case 'waiting_result':
-        return DEFAULT_TEXT.RESULT_STATUS.WAITING_RESULT;
-      default:
-        return '';
-    }
-  }, [currentStatus]);
-
-  // 獲取狀態提示的CSS類別 (使用 useMemo 避免每次重新計算)
-  const statusClassName = useMemo(() => {
-    switch (currentStatus) {
-      case 'select_device':
-      case 'input_command':
-      case 'waiting_result':
-        return 'status-hint status-hint-flash';
-      default:
-        return 'status-hint';
-    }
-  }, [currentStatus]);
+  // 使用自定義 Hook 來集中處理狀態計算
+  const { currentlyExecuting, statusText, statusClassName } = useAppStatus({
+    isAsyncMode,
+    isAsyncExecuting,
+    isPolling,
+    isBatchExecuting,
+    batchResultsLength: batchResults.length,
+    selectedDevicesLength: selectedDevices.length,
+    inputValue
+  });
 
 
   return (

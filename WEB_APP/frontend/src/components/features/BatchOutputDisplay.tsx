@@ -5,14 +5,21 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { type BatchOutputDisplayProps } from '@/types';
 import BatchResultItem from './BatchResultItem';
+import VirtualizedResultList from './VirtualizedResultList';
 import Button from '@/components/common/Button';
+import { createToggleHandler, handleCopyToClipboard } from '@/utils/commonHandlers';
 
 const BatchOutputDisplay = ({ 
   results, 
-  onClear
+  onClear,
+  statusText,
+  statusClassName
 }: BatchOutputDisplayProps) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');
+  
+  // 虛擬化閾值 - 當結果數量超過此值時使用虛擬化渲染
+  const VIRTUALIZATION_THRESHOLD = 20;
 
   // 當執行完成時自動展開所有項目
   useEffect(() => {
@@ -22,22 +29,13 @@ const BatchOutputDisplay = ({
     }
   }, [results.length, expandedItems.size, results]);
 
-  // React Hooks 必須在組件頂層調用，在任何條件判斷之前
-  const toggleExpanded = useCallback((deviceIp: string) => {
-    const newExpanded = new Set(expandedItems);
-    if (newExpanded.has(deviceIp)) {
-      newExpanded.delete(deviceIp);
-    } else {
-      newExpanded.add(deviceIp);
-    }
-    setExpandedItems(newExpanded);
-  }, [expandedItems]);
+  // 使用共用的切換處理器
+  const toggleExpanded = useMemo(
+    () => createToggleHandler(expandedItems, setExpandedItems),
+    [expandedItems]
+  );
 
-  const copyToClipboard = useCallback((content: string) => {
-    navigator.clipboard.writeText(content).then(() => {
-      // 複製成功，可以在未來添加通知組件
-    });
-  }, []);
+  const copyToClipboard = useCallback(handleCopyToClipboard, []);
 
   const filteredResults = useMemo(() => {
     return results.filter(result => {
@@ -52,9 +50,22 @@ const BatchOutputDisplay = ({
     failedCount: results.filter(r => !r.success).length
   }), [results]);
 
+  // 判斷是否使用虛擬化渲染
+  const shouldUseVirtualization = useMemo(() => {
+    return filteredResults.length > VIRTUALIZATION_THRESHOLD;
+  }, [filteredResults.length, VIRTUALIZATION_THRESHOLD]);
+
   // 條件渲染必須在所有 Hooks 之後
   if (results.length === 0) {
-    return null;
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        {statusText && (
+          <div className={statusClassName}>
+            {statusText}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -115,7 +126,17 @@ const BatchOutputDisplay = ({
           <div className="card-body text-center text-terminal-text-muted">
             沒有符合篩選條件的結果
           </div>
+        ) : shouldUseVirtualization ? (
+          /* 大數據量時使用虛擬化渲染 */
+          <VirtualizedResultList
+            results={filteredResults}
+            expandedItems={expandedItems}
+            onToggleExpanded={toggleExpanded}
+            onCopy={copyToClipboard}
+            containerHeight={500}
+          />
         ) : (
+          /* 小數據量時使用普通渲染 */
           <div className="divide-y divide-gray-100">
             {filteredResults.map((result) => (
               <BatchResultItem

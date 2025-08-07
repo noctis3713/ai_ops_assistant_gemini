@@ -8,6 +8,7 @@ import { useAppStore } from '@/store';
 import { useDevices } from '@/hooks';
 import { ERROR_STYLES, NEUTRAL_STYLES } from '@/constants';
 import { findDeviceByIp } from '@/utils/utils';
+import { handleCopyToClipboard } from '@/utils/commonHandlers';
 
 const BatchResultItem = ({ 
   result, 
@@ -26,10 +27,13 @@ const BatchResultItem = ({
     const device = devices ? findDeviceByIp(devices, deviceIp) : undefined;
     return device?.description || '';
   };
-  const handleCopyOutput = () => {
+  const handleCopyOutput = async () => {
     if (onCopy) {
       const content = `設備: ${result.deviceName} • ${result.deviceIp} • ${getDeviceDescription(result.deviceIp)}\n\n輸出:\n${result.output}${result.error ? `\n\n錯誤:\n${result.error}` : ''}`;
-      onCopy(content);
+      const success = await handleCopyToClipboard(content);
+      if (success && onCopy) {
+        onCopy(content); // 保持原有的回調行為
+      }
     }
   };
 

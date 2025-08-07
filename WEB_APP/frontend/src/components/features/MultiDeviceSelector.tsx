@@ -3,15 +3,17 @@
  * 支援單選、多選、群組快速選擇
  * 內含折疊顯示、模糊搜尋、群組選擇功能
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { type MultiDeviceSelectorProps } from '@/types';
 import { useDeviceGroups, useDeviceFilter } from '@/hooks';
-import { WARNING_STYLES, INFO_STYLES, DEVICE_GROUPS } from '@/constants';
+import { WARNING_STYLES, DEVICE_GROUPS } from '@/constants';
 import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
-import { findDeviceByIp } from '@/utils/utils';
 import DeviceSearchBox from './DeviceSearchBox';
 import DeviceGroupSelector from './DeviceGroupSelector';
 import DeviceList from './DeviceList';
+import DeviceSelectionSummary from './DeviceSelectionSummary';
+import SearchResultHint from './SearchResultHint';
+import { createBatchHandler, handlePageReload } from '@/utils/commonHandlers';
 
 const MultiDeviceSelector = ({
   devices,
@@ -44,37 +46,37 @@ const MultiDeviceSelector = ({
     onDevicesChange(newSelection);
   }, [selectedDevices, onDevicesChange]);
 
-  const handleClearSelection = useCallback(() => {
-    onDevicesChange([]);
-  }, [onDevicesChange]);
+  // 使用共用的批次處理器
+  const batchHandler = useMemo(() => {
+    const allDeviceIps = devices.map(device => device.ip);
+    return createBatchHandler(
+      allDeviceIps,
+      selectedDevices,
+      onDevicesChange,
+      (ip) => ip
+    );
+  }, [devices, selectedDevices, onDevicesChange]);
 
-  // 判斷群組是否被完全選取 - 使用 useCallback 優化
+  // 使用批次處理器判斷群組選擇狀態
   const isGroupSelected = useCallback((groupName: string) => {
     if (groupName === DEVICE_GROUPS.ALL_DEVICES) {
-      const allDeviceIps = devices.map(device => device.ip);
-      return allDeviceIps.every(ip => selectedDevices.includes(ip)) && 
-             allDeviceIps.length === selectedDevices.length;
+      return batchHandler.isAllSelected();
     }
     // 未來可以擴展其他群組的選擇邏輯
     return false;
-  }, [devices, selectedDevices]);
+  }, [batchHandler]);
 
-  // 群組快速選擇函數 - 添加節流優化防止快速點擊
+  // 使用批次處理器的群組選擇邏輯
   const handleGroupSelect = useCallback((groupName: string) => {
-    // 對於所有設備群組，實現切換選擇邏輯
     if (groupName === DEVICE_GROUPS.ALL_DEVICES) {
-      const allDeviceIps = devices.map(device => device.ip);
-      
-      if (isGroupSelected(groupName)) {
-        // 如果群組完全被選擇，則取消選擇所有設備
-        onDevicesChange([]);
+      if (batchHandler.isAllSelected()) {
+        batchHandler.selectNone();
       } else {
-        // 否則選擇群組內所有設備
-        onDevicesChange(allDeviceIps);
+        batchHandler.selectAll();
       }
     }
     // 未來可以擴展其他群組的選擇邏輯
-  }, [devices, isGroupSelected, onDevicesChange]);
+  }, [batchHandler]);
 
 
   // 使用自定義 Hook 進行設備篩選
@@ -139,7 +141,7 @@ const MultiDeviceSelector = ({
               </div>
               <div className="mt-3 flex space-x-2">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={handlePageReload}
                   className={WARNING_STYLES.BUTTON}
                 >
                   重新載入頁面
@@ -172,7 +174,7 @@ const MultiDeviceSelector = ({
         <div className="flex items-center space-x-2">
           {isExpanded && selectedDevices.length > 0 && (
             <button
-              onClick={handleClearSelection}
+              onClick={batchHandler.selectNone}
               className="text-sm text-blue-600 hover:text-blue-500 font-medium"
             >
               取消選擇
@@ -215,26 +217,16 @@ const MultiDeviceSelector = ({
       />
 
       {/* 選擇狀態摘要 */}
-      {selectedDevices.length > 0 && (
-        <div className={`mt-2 ${INFO_STYLES.CONTAINER_ROUNDED_PADDED}`}>
-          <div className="text-xs text-blue-800 font-medium mb-1">
-            已選擇 {selectedDevices.length} 個設備
-          </div>
-          <div className="text-xs text-blue-600">
-            {selectedDevices.map(ip => {
-              const device = findDeviceByIp(devices, ip);
-              return device?.name || ip;
-            }).join(', ')}
-          </div>
-        </div>
-      )}
+      <DeviceSelectionSummary
+        devices={devices}
+        selectedDevices={selectedDevices}
+      />
 
       {/* 搜尋結果提示 */}
-      {filterStats.hasFilter && isExpanded && (
-        <div className="text-xs text-terminal-text-secondary text-center">
-          搜尋到 {filterStats.filteredCount} 個設備（共 {filterStats.totalCount} 個）
-        </div>
-      )}
+      <SearchResultHint
+        filterStats={filterStats}
+        isVisible={isExpanded}
+      />
     </div>
   );
 };

@@ -112,6 +112,28 @@ export interface AppActions {
    * 用於組件卸載或重置時使用
    */
   resetExecutionState: () => void;
+  
+  /**
+   * 批次更新設備選擇和輸入狀態
+   * 減少多個狀態更新調用
+   */
+  updateSelectionAndInput: (devices: string[], input: string, mode?: ExecutionMode) => void;
+  
+  /**
+   * 智能狀態切換 - 根據當前狀態自動決定下一步操作
+   * 提供常見操作場景的一鍵完成
+   */
+  smartToggle: (action: 'clear_all' | 'restart_execution' | 'switch_mode') => void;
+  
+  /**
+   * 條件性狀態更新 - 只在滿足條件時才更新
+   * 避免不必要的重渲染
+   */
+  conditionalUpdate: (updates: {
+    status?: { message: string; type: StatusMessage['type'] };
+    progress?: { percentage: number; visible?: boolean };
+    batchProgress?: { completed: number; total: number; visible?: boolean };
+  }) => void;
 }
 
 // 完整的 Store 類型

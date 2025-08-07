@@ -363,6 +363,97 @@ export const useAppStore = create<AppStore>()(
         setTaskPollingActive(false);
         setCurrentTask(null);
       },
+
+      /**
+       * 批次更新設備選擇和輸入狀態
+       * 減少多個狀態更新調用
+       */
+      updateSelectionAndInput: (devices: string[], input: string, mode?: 'command' | 'ai') => {
+        const { setSelectedDevices, setInputValue, setMode } = get();
+        
+        // 批次更新多個相關狀態
+        setSelectedDevices(devices);
+        setInputValue(input);
+        if (mode) {
+          setMode(mode);
+        }
+      },
+
+      /**
+       * 智能狀態切換 - 根據當前狀態自動決定下一步操作
+       * 提供常見操作場景的一鍵完成
+       */
+      smartToggle: (action: 'clear_all' | 'restart_execution' | 'switch_mode') => {
+        const state = get();
+        
+        switch (action) {
+          case 'clear_all':
+            // 清空所有內容和結果
+            state.setSelectedDevices([]);
+            state.setInputValue('');
+            state.clearBatchResults();
+            state.clearStatus();
+            state.hideBatchProgress();
+            state.hideProgress();
+            break;
+            
+          case 'restart_execution':
+            // 保持選擇和輸入，只重置執行狀態
+            state.clearBatchResults();
+            state.clearStatus();
+            state.hideBatchProgress();
+            state.hideProgress();
+            state.setIsExecuting(false);
+            state.setIsBatchExecution(false);
+            break;
+            
+          case 'switch_mode':
+            // 智能切換執行模式（command ↔ ai）
+            {
+            const newMode = state.mode === 'command' ? 'ai' : 'command';
+            state.setMode(newMode);
+            // 切換模式時清空輸入，但保持設備選擇
+            state.setInputValue('');
+            break;
+            }
+        }
+      },
+
+      /**
+       * 條件性狀態更新 - 只在滿足條件時才更新
+       * 避免不必要的重渲染
+       */
+      conditionalUpdate: (updates: {
+        status?: { message: string; type: 'loading' | 'success' | 'error' | 'warning' | '' };
+        progress?: { percentage: number; visible?: boolean };
+        batchProgress?: { completed: number; total: number; visible?: boolean };
+      }) => {
+        const state = get();
+        
+        // 只有在狀態實際改變時才更新
+        if (updates.status && state.status.message !== updates.status.message) {
+          state.setStatus(updates.status.message, updates.status.type);
+        }
+        
+        if (updates.progress && state.progress.percentage !== updates.progress.percentage) {
+          if (updates.progress.visible !== undefined) {
+            if (updates.progress.visible) {
+              state.showProgress(updates.progress.percentage);
+            } else {
+              state.hideProgress();
+            }
+          } else {
+            state.setProgress({ percentage: updates.progress.percentage });
+          }
+        }
+        
+        if (updates.batchProgress && state.batchProgress.completedDevices !== updates.batchProgress.completed) {
+          if (updates.batchProgress.visible !== undefined && updates.batchProgress.visible) {
+            state.showBatchProgress(updates.batchProgress.total);
+          }
+          state.updateBatchProgress(updates.batchProgress.completed);
+        }
+      },
     }),
     {
       name: 'app-store', // 用於 Redux DevTools
