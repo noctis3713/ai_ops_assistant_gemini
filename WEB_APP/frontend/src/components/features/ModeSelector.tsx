@@ -30,9 +30,9 @@ const ModeSelector: React.FC<ModeSelectorProps> = ({
         const config = await getBackendConfig();
         setIsAiQueryEnabled(config.ai?.enableAiQuery ?? true);
       } catch (error) {
-        logError('獲取後端配置失敗，AI 功能將保持啟用狀態', { error });
-        // 設定失敗時預設為啟用，確保不影響用戶體驗
-        setIsAiQueryEnabled(true);
+        logError('獲取後端配置失敗，AI 功能將預設禁用以確保安全', { error });
+        // 設定失敗時預設為禁用，確保安全性
+        setIsAiQueryEnabled(false);
       } finally {
         setConfigLoading(false);
       }

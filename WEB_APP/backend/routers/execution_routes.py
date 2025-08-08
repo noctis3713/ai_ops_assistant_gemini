@@ -22,7 +22,7 @@ from fastapi.responses import PlainTextResponse
 from starlette import status
 
 # 導入依賴和核心服務
-from .dependencies import get_ai_service_dep, get_config_manager_dep
+from .dependencies import get_ai_service_dep, get_config_manager_dep, get_settings_dep
 from async_task_manager import TaskType, get_task_manager
 from core.network_tools import CommandValidator
 from core.error_codes import NetworkErrorCodes, AIErrorCodes, classify_network_error, classify_ai_error
@@ -238,6 +238,7 @@ async def ai_query(
     request: AIQueryRequest,
     config_manager=Depends(get_config_manager_dep),
     ai_service=Depends(get_ai_service_dep),
+    settings=Depends(get_settings_dep),
 ) -> BaseResponse[str]:
     """AI 查詢端點（重構版）
 
@@ -245,14 +246,23 @@ async def ai_query(
         request: 包含設備 IP 和查詢內容的請求
         config_manager: 配置管理器實例（依賴注入）
         ai_service: AI 服務實例（依賴注入）
+        settings: 全域設定實例（依賴注入）
 
     Returns:
         BaseResponse[str]: AI 分析結果（標準化格式）
 
     Raises:
-        HTTPException: 當設備不存在或 AI 查詢失敗時
+        HTTPException: 當設備不存在、AI 功能禁用或 AI 查詢失敗時
     """
     logger.info(f"收到 AI 查詢請求: {request.device_ip} -> {request.query}")
+    
+    # 檢查 AI 查詢功能是否啟用
+    if not settings.ENABLE_AI_QUERY:
+        logger.warning("AI 查詢功能已被管理員禁用")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="管理員已停用 AI 查詢功能"
+        )
 
     # 驗證設備IP
     try:
@@ -349,10 +359,19 @@ async def ai_query(
 )
 async def batch_execute(
     request: BatchExecuteRequest,
-    config_manager=Depends(get_config_manager_dep)
+    config_manager=Depends(get_config_manager_dep),
+    settings=Depends(get_settings_dep)
 ) -> BatchExecuteResponseTyped:
     """批次執行指令"""
     logger.info(f"收到批次執行請求: {len(request.devices)} 個設備 -> {request.command}")
+
+    # 檢查 AI 模式是否啟用
+    if request.mode == "ai" and not settings.ENABLE_AI_QUERY:
+        logger.warning("批次執行 AI 模式已被管理員禁用")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="管理員已停用 AI 查詢功能"
+        )
 
     # 指令安全性驗證 - AI 模式不需要預先驗證，讓 AI Agent 自行選擇安全指令
     if request.mode != "ai":
@@ -555,7 +574,8 @@ async def batch_execute(
 async def batch_execute_async(
     request: BatchExecuteRequest, 
     background_tasks: BackgroundTasks,
-    config_manager=Depends(get_config_manager_dep)
+    config_manager=Depends(get_config_manager_dep),
+    settings=Depends(get_settings_dep)
 ) -> TaskCreationResponseTyped:
     """
     非同步批次執行指令，立即返回任務 ID
@@ -575,6 +595,14 @@ async def batch_execute_async(
             "mode": request.mode,
         },
     )
+
+    # 檢查 AI 模式是否啟用
+    if request.mode == "ai" and not settings.ENABLE_AI_QUERY:
+        logger.warning("非同步批次執行 AI 模式已被管理員禁用")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="管理員已停用 AI 查詢功能"
+        )
 
     # 指令安全性驗證 - AI 模式不需要預先驗證
     if request.mode != "ai":

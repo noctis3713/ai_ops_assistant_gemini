@@ -22,7 +22,22 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     // 允許特定主機名訪問（用於 Docker 容器間通信）
-    allowedHosts: ['localhost', 'frontend', '172.20.0.4', '.local']
+    allowedHosts: ['localhost', 'frontend', '172.20.0.4', '.local'],
+    proxy: {
+      // 代理所有 /api 請求到後端容器
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+        ws: true, // 支援 WebSocket
+      },
+      // 代理健康檢查
+      '/health': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   resolve: {
     alias: {

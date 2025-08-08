@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # AI 功能開關 (移除 ENABLE_DOCUMENT_SEARCH - 不再支援外部文檔搜尋)
     PARSER_VERSION: str = Field(default="original", description="解析器版本")
     ENABLE_AI_SUMMARIZATION: bool = Field(default=False, description="啟用 AI 摘要功能")
+    ENABLE_AI_QUERY: bool = Field(default=True, description="啟用前端 AI 查詢功能")
     
     # AI 處理參數
     AI_SUMMARY_THRESHOLD: int = Field(default=10000, description="AI 摘要觸發門檻 (字元數)")
@@ -511,6 +512,9 @@ class Settings(BaseSettings):
                 
                 if not os.getenv("ENABLE_AI_SUMMARIZATION") and "enableSummarization" in ai_config:
                     self.ENABLE_AI_SUMMARIZATION = ai_config["enableSummarization"]
+                
+                if not os.getenv("ENABLE_AI_QUERY") and "enableAiQuery" in ai_config:
+                    self.ENABLE_AI_QUERY = ai_config["enableAiQuery"]
                 
                 if not os.getenv("AI_SUMMARY_THRESHOLD") and "summaryThreshold" in ai_config:
                     self.AI_SUMMARY_THRESHOLD = ai_config["summaryThreshold"]

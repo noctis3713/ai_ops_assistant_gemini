@@ -679,7 +679,7 @@ export interface FrontendConfig {
  */
 export const getBackendConfig = async (): Promise<BackendConfig> => {
   return createRetryableRequest(async () => {
-    const response = await apiClient.get<{ success: boolean; data?: BackendConfig; message?: string }>('/api/backend-config');
+    const response = await apiClient.get<{ success: boolean; data?: BackendConfig; message?: string }>(API_ENDPOINTS.BACKEND_CONFIG);
     
     // 處理 BaseResponse 格式
     if (!response.data.success) {

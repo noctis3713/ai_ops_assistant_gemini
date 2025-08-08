@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   TASKS: '/tasks',  // 任務列表端點
   CANCEL_TASK: '/task',  // 取消任務端點 (需要加上 /{task_id})
   TASK_MANAGER_STATS: '/task-manager/stats',  // 任務管理器統計端點
+  BACKEND_CONFIG: '/backend-config',  // 後端配置端點
   HEALTH: '/health',
   ROOT: '/',
 } as const;
