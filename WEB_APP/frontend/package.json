@@ -2,7 +2,7 @@
   "name": "ai-ops-web-frontend",
   "private": true,
   "version": "1.0.0",
-  "description": "網路維運助理 - React TypeScript 前端",
+  "description": "AI網路維運助理 - React TypeScript 前端",
   "type": "module",
   "scripts": {
     "dev": "vite",
