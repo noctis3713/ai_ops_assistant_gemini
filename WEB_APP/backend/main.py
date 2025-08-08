@@ -13,8 +13,8 @@ sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
 
-# 載入環境變數
-env_loaded = load_dotenv("config/.env")
+# 載入環境變數 (修正路徑指向根目錄的 env 檔案)
+env_loaded = load_dotenv("../../env")
 
 # 先導入 settings 才能使用
 from core.settings import Settings, get_settings, settings

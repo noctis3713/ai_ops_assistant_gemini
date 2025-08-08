@@ -5,7 +5,7 @@
 
 // API 基礎配置
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  BASE_URL: '/api', // 強制使用相對路徑通過代理訪問
   TIMEOUT: {
     DEFAULT: 30000,      // 30秒
     COMMAND: 60000,      // 指令執行 60秒
@@ -21,16 +21,16 @@ export const API_CONFIG = {
 
 // API 端點路徑
 export const API_ENDPOINTS = {
-  DEVICES: '/api/devices',
-  DEVICE_GROUPS: '/api/device-groups',
-  EXECUTE: '/api/execute',
-  AI_QUERY: '/api/ai-query',
-  BATCH_EXECUTE: '/api/batch-execute',  // 統一的批次執行端點，處理所有情況
-  BATCH_EXECUTE_ASYNC: '/api/batch-execute-async',  // 非同步批次執行端點
-  TASK_STATUS: '/api/task',  // 任務狀態查詢端點 (需要加上 /{task_id})
-  TASKS: '/api/tasks',  // 任務列表端點
-  CANCEL_TASK: '/api/task',  // 取消任務端點 (需要加上 /{task_id})
-  TASK_MANAGER_STATS: '/api/task-manager/stats',  // 任務管理器統計端點
+  DEVICES: '/devices',
+  DEVICE_GROUPS: '/device-groups',
+  EXECUTE: '/execute',
+  AI_QUERY: '/ai-query',
+  BATCH_EXECUTE: '/batch-execute',  // 統一的批次執行端點，處理所有情況
+  BATCH_EXECUTE_ASYNC: '/batch-execute-async',  // 非同步批次執行端點
+  TASK_STATUS: '/task',  // 任務狀態查詢端點 (需要加上 /{task_id})
+  TASKS: '/tasks',  // 任務列表端點
+  CANCEL_TASK: '/task',  // 取消任務端點 (需要加上 /{task_id})
+  TASK_MANAGER_STATS: '/task-manager/stats',  // 任務管理器統計端點
   HEALTH: '/health',
   ROOT: '/',
 } as const;

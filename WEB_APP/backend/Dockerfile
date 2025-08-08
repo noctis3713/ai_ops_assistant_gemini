@@ -56,10 +56,13 @@ ENV PYTHONPATH="/app" \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
+# 建立啟動腳本來確保日誌目錄權限
+RUN echo '#!/bin/bash\nmkdir -p /app/logs\nchmod 755 /app/logs\ntouch /app/logs/app.log /app/logs/ai.log /app/logs/network.log\nchmod 664 /app/logs/*.log\nexec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 --log-level info' > /app/start.sh && \
+    chmod +x /app/start.sh
+
 # 建立健康檢查腳本
 RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health || exit 1' > /app/health-check.sh && \
-    chmod +x /app/health-check.sh && \
-    chown appuser:appuser /app/health-check.sh
+    chmod +x /app/health-check.sh
 
 # 切換到非 root 用戶
 USER appuser
@@ -71,5 +74,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["/app/health-check.sh"]
 
-# 定義容器啟動指令
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "16", "--log-level", "info"]
+# 定義容器啟動指令 (使用自訂啟動腳本確保權限正確)
+CMD ["/app/start.sh"]

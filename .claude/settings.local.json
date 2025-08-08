@@ -35,7 +35,14 @@
       "Bash(ruff check:*)",
       "Bash(npx:*)",
       "Bash(git add:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker compose:*)",
+      "Bash(sudo docker ps:*)",
+      "Bash(docker:*)",
+      "Bash(sudo chown:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   }

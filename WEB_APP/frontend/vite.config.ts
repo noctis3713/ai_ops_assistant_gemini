@@ -17,6 +17,13 @@ export default defineConfig({
     })] : [])
   ],
   envDir: './config', // 指定環境變數檔案目錄
+  server: {
+    host: '0.0.0.0', // 允許外部訪問
+    port: 5173,
+    strictPort: true,
+    // 允許特定主機名訪問（用於 Docker 容器間通信）
+    allowedHosts: ['localhost', 'frontend', '172.20.0.4', '.local']
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

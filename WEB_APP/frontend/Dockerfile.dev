@@ -18,10 +18,16 @@ RUN npm install
 # 複製原始碼 (在 docker-compose.override.yml 中會被 volume 覆蓋)
 COPY . .
 
+# 接收 build args
+ARG VITE_API_BASE_URL=/api
+ARG VITE_ENVIRONMENT=development
+
 # 設定開發環境變數
 ENV NODE_ENV=development
 ENV VITE_HMR_HOST=0.0.0.0
 ENV VITE_HMR_PORT=5173
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_ENVIRONMENT=${VITE_ENVIRONMENT}
 
 # 暴露 Vite 開發伺服器端口
 EXPOSE 5173

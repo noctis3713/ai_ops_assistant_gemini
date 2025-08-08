@@ -2,7 +2,8 @@
 # 此檔案會自動覆蓋 docker-compose.yml 中的配置，用於開發環境
 # 使用方式：docker-compose up 會自動載入此檔案
 
-version: '3.8'
+# 注意：version 屬性在新版 Docker Compose 中已廢棄
+# version: '3.8'
 
 services:
   # =============================================================================
@@ -15,12 +16,15 @@ services:
       - "443:443"        # HTTPS 端口
       - "81:81"          # 管理介面端口
     
-    # 開發環境不限制資源
+    # 開發環境優化資源配置 (Proxy)
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
 
   # =============================================================================
   # 開發環境：後端服務設定
@@ -56,12 +60,15 @@ services:
     ports:
       - "8000:8000"
     
-    # 開發環境不限制資源
+    # 開發環境優化資源配置 (Backend)
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: '2.0'
+          memory: 4G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '3.0'
 
   # =============================================================================
   # 開發環境：前端服務設定  
@@ -94,12 +101,15 @@ services:
       - VITE_API_BASE_URL=http://localhost:8000
       - VITE_ENVIRONMENT=development
     
-    # 開發環境不限制資源
+    # 開發環境優化資源配置 (Frontend)
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '1.0'
+          memory: 1.5G
+          cpus: '2.0'
+        reservations:
+          memory: 1.5G
+          cpus: '1.5'
 
 # =============================================================================
 # 開發環境額外服務 (可選)
