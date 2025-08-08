@@ -13,6 +13,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import psutil
+except ImportError:  # pragma: no cover
+    psutil = None
+
 # 統一配置管理系統
 from core.settings import settings
 
@@ -253,7 +258,6 @@ def format_device_execution_result(
     }
 
 
-
 def validate_ip_address(ip: str) -> bool:
     """驗證 IP 位址格式
 
@@ -369,20 +373,12 @@ def get_system_info() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: 系統資訊
     """
-    import os
-
-    import psutil
-
     return {
         "python_version": sys.version,
         "platform": sys.platform,
         "cpu_count": os.cpu_count(),
-        "memory_usage": (
-            psutil.virtual_memory()._asdict() if "psutil" in globals() else None
-        ),
-        "disk_usage": (
-            psutil.disk_usage("/")._asdict() if "psutil" in globals() else None
-        ),
+        "memory_usage": psutil.virtual_memory()._asdict() if psutil else None,
+        "disk_usage": psutil.disk_usage("/")._asdict() if psutil else None,
     }
 
 
@@ -828,7 +824,7 @@ def get_frontend_log_config():
 
     # 使用 Settings 的統一前端日誌配置方法
     config_dict = settings.get_frontend_log_config()
-    
+
     return FrontendLogConfig(
         enableRemoteLogging=config_dict["enableRemoteLogging"],
         logLevel=config_dict["logLevel"],
