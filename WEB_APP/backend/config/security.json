@@ -1,0 +1,40 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-08-02",
+  "command_validation": {
+    "allowed_command_prefixes": [
+      "show",
+      "ping", 
+      "traceroute",
+      "display",
+      "get"
+    ],
+    "dangerous_keywords": [
+      "configure",
+      "write",
+      "delete",
+      "shutdown",
+      "reload",
+      "copy",
+      "erase",
+      "format",
+      "reset",
+      "clear ip route",
+      "clear arp",
+      "no "
+    ],
+    "max_command_length": 200,
+    "enable_strict_validation": true
+  },
+  "description": {
+    "allowed_command_prefixes": "允許執行的指令前綴清單，只有以這些關鍵字開頭的指令才會被執行",
+    "dangerous_keywords": "危險關鍵字清單，包含這些關鍵字的指令將被阻擋",
+    "max_command_length": "指令最大長度限制，超過此長度的指令將被拒絕",
+    "enable_strict_validation": "是否啟用嚴格驗證模式"
+  },
+  "audit": {
+    "log_all_validations": true,
+    "log_blocked_commands": true,
+    "alert_on_security_violations": true
+  }
+}

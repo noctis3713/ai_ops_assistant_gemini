@@ -1,0 +1,65 @@
+{# 工具描述模板 - 增強版 #}
+<tools_guide>
+**BatchCommandRunner**（唯一可用工具）
+
+**功能說明**：
+- 網路設備指令執行工具 - 自動執行安全的 show 類指令並返回結構化結果
+- 工具會自動驗證指令安全性，只執行允許的唯讀指令
+- 支援所有標準的 show 指令（如 show version, show interface, show environment, show platform 等）
+
+**重要限制**：
+- 每次調用只能執行一個指令
+- 多個指令必須分別調用此工具多次
+- 絕對禁止在沒有執行的情況下虛構結果
+
+**輸入格式**：
+- `"device_ip: command"`（單一設備執行單一指令）
+- `"device_ip1,device_ip2: command"`（多設備執行同一指令）
+- `"command"`（所有設備執行同一指令）
+
+**多指令執行範例**：
+錯誤方式：
+- `"202.153.183.18: show clock; show platform"` ❌ (不支援分號分隔)
+- `"202.153.183.18: show clock and show platform"` ❌ (不支援 and 連接)
+
+正確方式：
+1. 第一次調用：`"202.153.183.18: show clock"`
+2. 第二次調用：`"202.153.183.18: show platform"`
+3. 整合兩次結果進行分析
+
+**回傳 JSON 結構**：
+{% raw %}
+```json
+{
+  "summary": {
+    "command": "執行的指令",
+    "total_devices": 總設備數,
+    "successful_devices": 成功設備數,
+    "failed_devices": 失敗設備數,
+    "execution_time_seconds": 執行時間(秒),
+    "cache_stats": {"hits": 快取命中次數, "misses": 快取未命中次數}
+  },
+  "successful_results": [
+    {"device_ip": "設備IP", "output": "設備輸出內容"}
+  ],
+  "failed_results": [
+    {
+      "device_ip": "設備IP",
+      "error_message": "錯誤訊息",
+      "error_details": {
+        "type": "錯誤類型",
+        "category": "錯誤分類", 
+        "suggestion": "解決建議"
+      }
+    }
+  ]
+}
+```
+{% endraw %}
+
+**結果處理要求**：
+- 你必須解析這個 JSON 結果來獲取設備的輸出和錯誤資訊
+- 必須基於實際執行結果進行分析，禁止憑空猜測
+- 如果有 failed_results，必須逐項說明錯誤原因與建議
+- 所有數據點都要來自 BatchCommandRunner 的實際輸出
+</tools_guide>

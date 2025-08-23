@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+AI 網路維運助理主程式
+
+整合所有功能，遵循 YAGNI 原則：
+- 統一設定管理
+- 中間件管理
+- 統一路由
+- 應用程式生命週期管理
+
+Created: 2025-08-22
+Author: Claude Code Assistant
+"""
+
+import asyncio
+import logging
+import os
+import sys
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+
+# 設定專案路徑
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# 載入環境變數
+from dotenv import load_dotenv
+
+
+# 智能環境變數載入
+def _load_env():
+    """載入環境變數"""
+    is_docker = os.path.exists("/.dockerenv") or os.getenv("PYTHONPATH") == "/app"
+
+    if is_docker:
+        print("🐳 Docker 環境 - 使用容器環境變數")
+        return True, "Docker"
+    else:
+        print("💻 本地環境 - 搜尋 .env 檔案")
+        env_paths = [
+            project_root / ".env",
+            Path(__file__).parent.parent / ".env",
+            Path(__file__).parent / ".env",
+        ]
+
+        for env_path in env_paths:
+            if env_path.exists():
+                load_dotenv(env_path)
+                print(f"✅ 載入環境變數: {env_path}")
+                return True, str(env_path)
+
+        print("❌ 未找到 .env 檔案")
+        return False, "未找到"
+
+
+# 載入環境變數
+env_loaded, env_path = _load_env()
+
+import uvicorn
+
+# FastAPI 相關匯入
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import ORJSONResponse
+
+# 匯入統一路由模組
+from unified_routes import admin_router, health_router, router
+
+# 設定日誌
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+logger = logging.getLogger(__name__)
+
+# 應用程式版本
+APP_VERSION = "3.0.0"
+
+
+# =============================================================================
+# 應用程式生命週期管理
+# =============================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """應用程式生命週期管理"""
+    # 啟動階段
+    try:
+        logger.info("開始啟動 AI 網路維運助理 API")
+
+        # 初始化基本服務
+        from ai_service import get_ai_service
+        from settings import get_config_manager, get_settings
+        from task_manager import get_task_manager
+
+        # 設定全域物件
+        app.state.settings = get_settings()
+        app.state.config_manager = get_config_manager()
+        app.state.task_manager = get_task_manager()
+        app.state.ai_service = get_ai_service()
+
+        logger.info(f"環境變數載入: {env_loaded} ({env_path})")
+        logger.info(f"AI 提供者: {app.state.settings.AI_PROVIDER}")
+        logger.info(f"Gemini 配置: {app.state.settings.get_gemini_configured()}")
+        logger.info(f"Claude 配置: {app.state.settings.get_claude_configured()}")
+        logger.info("所有服務初始化完成")
+
+        yield  # 開始處理請求
+
+    except Exception as e:
+        logger.error(f"啟動失敗: {e}", exc_info=True)
+        raise
+
+    # 關閉階段
+    try:
+        logger.info("開始關閉應用程式")
+        # 執行標準關閉流程
+        logger.info("應用程式已安全關閉")
+
+    except Exception as e:
+        logger.error(f"關閉失敗: {e}", exc_info=True)
+
+
+# =============================================================================
+# FastAPI 應用程式初始化
+# =============================================================================
+
+app = FastAPI(
+    title="AI 網路維運助理 API",
+    description="網路設備指令執行與 AI 智能分析",
+    version=APP_VERSION,
+    default_response_class=ORJSONResponse,
+    lifespan=lifespan,
+)
+
+# =============================================================================
+# 中間件配置
+# =============================================================================
+
+# CORS 配置
+def get_cors_origins():
+    """動態獲取 CORS 允許的來源"""
+    origins = [
+        # 容器間通信
+        "http://frontend",
+        "http://ai_ops_frontend",
+        # 本地開發
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:80",
+        "http://127.0.0.1:80",
+    ]
+    
+    # 從環境變數添加外部 IP
+    external_ip = os.getenv("EXTERNAL_IP")
+    if external_ip:
+        origins.append(f"http://{external_ip}")
+        origins.append(f"https://{external_ip}")
+    
+    # 從環境變數添加內部 IP  
+    internal_ip = os.getenv("INTERNAL_IP")
+    if internal_ip:
+        origins.append(f"http://{internal_ip}")
+    
+    # 從環境變數添加其他允許的來源
+    cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS")
+    if cors_origins_env:
+        additional_origins = cors_origins_env.split(",")
+        origins.extend([origin.strip() for origin in additional_origins])
+    
+    return origins
+
+allowed_origins = get_cors_origins()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# GZip 壓縮
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+# 監控中間件
+@app.middleware("http")
+async def monitoring_middleware(request: Request, call_next):
+    """請求監控中間件"""
+    import time
+    import uuid
+
+    # 生成請求 ID
+    request_id = f"req_{str(uuid.uuid4())[:8]}"
+    start_time = time.time()
+
+    # 健檢路徑使用 DEBUG 級別記錄，減少日誌噪音
+    if request.url.path == "/health":
+        logger.debug(f"[{request_id}] 健檢請求: {request.method} {request.url.path}")
+    else:
+        logger.info(f"[{request_id}] 請求開始: {request.method} {request.url.path}")
+
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+
+        # 添加響应头
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Process-Time"] = f"{process_time:.6f}"
+
+        # 健檢路徑使用 DEBUG 級別記錄
+        if request.url.path == "/health":
+            logger.debug(
+                f"[{request_id}] 健檢完成: {response.status_code} ({process_time:.3f}s)"
+            )
+        else:
+            logger.info(
+                f"[{request_id}] 請求完成: {response.status_code} ({process_time:.3f}s)"
+            )
+        return response
+
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(
+            f"[{request_id}] 請求錯誤: {type(e).__name__} ({process_time:.3f}s)",
+            exc_info=True,
+        )
+        raise
+
+
+logger.info(f"中間件配置完成 - CORS 來源: {len(allowed_origins)} 個")
+
+# =============================================================================
+# 註冊路由
+# =============================================================================
+
+app.include_router(health_router)  # 健康檢查路由 (無前綴)
+app.include_router(router)  # 主要 API 路由 (/api)
+app.include_router(admin_router)  # 管理路由 (/api/admin)
+logger.info("統一路由註冊完成")
+
+# =============================================================================
+# 路由除錯
+# =============================================================================
+
+
+def print_routes():
+    """印出所有路由"""
+    from fastapi.routing import APIRoute
+
+    print("=" * 80)
+    print("             API 路由列表             ")
+    print("=" * 80)
+    route_count = 0
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            methods = ",".join(route.methods)
+            print(f"{methods:<10} {route.path:<50} -> {route.name}")
+            route_count += 1
+    print("=" * 80)
+    print(f"總計 {route_count} 個路由")
+    print("=" * 80)
+
+
+print_routes()
+
+# =============================================================================
+# 主程式進入點
+# =============================================================================
+
+if __name__ == "__main__":
+    logger.info("啟動 AI 網路維運助理 API")
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", access_log=True)

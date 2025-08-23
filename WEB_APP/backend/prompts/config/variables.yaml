@@ -1,0 +1,55 @@
+# 變數配置
+
+device_vendor: "Cisco"
+certification_level: "CCIE"
+max_devices: 50
+
+supported_commands:
+  - "show version"
+  - "show interface"
+  - "show environment"
+  - "show inventory"
+  - "show processes"
+  - "show memory"
+  - "show ip route"
+  - "show ip interface brief"
+  - "show running-config"
+  - "show startup-config"
+  - "show logging"
+  - "show clock"
+  - "show uptime"
+
+# 禁止指令
+dangerous_commands:
+  - "configure"
+  - "write"
+  - "delete"
+  - "shutdown"
+  - "reload"
+  - "erase"
+
+security_rules:
+  - "只執行 show 指令"
+  - "禁止配置變更"
+  - "指令自動驗證"
+  - "僅分析診斷"
+
+analysis_types:
+  single_device: "single_device"
+  multi_device: "multi_device"
+
+default_recommendations:
+  - "定期監控狀態"
+  - "檢查日誌檔案"
+  - "維護配置備份"
+
+language: "zh_TW"
+
+template_paths:
+  system_prompt: "system_prompt.j2"
+  react_examples: "react_examples.j2"
+  tool_descriptions_with_search: "tool_descriptions_with_search.j2"
+  tool_descriptions: "tool_descriptions.j2"
+
+template_version: "1.1.0"
+last_updated: "2025-08-02"

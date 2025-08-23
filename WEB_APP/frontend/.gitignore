@@ -1,0 +1,91 @@
+# 前端特定日誌檔案
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+bun-debug.log*
+
+# 依賴和建構輸出
+node_modules
+dist
+dist-ssr
+*.local
+
+# Vite 相關快取
+.vite
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
+
+# TypeScript 快取
+tsconfig.tsbuildinfo
+.tsbuildinfo
+*.tsbuildinfo
+
+# 現代化前端工具
+.turbo
+.nx/cache
+.parcel-cache
+.rollup.cache
+
+# 測試相關
+coverage/
+.nyc_output/
+__tests__/__snapshots__/
+.jest/
+jest.config.*.cache
+
+# 編輯器和 IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-*
+.history/
+
+# 注意：系統檔案規則已在根目錄 .gitignore 中定義
+
+# 環境變數檔案
+.env
+.env.*
+!.env.example
+!.env.template
+config/.env.local
+config/.env.*
+
+# 本地開發檔案
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 套件管理器相關
+.pnpm-store/
+.yarn/install-state.gz
+.yarn/build-state.yml
+.yarn/cache
+.pnp.*
+yarn-error.log
+
+# Storybook
+storybook-static/
+
+# 效能分析
+bundle-analyzer-report.html
+stats.json
+
+# 除錯和專案特定
+.eslintcache
+.stylelintcache
+*.tgz
+*.tar.gz
+
+# shadcn/ui 相關 (如有需要)
+# components.json.bak

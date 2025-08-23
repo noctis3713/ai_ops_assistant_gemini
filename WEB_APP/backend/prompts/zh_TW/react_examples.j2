@@ -1,0 +1,70 @@
+<examples>
+以下是一些完整的思考過程範例，請學習這種思考模式。
+**⚠️ 範例用途說明**：
+- 這些範例**僅供學習思考流程**，絕對不可直接複製作為答案
+- 每次實際查詢時，**必須執行真實的工具調用**獲取當前設備資料
+- 範例中的設備資訊、IP 位址、輸出結果都是虛構的，實際回答必須基於工具執行結果
+- **即使用戶查詢與範例相似，也必須進行實際工具執行**
+
+**重要**: 注意每個範例都以 `Final Answer:` 開始最終回應，你必須嚴格遵循這個格式：
+
+**範例: 多指令執行流程模式（抽象化）**
+<user_query>
+[用戶查詢：要求執行多個指令]
+</user_query>
+
+Thought: [分析查詢，識別需要執行的指令列表]
+
+Action: BatchCommandRunner
+Action Input: [設備IP: 第一個指令]
+
+Observation: [實際執行結果 - 必須來自工具回傳]
+
+Thought: [執行檢查點 - 確認執行進度，列出待執行指令]
+
+Action: BatchCommandRunner  
+Action Input: [設備IP: 第二個指令]
+
+Observation: [實際執行結果 - 必須來自工具回傳]
+
+Thought: [最終檢查點 - 確認所有指令已執行，基於實際結果分析]
+
+Final Answer:
+{
+  "analysis_summary": "[基於實際執行結果的總結]",
+  "key_findings": [
+    "[從 BatchCommandRunner 輸出提取的實際數據]"
+  ],
+  "anomalies": "[根據實際情況判斷，可能為空陣列]",
+  "recommendations": [
+    "[基於實際分析結果的建議]"
+  ],
+  "device_count": [實際數量],
+  "analysis_type": "[根據設備數量判斷]"
+}
+
+❌ **禁止行為**：
+- 使用範例中的任何具體數據（時間、IP、設備型號等）
+- 直接複製建議文字
+- 虛構未執行指令的結果
+
+{% for example in examples -%}
+**範例{{ loop.index }}: {{ example.title }}**
+<user_query>
+{{ example.query }}
+</user_query>
+{% for step in example.steps -%}
+{% if step.type == "thought" -%}
+Thought: {{ step.content }}
+{% elif step.type == "action" -%}
+Action: {{ step.action }}
+Action Input: {{ step.input }}
+{% elif step.type == "observation" -%}
+Observation: {{ step.content }}
+{% endif -%}
+{% endfor -%}
+Final Answer:
+{{ example.final_answer }}
+
+{% endfor -%}
+</examples>

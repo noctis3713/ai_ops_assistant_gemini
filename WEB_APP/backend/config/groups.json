@@ -1,0 +1,19 @@
+{
+  "groups": [
+    {
+      "name": "cisco_xe_devices",
+      "description": "所有SIS設備",
+      "devices": ["202.3.182.202", "202.153.183.18"],
+      "platform": "cisco_xe",
+      "data": {
+        "device_type": "cisco_xe",
+        "scope": "all"
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_date": "2025-07-27",
+    "description": "設備群組配置，統一管理所有 Cisco IOS-XE 設備"
+  }
+}

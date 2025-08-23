@@ -1,0 +1,40 @@
+{
+  "devices": [
+    {
+      "ip": "192.168.1.1",
+      "model": "Cisco ASR 1001-X",
+      "os": "cisco_xe",
+      "name": "EXAMPLE-DEVICE-1",
+      "description": "範例設備 1 - Cisco ASR 路由器",
+      "username": "${DEVICE_DEFAULT_USERNAME}",
+      "password": "${DEVICE_DEFAULT_PASSWORD}",
+      "device_type": "cisco_xe"
+    },
+    {
+      "ip": "192.168.1.2",
+      "model": "Cisco ASR 1001-X",
+      "os": "cisco_xe",
+      "name": "EXAMPLE-DEVICE-2",
+      "description": "範例設備 2 - Cisco ASR 路由器",
+      "username": "${DEVICE_DEFAULT_USERNAME}",
+      "password": "${DEVICE_DEFAULT_PASSWORD}",
+      "device_type": "cisco_xe"
+    }
+  ],
+  "_instructions": {
+    "description": "此為設備配置檔案範本",
+    "usage": "複製此檔案為 devices.json 並填入實際的設備資訊",
+    "security_note": "請勿將包含實際密碼的 devices.json 檔案加入版本控制",
+    "env_variables": {
+      "DEVICE_DEFAULT_USERNAME": "在 .env 檔案中設定預設設備使用者名稱",
+      "DEVICE_DEFAULT_PASSWORD": "在 .env 檔案中設定預設設備密碼"
+    },
+    "supported_device_types": [
+      "cisco_xe",
+      "cisco_ios",
+      "cisco_nxos",
+      "juniper_junos",
+      "arista_eos"
+    ]
+  }
+}

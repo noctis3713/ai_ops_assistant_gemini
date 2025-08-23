@@ -1,0 +1,250 @@
+# Docker Compose 配置檔案 - AI Ops Assistant with Traefik
+# 企業級容器化方案：HTTP 訪問 + 反向代理 + 負載均衡
+# 網路架構：外部 202.3.184.82 → 內部 10.60.21.11 (NAT映射)
+
+services:
+  # =============================================================================
+  # 服務一：Traefik 反向代理 (入口點)
+  # =============================================================================
+  traefik:
+    image: traefik:v3.0
+    container_name: ai_ops_traefik
+    hostname: traefik
+    restart: unless-stopped
+    
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    
+    ports:
+      # HTTP 主要入口點 (對應外部 202.3.184.82:80)
+      - "80:80"
+      # Traefik 管理面板 (外部可通過 :81 訪問)
+      - "81:8080"
+    
+    volumes:
+      # Traefik 配置檔案
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      # Docker socket 用於自動發現
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # 日誌目錄
+      - ./logs/traefik:/var/log/traefik
+      # 時間同步
+      - /etc/localtime:/etc/localtime:ro
+    
+    networks:
+      - ai-ops-network
+    
+    environment:
+      - TRAEFIK_LOG_LEVEL=INFO
+      - TRAEFIK_API_DEBUG=false
+    
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # =============================================================================
+  # 服務二：後端應用 (FastAPI)
+  # =============================================================================
+  backend:
+    build:
+      context: ./WEB_APP/backend
+      dockerfile: Dockerfile
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+    
+    container_name: ai_ops_backend
+    hostname: backend
+    restart: unless-stopped
+    
+    environment:
+      # AI 服務環境變數
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash-latest}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-3-haiku-20240307}
+      
+      # 系統配置
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-admin123}
+      - PROMPT_LANGUAGE=${PROMPT_LANGUAGE:-zh_TW}
+      - PROMPT_TEMPLATE_DIR=${PROMPT_TEMPLATE_DIR:-/app/prompts}
+      
+      # 網路配置
+      - DEVICE_CONNECTION_TIMEOUT=${DEVICE_CONNECTION_TIMEOUT:-30}
+      - COMMAND_EXECUTION_TIMEOUT=${COMMAND_EXECUTION_TIMEOUT:-20}
+      - MAX_CONCURRENT_CONNECTIONS=${MAX_CONCURRENT_CONNECTIONS:-5}
+      
+      # 設備認證配置 (改由 /app/config/devices.json 檔案提供)
+      
+      # Webhook 配置 - n8n 整合支援
+      
+      # Webhook 配置
+      - WEBHOOK_TIMEOUT_SECONDS=${WEBHOOK_TIMEOUT_SECONDS:-30}
+      - WEBHOOK_MAX_RETRIES=${WEBHOOK_MAX_RETRIES:-3}
+      
+      # 日誌配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_VERBOSE_LOGGING=${ENABLE_VERBOSE_LOGGING:-false}
+      
+      # 容器特定配置
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    
+    volumes:
+      # 持久化重要資料
+      - ${LOGS_PATH:-./logs}:/app/logs
+      - ${CONFIG_PATH:-./WEB_APP/backend/config}:/app/config
+      - /etc/localtime:/etc/localtime:ro
+    
+    networks:
+      - ai-ops-network
+    
+    # Traefik 路由標籤
+    labels:
+      # 啟用 Traefik 代理
+      - "traefik.enable=true"
+      
+      # HTTP 路由規則 - API 端點 (支援內外網訪問)
+      - "traefik.http.routers.backend.rule=(Host(`10.60.21.11`) || Host(`202.3.184.82`)) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.routers.backend.service=backend-service"
+      
+      # 健康檢查路由 (支援內外網訪問)
+      - "traefik.http.routers.backend-health.rule=(Host(`10.60.21.11`) || Host(`202.3.184.82`)) && Path(`/health`)"
+      - "traefik.http.routers.backend-health.entrypoints=web"
+      - "traefik.http.routers.backend-health.service=backend-service"
+      
+      # 服務端點配置
+      - "traefik.http.services.backend-service.loadbalancer.server.port=8000"
+      - "traefik.http.services.backend-service.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.backend-service.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.backend-service.loadbalancer.healthcheck.timeout=10s"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    depends_on:
+      traefik:
+        condition: service_started
+    
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '2.0'
+
+  # =============================================================================
+  # 服務三：前端應用 (React + Nginx)
+  # =============================================================================
+  frontend:
+    build:
+      context: ./WEB_APP/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
+        - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-production}
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+    
+    container_name: ai_ops_frontend
+    hostname: frontend
+    restart: unless-stopped
+    
+    environment:
+      # Nginx 環境變數
+      - NGINX_WORKER_PROCESSES=${NGINX_WORKER_PROCESSES:-auto}
+      - NGINX_WORKER_CONNECTIONS=${NGINX_WORKER_CONNECTIONS:-1024}
+    
+    volumes:
+      # 時間同步
+      - /etc/localtime:/etc/localtime:ro
+    
+    networks:
+      - ai-ops-network
+    
+    # Traefik 路由標籤
+    labels:
+      # 啟用 Traefik 代理
+      - "traefik.enable=true"
+      
+      # HTTP 路由規則 - 前端主頁面 (支援內外網訪問)
+      - "traefik.http.routers.frontend.rule=Host(`10.60.21.11`) || Host(`202.3.184.82`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.service=frontend-service"
+      - "traefik.http.routers.frontend.priority=1"
+      
+      # 服務端點配置
+      - "traefik.http.services.frontend-service.loadbalancer.server.port=80"
+      - "traefik.http.services.frontend-service.loadbalancer.healthcheck.path=/"
+      - "traefik.http.services.frontend-service.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.frontend-service.loadbalancer.healthcheck.timeout=10s"
+      
+      # 中介軟體設定 (可選)
+      - "traefik.http.middlewares.frontend-headers.headers.customrequestheaders.X-Forwarded-Proto=http"
+      - "traefik.http.routers.frontend.middlewares=frontend-headers"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    depends_on:
+      backend:
+        condition: service_healthy
+      traefik:
+        condition: service_started
+    
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+
+# =============================================================================
+# 網路配置
+# =============================================================================
+networks:
+  ai-ops-network:
+    driver: bridge
+    name: ai-ops-network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/16
+          gateway: 172.21.0.1
+
+# =============================================================================
+# Volume 配置 (持久化資料)
+# =============================================================================
+volumes:
+  traefik_logs:
+    driver: local
+  app_logs:
+    driver: local
+  app_config:
+    driver: local
