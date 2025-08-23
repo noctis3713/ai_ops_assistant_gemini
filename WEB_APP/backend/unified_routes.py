@@ -245,10 +245,10 @@ async def get_devices():
 
     try:
         # 取得設備配置
-        from settings import get_config_manager
+        from settings import get_settings
 
-        config_manager = get_config_manager()
-        devices_config = config_manager.get_devices_config()
+        settings = get_settings()
+        devices_config = settings.get_devices_config()
 
         # 轉換為 DeviceInfo 模型
         device_list = []
@@ -281,10 +281,10 @@ async def get_device_groups():
 
     try:
         # 取得群組配置
-        from settings import get_config_manager
+        from settings import get_settings
 
-        config_manager = get_config_manager()
-        groups_config = config_manager.get_groups_config()
+        settings = get_settings()
+        groups_config = settings.get_groups_config()
 
         # 轉換為 DeviceGroup 模型
         group_list = []
@@ -315,10 +315,10 @@ async def get_devices_status():
 
     try:
         # 取得設備清單
-        from settings import get_config_manager
+        from settings import get_settings
 
-        config_manager = get_config_manager()
-        devices_config = config_manager.get_devices_config()
+        settings = get_settings()
+        devices_config = settings.get_devices_config()
         device_ips = [device.get("ip") for device in devices_config if device.get("ip")]
 
         if not device_ips:
@@ -336,7 +336,7 @@ async def get_devices_status():
         checked_at = datetime.now().isoformat()
 
         for device_ip in device_ips:
-            device_config = config_manager.get_device_by_ip(device_ip) or {}
+            device_config = settings.get_device_by_ip(device_ip) or {}
             device_name = device_config.get("name", device_ip)
 
             is_healthy = health_results.get(device_ip, False)

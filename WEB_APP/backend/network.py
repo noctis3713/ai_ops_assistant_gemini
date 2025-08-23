@@ -80,10 +80,10 @@ def get_device_credentials(device_config=None):
 
     if not username or not password:
         try:
-            from settings import get_config_manager
+            from settings import get_settings
 
-            config_manager = get_config_manager()
-            devices_config = config_manager.get_devices_config()
+            settings = get_settings()
+            devices_config = settings.get_devices_config()
 
             available_devices = []
             for device in devices_config:
@@ -114,9 +114,9 @@ def get_device_credentials(device_config=None):
 def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
     """根據設備 IP 查找對應的設備配置"""
     try:
-        from settings import get_config_manager
-        config_manager = get_config_manager()
-        devices_config = config_manager.get_devices_config()
+        from settings import get_settings
+        settings = get_settings()
+        devices_config = settings.get_devices_config()
         
         for device in devices_config:
             if device.get("ip") == device_ip:
@@ -496,10 +496,10 @@ def batch_command_wrapper(input_str: str) -> str:
         # 如果沒有指定設備，從配置中獲取所有設備
         if device_ips is None:
             try:
-                from settings import get_config_manager
+                from settings import get_settings
 
-                config_manager = get_config_manager()
-                devices_config = config_manager.get_devices_config()
+                settings = get_settings()
+                devices_config = settings.get_devices_config()
                 device_ips = [
                     device.get("ip") for device in devices_config if device.get("ip")
                 ]

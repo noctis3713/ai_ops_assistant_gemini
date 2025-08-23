@@ -175,9 +175,9 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 75, "處理結果...")
 
         # 格式化結果
-        from settings import get_config_manager
+        from settings import get_settings
 
-        config_manager = get_config_manager()
+        settings = get_settings()
 
         # 直接格式化結果，處理 AsyncBatchResult 結構
         formatted_results = []
@@ -188,7 +188,7 @@ class AsyncTaskManager:
 
         for execution_result in execution_results:
             device_ip = execution_result.device_ip
-            device_config = config_manager.get_device_by_ip(device_ip) or {}
+            device_config = settings.get_device_by_ip(device_ip) or {}
             device_name = execution_result.device_name or device_config.get(
                 "name", device_ip
             )
@@ -245,9 +245,9 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 75, "格式化 AI 回應...")
 
         # AI 結果格式化
-        from settings import get_config_manager
+        from settings import get_settings
 
-        config_manager = get_config_manager()
+        settings = get_settings()
 
         # 直接格式化 AI 結果，移除複雜的格式化器
         formatted_results = []
@@ -258,7 +258,7 @@ class AsyncTaskManager:
         if devices:
             # 有指定設備的 AI 查詢
             for device_ip in devices:
-                device_config = config_manager.get_device_by_ip(device_ip) or {}
+                device_config = settings.get_device_by_ip(device_ip) or {}
                 device_name = device_config.get("name", device_ip)
 
                 formatted_results.append(

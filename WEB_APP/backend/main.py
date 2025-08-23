@@ -95,12 +95,11 @@ async def lifespan(app: FastAPI):
 
         # 初始化基本服務
         from ai_service import get_ai_service
-        from settings import get_config_manager, get_settings
+        from settings import get_settings
         from task_manager import get_task_manager
 
         # 設定全域物件
         app.state.settings = get_settings()
-        app.state.config_manager = get_config_manager()
         app.state.task_manager = get_task_manager()
         app.state.ai_service = get_ai_service()
 

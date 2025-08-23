@@ -179,52 +179,53 @@ class Settings(BaseSettings):
         # 記錄配置更新操作
         pass
 
+    # =========================================================================
+    # 設備配置管理 - 整合自 ConfigManager
+    # =========================================================================
 
-# =============================================================================
-# 設備配置管理器 - 整合自 config.py
-# =============================================================================
+    _devices_config: Optional[List[Dict[str, Any]]] = None
+    _groups_config: Optional[Dict[str, Any]] = None  
+    _security_config: Optional[Dict[str, Any]] = None
 
+    @property
+    def config_dir(self) -> Path:
+        """配置目錄路徑"""
+        return Path(__file__).parent / "config"
 
-class ConfigManager:
-    """設備配置管理器"""
-
-    def __init__(self):
-        self.config_dir = Path(__file__).parent / "config"
-        self._devices = None
-        self._groups = None
-        self._security = None
-
-    def load_devices(self) -> List[Dict[str, Any]]:
-        """載入設備配置"""
-        if self._devices is not None:
-            return self._devices
+    def get_devices_config(self) -> List[Dict[str, Any]]:
+        """載入設備配置 - 整合自 ConfigManager"""
+        if self._devices_config is not None:
+            return self._devices_config
 
         config_file = self.config_dir / "devices.json"
 
         try:
             if not config_file.exists():
-                return []
+                self._devices_config = []
+                return self._devices_config
 
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            self._devices = data.get("devices", [])
-            return self._devices
+            self._devices_config = data.get("devices", [])
+            return self._devices_config
 
         except Exception as e:
-            print(f"載入設備配置失敗: {e}")
-            return []
+            logger.error(f"載入設備配置失敗: {e}")
+            self._devices_config = []
+            return self._devices_config
 
-    def load_groups(self) -> Dict[str, Any]:
-        """載入群組配置"""
-        if self._groups is not None:
-            return self._groups
+    def get_groups_config(self) -> Dict[str, Any]:
+        """載入群組配置 - 整合自 ConfigManager"""
+        if self._groups_config is not None:
+            return self._groups_config
 
         config_file = self.config_dir / "groups.json"
 
         try:
             if not config_file.exists():
-                return {}
+                self._groups_config = {}
+                return self._groups_config
 
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -238,81 +239,65 @@ class ConfigManager:
                         "description": group.get("description", ""),
                     }
 
-            self._groups = groups_dict
-            return self._groups
+            self._groups_config = groups_dict
+            return self._groups_config
 
         except Exception as e:
-            print(f"載入群組配置失敗: {e}")
-            return {}
+            logger.error(f"載入群組配置失敗: {e}")
+            self._groups_config = {}
+            return self._groups_config
 
-    def load_security_config(self) -> Dict[str, Any]:
-        """載入安全配置"""
-        if self._security is not None:
-            return self._security
+    def get_security_config(self) -> Dict[str, Any]:
+        """載入安全配置 - 整合自 ConfigManager"""
+        if self._security_config is not None:
+            return self._security_config
 
         config_file = self.config_dir / "security.json"
 
         try:
             if not config_file.exists():
-                return {}
+                self._security_config = {}
+                return self._security_config
 
             with open(config_file, "r", encoding="utf-8") as f:
-                self._security = json.load(f)
+                self._security_config = json.load(f)
 
-            return self._security
+            return self._security_config
 
         except Exception as e:
-            print(f"載入安全配置失敗: {e}")
-            return {}
-
-    def get_devices_config(self) -> List[Dict[str, Any]]:
-        """取得設備配置列表"""
-        return self.load_devices()
-
-    def get_groups_config(self) -> Dict[str, Any]:
-        """取得群組配置字典"""
-        return self.load_groups()
-
-    def get_security_config(self) -> Dict[str, Any]:
-        """取得安全配置"""
-        return self.load_security_config()
+            logger.error(f"載入安全配置失敗: {e}")
+            self._security_config = {}
+            return self._security_config
 
     def get_device_by_ip(self, ip: str) -> Optional[Dict[str, Any]]:
-        """根據 IP 取得設備配置"""
-        devices = self.load_devices()
+        """根據 IP 取得設備配置 - 整合自 ConfigManager"""
+        devices = self.get_devices_config()
         for device in devices:
             if device.get("ip") == ip:
                 return device
         return None
 
     def get_all_device_ips(self) -> List[str]:
-        """取得所有設備 IP"""
-        devices = self.load_devices()
+        """取得所有設備 IP - 整合自 ConfigManager"""
+        devices = self.get_devices_config()
         return [d.get("ip") for d in devices if d.get("ip")]
 
     def refresh_config(self):
-        """重新載入配置"""
-        self._devices = None
-        self._groups = None
-        self._security = None
+        """重新載入所有配置 - 整合自 ConfigManager"""
+        self._devices_config = None
+        self._groups_config = None
+        self._security_config = None
+        self._frontend_config_cache = None
+        self._backend_config_cache = None
 
 
 # 全域實例
 settings = Settings()
-_config_manager = None
 
 
 def get_settings() -> Settings:
     """取得全域設定實例"""
     return settings
-
-
-def get_config_manager() -> ConfigManager:
-    """取得全域配置管理器實例"""
-    global _config_manager
-    if _config_manager is None:
-        _config_manager = ConfigManager()
-    return _config_manager
 
 
 # =============================================================================
@@ -419,20 +404,20 @@ class SimpleCommandValidator:
 
         return True, "指令安全驗證通過"
 
-    def reload_config(self, config_manager=None):
+    def reload_config(self):
         """重載安全配置，使用預設配置"""
         try:
-            if config_manager:
-                security_config = config_manager.get_security_config()
-                command_config = security_config.get("command_validation", {})
+            # 直接使用全域 settings 實例
+            security_config = settings.get_security_config()
+            command_config = security_config.get("command_validation", {})
 
-                self.allowed_prefixes = command_config.get(
-                    "allowed_command_prefixes", self.DEFAULT_ALLOWED_PREFIXES
-                )
-                self.dangerous_keywords = command_config.get(
-                    "dangerous_keywords", self.DEFAULT_DANGEROUS_KEYWORDS
-                )
-                logger.info("指令驗證配置已重載")
+            self.allowed_prefixes = command_config.get(
+                "allowed_command_prefixes", self.DEFAULT_ALLOWED_PREFIXES
+            )
+            self.dangerous_keywords = command_config.get(
+                "dangerous_keywords", self.DEFAULT_DANGEROUS_KEYWORDS
+            )
+            logger.info("指令驗證配置已重載")
         except Exception as e:
             logger.warning(f"重載指令驗證配置失敗，使用預設配置: {e}")
             self.allowed_prefixes = self.DEFAULT_ALLOWED_PREFIXES.copy()
@@ -470,22 +455,10 @@ def is_safe_command(command: str) -> bool:
     return is_safe
 
 
-# =============================================================================
-# 向後相容性別名
-# =============================================================================
-
-# 保持與舊程式碼的相容性
-DeviceConfigManager = ConfigManager
-get_device_config_manager = get_config_manager
-
-
 __all__ = [
     "Settings",
     "settings",
     "get_settings",
-    "ConfigManager",
-    "get_config_manager",
-    "get_device_config_manager",
     # 驗證功能
     "validate_ip_address",
     "validate_device_list",
