@@ -20,7 +20,7 @@ try:
 except ImportError as e:
     raise ImportError(f"必要依賴缺失: {e}. 請執行: pip install Jinja2 PyYAML") from e
 
-from exceptions import PromptConfigError, PromptLanguageError, PromptTemplateError
+from exceptions import ServiceError, config_error
 from settings import settings
 
 logger = logging.getLogger(__name__)
@@ -122,9 +122,9 @@ class PromptManager:
             return content
 
         except yaml.YAMLError as e:
-            raise PromptConfigError(f"YAML 解析失敗: {e}", str(full_path))
+            raise config_error(f"YAML 解析失敗: {e}", str(full_path))
         except Exception as e:
-            raise PromptConfigError(f"配置檔案載入失敗: {e}", str(full_path))
+            raise config_error(f"配置檔案載入失敗: {e}", str(full_path))
 
     def render(self, template_name: str, **kwargs) -> str:
         """渲染模板"""
@@ -141,13 +141,13 @@ class PromptManager:
 
         except jinja2.TemplateNotFound:
             available_templates = self._get_available_templates()
-            raise PromptTemplateError(
-                f"模板檔案不存在: {template_path}",
-                template_name,
-                {"available_templates": available_templates},
+            raise ServiceError(
+                f"提示詞模板檔案不存在: {template_path}",
+                "PROMPT_TEMPLATE_NOT_FOUND",
+                500
             )
         except jinja2.TemplateError as e:
-            raise PromptTemplateError(f"模板渲染失敗: {e}", template_name, kwargs)
+            raise ServiceError(f"提示詞模板渲染失敗: {e}", "PROMPT_TEMPLATE_RENDER_ERROR", 500)
 
     def render_system_prompt(self, **kwargs) -> str:
         """渲染系統提示詞"""

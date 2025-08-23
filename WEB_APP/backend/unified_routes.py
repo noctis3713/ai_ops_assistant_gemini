@@ -29,7 +29,8 @@ from common import BaseResponse
 # 導入統一異常處理
 from exceptions import (
     AuthenticationError,
-    DeviceNotFoundError,
+    ServiceError,
+    device_error,
     convert_to_service_error,
 )
 

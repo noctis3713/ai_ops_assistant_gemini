@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-統一異常處理模組
+簡化異常處理模組
 
-所有異常處理相關功能合併到單一檔案中，遵循 YAGNI 原則。
-包含：異常定義、錯誤代碼、異常處理器、異常轉換器。
+遵循 YAGNI 原則，僅保留必要的異常處理功能：
+- 4 個核心異常類別
+- 統一錯誤回應格式  
+- 必要的異常處理器
 
-Created: 2025-08-22
-Author: Claude Code Assistant
+Created: 2025-08-23
+Author: Claude Code Assistant (YAGNI 簡化版本)
 """
 
-import json
 import logging
 import traceback
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request, status
 from fastapi.exception_handlers import (
@@ -34,442 +33,94 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# 服務層異常定義
+# 核心異常定義 (4 個核心類別)
 # =============================================================================
 
 
 class ServiceError(Exception):
-    """服務層基礎異常"""
+    """通用業務邏輯異常 - 取代所有細分異常類別"""
 
     def __init__(
-        self, detail: str, error_code: Optional[str] = None, status_code: int = 400
+        self, 
+        detail: str, 
+        error_code: Optional[str] = None, 
+        status_code: int = 400,
+        **kwargs
     ):
         self.detail = detail
-        self.error_code = error_code or self.__class__.__name__
+        self.error_code = error_code or "SERVICE_ERROR"
         self.status_code = status_code
+        # 儲存額外資訊 (如 device_ip, task_id 等)
+        self.extra_info = kwargs
         super().__init__(detail)
 
 
-# 配置相關異常
-class ConfigError(ServiceError):
-    def __init__(self, detail: str, error_code: Optional[str] = None):
-        super().__init__(detail, error_code, status_code=500)
-
-
-class ConfigNotFoundError(ConfigError):
-    def __init__(self, config_path: str):
-        detail = f"配置檔案不存在: {config_path}"
-        super().__init__(detail, "CONFIG_NOT_FOUND")
-
-
-class ConfigValidationError(ConfigError):
-    def __init__(self, config_type: str, validation_error: str):
-        detail = f"配置檔案驗證失敗 [{config_type}]: {validation_error}"
-        super().__init__(detail, "CONFIG_VALIDATION_ERROR")
-
-
-class ConfigParseError(ConfigError):
-    def __init__(self, config_path: str, parse_error: str):
-        detail = f"配置檔案解析失敗 [{config_path}]: {parse_error}"
-        super().__init__(detail, "CONFIG_PARSE_ERROR")
-
-
-# 設備相關異常
-class DeviceError(ServiceError):
-    def __init__(
-        self,
-        detail: str,
-        device_ip: Optional[str] = None,
-        error_code: Optional[str] = None,
-    ):
-        self.device_ip = device_ip
-        if device_ip:
-            detail = f"設備 {device_ip}: {detail}"
-        super().__init__(detail, error_code, status_code=422)
-
-
-class DeviceConnectionError(DeviceError):
-    def __init__(self, device_ip: str, connection_error: str):
-        detail = f"無法連線到設備: {connection_error}"
-        super().__init__(detail, device_ip, "DEVICE_CONNECTION_ERROR")
-
-
-class DeviceAuthenticationError(DeviceError):
-    def __init__(self, device_ip: str):
-        detail = "設備認證失敗，請檢查帳號密碼"
-        super().__init__(detail, device_ip, "DEVICE_AUTHENTICATION_ERROR")
-
-
-class DeviceTimeoutError(DeviceError):
-    def __init__(self, device_ip: str, operation: str, timeout: int):
-        detail = f"設備操作超時 [{operation}]，超時時間: {timeout}秒"
-        super().__init__(detail, device_ip, "DEVICE_TIMEOUT_ERROR")
-
-
-class DeviceNotFoundError(DeviceError):
-    def __init__(self, device_ip: str):
-        detail = "設備未找到或未配置"
-        super().__init__(detail, device_ip, "DEVICE_NOT_FOUND")
-
-
-# 指令相關異常
-class CommandError(ServiceError):
-    def __init__(
-        self,
-        detail: str,
-        command: Optional[str] = None,
-        error_code: Optional[str] = None,
-    ):
-        self.command = command
-        if command:
-            detail = f"指令 '{command}': {detail}"
-        super().__init__(detail, error_code, status_code=422)
-
-
-class CommandValidationError(CommandError):
-    def __init__(self, command: str, validation_error: str):
-        detail = f"指令安全驗證失敗: {validation_error}"
-        super().__init__(detail, command, "COMMAND_VALIDATION_ERROR")
-
-
-class CommandExecutionError(CommandError):
-    def __init__(self, command: str, device_ip: str, execution_error: str):
-        detail = f"在設備 {device_ip} 上執行失敗: {execution_error}"
-        super().__init__(detail, command, "COMMAND_EXECUTION_ERROR")
-
-
-class CommandTimeoutError(CommandError):
-    def __init__(self, command: str, device_ip: str, timeout: int):
-        detail = f"在設備 {device_ip} 上執行超時 (超時時間: {timeout}秒)"
-        super().__init__(detail, command, "COMMAND_TIMEOUT_ERROR")
-
-
-# AI 服務相關異常
-class AIServiceError(ServiceError):
-    def __init__(self, detail: str, error_code: Optional[str] = None):
-        super().__init__(detail, error_code, status_code=503)
-
-
-class AINotAvailableError(AIServiceError):
-    def __init__(self, reason: str = "AI 服務未初始化或配置不正確"):
-        super().__init__(reason, "AI_NOT_AVAILABLE")
-
-
-class AIInitializationError(AIServiceError):
-    def __init__(self, provider: str, init_error: str):
-        detail = f"AI 服務初始化失敗 [{provider}]: {init_error}"
-        super().__init__(detail, "AI_INITIALIZATION_ERROR")
-
-
-class AIAPIError(AIServiceError):
-    def __init__(self, provider: str, api_error: str):
-        detail = f"AI API 呼叫失敗 [{provider}]: {api_error}"
-        super().__init__(detail, "AI_API_ERROR")
-
-
-class AIQuotaExceededError(AIServiceError):
-    def __init__(self, provider: str):
-        detail = f"AI 服務配額已用完 [{provider}]，請稍後再試或聯繫管理員"
-        super().__init__(detail, "AI_QUOTA_EXCEEDED")
-
-
-class AIResponseParseError(AIServiceError):
-    def __init__(self, provider: str, parse_error: str):
-        detail = f"AI 回應格式解析失敗 [{provider}]: {parse_error}"
-        super().__init__(detail, "AI_RESPONSE_PARSE_ERROR")
-
-
-# 任務相關異常
-class TaskError(ServiceError):
-    def __init__(
-        self,
-        detail: str,
-        task_id: Optional[str] = None,
-        error_code: Optional[str] = None,
-    ):
-        self.task_id = task_id
-        if task_id:
-            detail = f"任務 {task_id}: {detail}"
-        super().__init__(detail, error_code, status_code=422)
-
-
-class TaskNotFoundError(TaskError):
-    def __init__(self, task_id: str):
-        detail = "任務不存在或已被清理"
-        super().__init__(detail, task_id, "TASK_NOT_FOUND")
-
-
-class TaskExecutionError(TaskError):
-    def __init__(self, task_id: str, execution_error: str):
-        detail = f"任務執行失敗: {execution_error}"
-        super().__init__(detail, task_id, "TASK_EXECUTION_ERROR")
-
-
-class TaskTimeoutError(TaskError):
-    def __init__(self, task_id: str, timeout: int):
-        detail = f"任務執行超時 (超時時間: {timeout}秒)"
-        super().__init__(detail, task_id, "TASK_TIMEOUT_ERROR")
-
-
-class TaskCancelledError(TaskError):
-    def __init__(self, task_id: str):
-        detail = "任務已被取消"
-        super().__init__(detail, task_id, "TASK_CANCELLED")
-
-
-# 提示詞管理器相關異常
-class PromptManagerError(ServiceError):
-    def __init__(self, detail: str, error_code: Optional[str] = None):
-        super().__init__(detail, error_code, status_code=500)
-
-
-class PromptConfigError(PromptManagerError):
-    def __init__(
-        self,
-        message: str,
-        config_path: Optional[str] = None,
-        line_number: Optional[int] = None,
-    ):
-        self.config_path = config_path
-        self.line_number = line_number
-        detail = f"提示詞配置錯誤: {message}"
-        if config_path:
-            detail += f" (檔案: {config_path})"
-        if line_number:
-            detail += f" (行號: {line_number})"
-        super().__init__(detail, "PROMPT_CONFIG_ERROR")
-
-
-class PromptTemplateError(PromptManagerError):
-    def __init__(
-        self,
-        message: str,
-        template_name: Optional[str] = None,
-        context: Optional[dict] = None,
-    ):
-        self.template_name = template_name
-        self.context = context
-        detail = f"提示詞模板錯誤: {message}"
-        if template_name:
-            detail += f" (模板: {template_name})"
-        super().__init__(detail, "PROMPT_TEMPLATE_ERROR")
-
-
-class PromptLanguageError(PromptManagerError):
-    def __init__(self, message: str, language: str, available_languages: list = None):
-        self.language = language
-        self.available_languages = available_languages or []
-        detail = f"提示詞語言錯誤: {message} (語言: {language})"
-        super().__init__(detail, "PROMPT_LANGUAGE_ERROR")
-
-
-# 權限和認證相關異常
 class AuthenticationError(ServiceError):
-    def __init__(self, detail: str = "認證失敗，請檢查 API Key"):
+    """認證失敗異常 (401/403)"""
+
+    def __init__(self, detail: str = "認證失敗，請檢查憑證"):
         super().__init__(detail, "AUTHENTICATION_ERROR", status_code=401)
 
 
-class AuthorizationError(ServiceError):
-    def __init__(self, detail: str = "權限不足，無法執行此操作"):
-        super().__init__(detail, "AUTHORIZATION_ERROR", status_code=403)
-
-
 class ValidationError(ServiceError):
-    def __init__(self, field: str, validation_error: str):
-        detail = f"資料驗證失敗 [{field}]: {validation_error}"
-        super().__init__(detail, "VALIDATION_ERROR", status_code=422)
+    """資料驗證失敗異常 (422)"""
+
+    def __init__(self, detail: str, field: Optional[str] = None):
+        error_code = "VALIDATION_ERROR"
+        if field:
+            detail = f"欄位 '{field}': {detail}"
+        super().__init__(detail, error_code, status_code=422)
 
 
 class ExternalServiceError(ServiceError):
-    def __init__(
-        self, service_name: str, detail: str, error_code: Optional[str] = None
-    ):
-        self.service_name = service_name
-        detail = f"外部服務異常 [{service_name}]: {detail}"
-        super().__init__(detail, error_code, status_code=503)
+    """外部服務異常 (503) - 包含 AI、網路設備等"""
 
-
-class NetworkServiceError(ExternalServiceError):
-    def __init__(self, detail: str):
-        super().__init__("NetworkService", detail, "NETWORK_SERVICE_ERROR")
-
-
-# =============================================================================
-# 錯誤代碼定義
-# =============================================================================
-
-
-class ErrorCodes:
-    """統一錯誤代碼管理"""
-
-    # AI 相關錯誤代碼
-    AI_QUOTA_EXCEEDED = "AI_QUOTA_EXCEEDED"
-    AI_RATE_LIMIT = "AI_RATE_LIMIT"
-    AI_AUTH_FAILED = "AI_AUTH_FAILED"
-    AI_SERVICE_UNAVAILABLE = "AI_SERVICE_UNAVAILABLE"
-    AI_SERVICE_TIMEOUT = "AI_SERVICE_TIMEOUT"
-    AI_QUERY_FAILED = "AI_QUERY_FAILED"
-
-    # 網路設備相關錯誤代碼
-    CONNECTION_TIMEOUT = "CONNECTION_TIMEOUT"
-    CONNECTION_REFUSED = "CONNECTION_REFUSED"
-    HOST_UNREACHABLE = "HOST_UNREACHABLE"
-    AUTH_FAILED = "AUTH_FAILED"
-    COMMAND_FAILED = "COMMAND_FAILED"
-    COMMAND_UNSAFE = "COMMAND_UNSAFE"
-    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"
-    DEVICE_UNREACHABLE = "DEVICE_UNREACHABLE"
-
-    # 任務管理相關錯誤代碼
-    TASK_NOT_FOUND = "TASK_NOT_FOUND"
-    TASK_CREATION_FAILED = "TASK_CREATION_FAILED"
-    TASK_EXECUTION_FAILED = "TASK_EXECUTION_FAILED"
-    TASK_TIMEOUT = "TASK_TIMEOUT"
-
-    # 系統相關錯誤代碼
-    CONFIG_LOAD_FAILED = "CONFIG_LOAD_FAILED"
-    CONFIG_VALIDATION_FAILED = "CONFIG_VALIDATION_FAILED"
-    INTERNAL_ERROR = "INTERNAL_ERROR"
-    VALIDATION_ERROR = "VALIDATION_ERROR"
-    PERMISSION_DENIED = "PERMISSION_DENIED"
-
-
-# 前端友善錯誤訊息映射
-ERROR_MESSAGE_MAP = {
-    ErrorCodes.AI_QUOTA_EXCEEDED: "AI API 配額已用完，請稍後再試或升級方案",
-    ErrorCodes.AI_SERVICE_UNAVAILABLE: "AI 服務暫時不可用，請稍後再試",
-    ErrorCodes.AI_SERVICE_TIMEOUT: "AI 分析超時，請縮短查詢內容或稍後重試",
-    ErrorCodes.CONNECTION_TIMEOUT: "設備連線超時，請檢查網路狀況",
-    ErrorCodes.CONNECTION_REFUSED: "設備拒絕連線，請檢查設備狀態",
-    ErrorCodes.AUTH_FAILED: "設備認證失敗，請檢查憑證設定",
-    ErrorCodes.COMMAND_UNSAFE: "指令不安全，系統已自動阻止",
-    ErrorCodes.DEVICE_NOT_FOUND: "設備不存在，請檢查 IP 位址",
-    ErrorCodes.TASK_NOT_FOUND: "任務不存在或已被清理",
-    ErrorCodes.TASK_CREATION_FAILED: "任務建立失敗",
-    ErrorCodes.TASK_EXECUTION_FAILED: "任務執行失敗",
-    ErrorCodes.CONFIG_LOAD_FAILED: "配置載入失敗",
-    ErrorCodes.INTERNAL_ERROR: "系統內部錯誤",
-    ErrorCodes.VALIDATION_ERROR: "輸入驗證失敗",
-    ErrorCodes.PERMISSION_DENIED: "權限不足",
-}
-
-
-def get_error_message(error_code: str) -> str:
-    """根據錯誤代碼獲取用戶友善的錯誤訊息"""
-    return ERROR_MESSAGE_MAP.get(error_code, "發生未知錯誤，請聯繫系統管理員")
+    def __init__(self, service_name: str, detail: str, error_code: Optional[str] = None):
+        full_detail = f"外部服務異常 [{service_name}]: {detail}"
+        super().__init__(
+            full_detail, 
+            error_code or "EXTERNAL_SERVICE_ERROR", 
+            status_code=503,
+            service_name=service_name
+        )
 
 
 # =============================================================================
-# 異常轉換器
+# 便利建構函數 - 取代原本的細分異常類別
 # =============================================================================
 
+def device_error(device_ip: str, detail: str, error_code: str = "DEVICE_ERROR") -> ServiceError:
+    """設備相關異常建構函數"""
+    return ServiceError(
+        f"設備 {device_ip}: {detail}",
+        error_code,
+        status_code=422,
+        device_ip=device_ip
+    )
 
-@dataclass
-class ExceptionContext:
-    """異常轉換上下文"""
+def ai_error(provider: str, detail: str, error_code: str = "AI_ERROR") -> ExternalServiceError:
+    """AI 服務異常建構函數"""
+    return ExternalServiceError(f"AI-{provider}", detail, error_code)
 
-    error_category: str
-    source_module: str
-    operation: str
-    additional_info: Optional[Dict[str, Any]] = None
+def task_error(task_id: str, detail: str, error_code: str = "TASK_ERROR") -> ServiceError:
+    """任務異常建構函數"""
+    return ServiceError(
+        f"任務 {task_id}: {detail}",
+        error_code,
+        status_code=422,
+        task_id=task_id
+    )
 
-
-class ExceptionConverter:
-    """統一異常轉換器"""
-
-    def __init__(self, debug_mode: bool = False):
-        self.debug_mode = debug_mode
-        self.conversion_stats = {
-            "total_conversions": 0,
-            "by_category": {},
-            "by_exception_type": {},
-        }
-
-    def convert_to_service_error(
-        self, exc: Exception, context: Optional[ExceptionContext] = None
-    ) -> ServiceError:
-        """將任何異常轉換為 ServiceError"""
-        if context:
-            self._update_stats(context.error_category, type(exc).__name__)
-
-        exc_str = str(exc).lower()
-
-        # 網路連線相關異常
-        if any(keyword in exc_str for keyword in ["timeout", "超時", "timed out"]):
-            return DeviceTimeoutError("unknown", "操作", 30)
-        elif any(keyword in exc_str for keyword in ["connection", "連線", "connect"]):
-            return DeviceConnectionError("unknown", str(exc))
-        elif any(keyword in exc_str for keyword in ["authentication", "認證", "auth"]):
-            return DeviceAuthenticationError("unknown")
-
-        # AI 服務相關異常
-        elif any(
-            keyword in exc_str for keyword in ["quota", "配額", "limit", "exceeded"]
-        ):
-            return AIQuotaExceededError("unknown")
-        elif any(keyword in exc_str for keyword in ["api", "service"]):
-            return AIAPIError("unknown", str(exc))
-
-        # 配置相關異常
-        elif isinstance(exc, FileNotFoundError):
-            return ConfigNotFoundError(str(exc))
-        elif isinstance(exc, json.JSONDecodeError):
-            return ConfigParseError("unknown", str(exc))
-
-        # 驗證相關異常
-        elif isinstance(exc, (ValueError, TypeError)):
-            return ValidationError("unknown", str(exc))
-
-        # 預設為一般服務異常
-        else:
-            error_message = str(exc) if self.debug_mode else "系統發生內部錯誤"
-            return ServiceError(error_message, "UNKNOWN_ERROR", 500)
-
-    def get_conversion_stats(self) -> Dict[str, Any]:
-        """獲取異常轉換統計資訊"""
-        return {
-            "total_conversions": self.conversion_stats["total_conversions"],
-            "by_category": dict(self.conversion_stats["by_category"]),
-            "by_exception_type": dict(self.conversion_stats["by_exception_type"]),
-        }
-
-    def reset_stats(self) -> None:
-        """重置統計資訊"""
-        self.conversion_stats = {
-            "total_conversions": 0,
-            "by_category": {},
-            "by_exception_type": {},
-        }
-
-    def _update_stats(self, category: str, exception_type: str) -> None:
-        """更新轉換統計資訊"""
-        self.conversion_stats["total_conversions"] += 1
-
-        if category not in self.conversion_stats["by_category"]:
-            self.conversion_stats["by_category"][category] = 0
-        self.conversion_stats["by_category"][category] += 1
-
-        if exception_type not in self.conversion_stats["by_exception_type"]:
-            self.conversion_stats["by_exception_type"][exception_type] = 0
-        self.conversion_stats["by_exception_type"][exception_type] += 1
-
-
-# 全域實例
-_exception_converter = None
-
-
-def get_exception_converter(debug_mode: bool = False) -> ExceptionConverter:
-    """取得異常轉換器實例"""
-    global _exception_converter
-    if _exception_converter is None:
-        _exception_converter = ExceptionConverter(debug_mode=debug_mode)
-    return _exception_converter
+def config_error(detail: str, config_path: Optional[str] = None) -> ServiceError:
+    """配置異常建構函數"""
+    if config_path:
+        detail = f"配置檔案 {config_path}: {detail}"
+    return ServiceError(detail, "CONFIG_ERROR", status_code=500)
 
 
 # =============================================================================
 # 異常處理器
 # =============================================================================
-
 
 def _create_error_response(
     status_code: int,
@@ -513,22 +164,16 @@ def _log_exception(
 
 
 async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
-    """處理所有自訂業務異常"""
+    """處理所有 ServiceError 異常"""
     _log_exception(request, exc, level=logging.WARNING)
-
-    status_code = getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST)
 
     # 準備額外詳情
     details = {}
-    if isinstance(exc, DeviceError) and hasattr(exc, "device_ip"):
-        details["device_ip"] = exc.device_ip
-    elif isinstance(exc, CommandError) and hasattr(exc, "command"):
-        details["command"] = exc.command
-    elif isinstance(exc, TaskError) and hasattr(exc, "task_id"):
-        details["task_id"] = exc.task_id
+    if hasattr(exc, 'extra_info') and exc.extra_info:
+        details.update(exc.extra_info)
 
     return _create_error_response(
-        status_code=status_code,
+        status_code=exc.status_code,
         message=exc.detail,
         error_code=exc.error_code,
         details=details if details else None,
@@ -594,7 +239,6 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     _log_exception(request, exc, level=logging.ERROR, include_traceback=True)
 
     import os
-
     is_debug = os.getenv("DEBUG", "false").lower() == "true"
 
     if is_debug:
@@ -617,20 +261,15 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 def register_exception_handlers(app):
     """註冊所有異常處理器到 FastAPI 應用"""
-    # 註冊自訂業務異常處理器
+    # 註冊核心異常處理器
     app.add_exception_handler(ServiceError, service_error_handler)
-    app.add_exception_handler(DeviceError, service_error_handler)
-    app.add_exception_handler(CommandError, service_error_handler)
-    app.add_exception_handler(AIServiceError, service_error_handler)
-    app.add_exception_handler(TaskError, service_error_handler)
-    app.add_exception_handler(ConfigError, service_error_handler)
     app.add_exception_handler(AuthenticationError, service_error_handler)
-    app.add_exception_handler(AuthorizationError, service_error_handler)
+    app.add_exception_handler(ValidationError, service_error_handler)
+    app.add_exception_handler(ExternalServiceError, service_error_handler)
 
     # 註冊驗證異常處理器
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(PydanticValidationError, validation_exception_handler)
-    app.add_exception_handler(ValidationError, service_error_handler)
 
     # 註冊 HTTP 異常處理器
     app.add_exception_handler(HTTPException, http_exception_handler)
@@ -639,25 +278,39 @@ def register_exception_handlers(app):
     # 註冊通用異常處理器（必須最後註冊）
     app.add_exception_handler(Exception, general_exception_handler)
 
-    logger.info("已註冊所有全域異常處理器")
+    logger.info("已註冊簡化版異常處理器")
 
 
 # =============================================================================
-# 便利函數
+# 向後相容性支援 - 保留重要的便利函數
 # =============================================================================
 
-
-def convert_to_service_error(
-    exc: Exception, operation: str = "系統操作"
-) -> ServiceError:
+def convert_to_service_error(exc: Exception, operation: str = "系統操作") -> ServiceError:
     """便利函數：將任何異常轉換為 ServiceError"""
-    converter = get_exception_converter()
-    context = ExceptionContext(
-        error_category="general", source_module="unknown", operation=operation
-    )
-    return converter.convert_to_service_error(exc, context)
+    exc_str = str(exc).lower()
+
+    # 基本的異常映射
+    if any(keyword in exc_str for keyword in ["timeout", "超時", "timed out"]):
+        return ServiceError(f"{operation}超時", "TIMEOUT_ERROR", 408)
+    elif any(keyword in exc_str for keyword in ["connection", "連線", "connect"]):
+        return ServiceError(f"{operation}連線失敗: {str(exc)}", "CONNECTION_ERROR", 503)
+    elif any(keyword in exc_str for keyword in ["authentication", "認證", "auth"]):
+        return AuthenticationError(f"{operation}認證失敗")
+    elif any(keyword in exc_str for keyword in ["quota", "配額", "limit", "exceeded"]):
+        return ExternalServiceError("API", f"配額已用完: {str(exc)}", "QUOTA_EXCEEDED")
+    elif isinstance(exc, FileNotFoundError):
+        return config_error(f"檔案不存在: {str(exc)}")
+    elif isinstance(exc, (ValueError, TypeError)):
+        return ValidationError(str(exc))
+    else:
+        return ServiceError(f"{operation}失敗: {str(exc)}", "UNKNOWN_ERROR", 500)
 
 
-def map_exception_to_service_error(exc: Exception, context: str = "") -> ServiceError:
-    """將通用異常映射為服務層異常（向後相容）"""
-    return convert_to_service_error(exc, context or "系統操作")
+# 向後相容性別名
+map_exception_to_service_error = convert_to_service_error
+
+# 舊式異常類別別名 (向後相容)
+DeviceNotFoundError = lambda device_ip: device_error(device_ip, "設備未找到", "DEVICE_NOT_FOUND")
+AINotAvailableError = lambda reason="AI 服務不可用": ai_error("Unknown", reason, "AI_NOT_AVAILABLE")
+TaskNotFoundError = lambda task_id: task_error(task_id, "任務不存在", "TASK_NOT_FOUND")
+ConfigNotFoundError = lambda path: config_error(f"配置檔案不存在: {path}", path)

@@ -32,7 +32,7 @@ except ImportError:
 
 
 from common import NetworkAnalysisResponse
-from exceptions import AIServiceError
+from exceptions import ExternalServiceError, ai_error
 from network import batch_command_wrapper, set_device_scope_restriction
 from prompt_manager import get_prompt_manager
 from settings import settings
@@ -499,10 +499,10 @@ Question: {{input}}
             str: 格式化的 Markdown 結果
 
         Raises:
-            AIServiceError: 當 AI 服務未初始化或查詢失敗時
+            ExternalServiceError: 當 AI 服務未初始化或查詢失敗時
         """
         if not self.ai_initialized or not self.agent_executor:
-            raise AIServiceError("AI 服務未啟用或初始化失敗")
+            raise ai_error("Gemini", "AI 服務未啟用或初始化失敗", "AI_NOT_AVAILABLE")
 
         # 使用 PromptManager 統一處理提示詞構建
         unique_id = uuid.uuid4()
@@ -541,7 +541,7 @@ Question: {{input}}
             )
 
             if not final_answer_str.strip():
-                raise AIServiceError("空的 AI 回應")
+                raise ai_error("Gemini", "AI 回應為空", "AI_EMPTY_RESPONSE")
 
             try:
                 # 使用 PydanticOutputParser 解析結構化輸出

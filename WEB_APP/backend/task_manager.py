@@ -23,7 +23,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 # 導入自定義異常
-from exceptions import TaskError
+from exceptions import ServiceError, task_error
 
 logger = logging.getLogger(__name__)
 
