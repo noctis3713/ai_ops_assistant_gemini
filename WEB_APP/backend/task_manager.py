@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-非同步任務管理器
+任務管理和異步執行模組
 
-專注於兩個核心功能：
-1. 設備指令執行 + 非同步處理
-2. AI 查詢 + 非同步處理
-
-採用 YAGNI 原則
+提供網路任務的非同步執行和狀態管理：
+- 設備指令執行任務管理
+- AI 智能分析任務處理
+- 任務進度追蹤和結果儲存
+- Webhook 回調和通知機制
 
 Created: 2025-08-22
 Author: Claude Code Assistant
@@ -29,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 class TaskStatus(Enum):
-    """任務狀態枚舉"""
+    """任務執行狀態枚舉定義
+    
+    定義任務在生命週期中的各種狀態。
+    """
 
     PENDING = "pending"
     RUNNING = "running"
@@ -39,7 +42,10 @@ class TaskStatus(Enum):
 
 @dataclass
 class TaskProgress:
-    """任務進度資訊"""
+    """任務執行進度和狀態資訊
+    
+    追蹤任務執行的百分比、當前階段和詳細資訊。
+    """
 
     percentage: float = 0.0
     current_stage: str = "等待開始..."
@@ -59,7 +65,10 @@ class TaskProgress:
 
 @dataclass
 class Task:
-    """任務資料結構"""
+    """任務實體的資料結構
+    
+    包含任務的完整資訊：識別符、操作類型、進度和結果。
+    """
 
     task_id: str
     operation_type: str  # "device_command" or "ai_query"
@@ -75,9 +84,17 @@ class Task:
 
 
 class AsyncTaskManager:
-    """非同步任務管理器"""
+    """任務管理和異步執行引擎
+    
+    負責任務的建立、執行、狀態管理和結果儲存，
+    支援多個任務並行執行和線程安全的狀態訪問。
+    """
 
     def __init__(self):
+        """初始化任務管理器
+        
+        建立任務儲存和異步鎖，確保線程安全。
+        """
         self.tasks: Dict[str, Task] = {}
         self._lock = asyncio.Lock()
 
@@ -87,7 +104,16 @@ class AsyncTaskManager:
         payload: Dict[str, Any],
         webhook_url: Optional[str] = None,
     ) -> str:
-        """建立新任務並返回 task_id"""
+        """建立並啟動新的異步任務
+        
+        Args:
+            operation_type: 操作類型，device_command 或 ai_query
+            payload: 任務執行所需的參數資料
+            webhook_url: 任務完成後的回調 URL
+            
+        Returns:
+            任務的唯一識別符
+        """
         task_id = str(uuid.uuid4())
 
         task = Task(
@@ -108,12 +134,18 @@ class AsyncTaskManager:
         return task_id
 
     async def get_task(self, task_id: str) -> Optional[Task]:
-        """取得任務資訊"""
+        """根據 ID 獲取任務的詳細資訊
+        
+        線程安全地返回任務的當前狀態和結果。
+        """
         async with self._lock:
             return self.tasks.get(task_id)
 
     async def _execute_task(self, task_id: str):
-        """執行任務的核心邏輯"""
+        """任務執行的主要流程管理
+        
+        根據任務類型調用相應的執行器，處理錯誤和通知。
+        """
         async with self._lock:
             task = self.tasks.get(task_id)
             if not task:
@@ -154,7 +186,10 @@ class AsyncTaskManager:
                 task.progress.update(0, f"執行失敗: {e}")
 
     async def _execute_device_command(self, task: Task) -> Dict[str, Any]:
-        """執行設備指令"""
+        """執行網路設備指令任務
+        
+        透過 SSH 連線向指定設備執行指令，收集結果和處理錯誤。
+        """
         devices = task.payload.get("devices", [])
         command = task.payload.get("command", "")
 
@@ -223,7 +258,10 @@ class AsyncTaskManager:
         }
 
     async def _execute_ai_query(self, task: Task) -> Dict[str, Any]:
-        """執行 AI 查詢"""
+        """執行 AI 智能分析任務
+        
+        調用 AI 服務進行網路設備或系統狀態的智能分析。
+        """
         devices = task.payload.get("devices", [])
         query = task.payload.get("query", "")
 
@@ -249,7 +287,7 @@ class AsyncTaskManager:
 
         settings = get_settings()
 
-        # 直接格式化 AI 結果，移除複雜的格式化器
+        # 直接格式化 AI 結果
         formatted_results = []
 
         # ai_response 是字符串，不是字典
@@ -287,14 +325,20 @@ class AsyncTaskManager:
         }
 
     async def _update_progress(self, task_id: str, percentage: float, stage: str):
-        """更新任務進度"""
+        """線程安全地更新任務進度
+        
+        更新任務的執行百分比和當前階段描述。
+        """
         async with self._lock:
             task = self.tasks.get(task_id)
             if task:
                 task.progress.update(percentage, stage)
 
     async def _send_webhook(self, task: Task):
-        """發送 webhook 通知"""
+        """發送任務完成的 Webhook 通知
+        
+        向指定的 URL 發送 HTTP POST 請求，包含任務結果。
+        """
         if not task.webhook_url:
             return
 
@@ -333,7 +377,11 @@ _task_manager = None
 
 
 def get_task_manager() -> AsyncTaskManager:
-    """取得全域任務管理器實例"""
+    """獲取全域任務管理器實例
+    
+    單例模式的任務管理器，確保在應用程式中
+    使用相同的任務儲存和管理實例。
+    """
     global _task_manager
     if _task_manager is None:
         _task_manager = AsyncTaskManager()

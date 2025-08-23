@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-簡化異常處理模組
+異常處理和錯誤管理模組
 
-遵循 YAGNI 原則，僅保留必要的異常處理功能：
-- 4 個核心異常類別
-- 統一錯誤回應格式  
-- 必要的異常處理器
+提供統一的異常處理機制：
+- 核心異常類別定義
+- 標準化錯誤回應格式  
+- FastAPI 異常處理器
 
 Created: 2025-08-23
-Author: Claude Code Assistant (YAGNI 簡化版本)
+Author: Claude Code Assistant
 """
 
 import logging
@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# 核心異常定義 (4 個核心類別)
+# 核心異常類別定義
 # =============================================================================
 
 
 class ServiceError(Exception):
-    """通用業務邏輯異常 - 取代所有細分異常類別"""
+    """通用業務邏輯異常基礎類別"""
 
     def __init__(
         self, 
@@ -50,20 +50,20 @@ class ServiceError(Exception):
         self.detail = detail
         self.error_code = error_code or "SERVICE_ERROR"
         self.status_code = status_code
-        # 儲存額外資訊 (如 device_ip, task_id 等)
+        # 儲存相關上下文資訊
         self.extra_info = kwargs
         super().__init__(detail)
 
 
 class AuthenticationError(ServiceError):
-    """認證失敗異常 (401/403)"""
+    """用戶認證失敗異常"""
 
     def __init__(self, detail: str = "認證失敗，請檢查憑證"):
         super().__init__(detail, "AUTHENTICATION_ERROR", status_code=401)
 
 
 class ValidationError(ServiceError):
-    """資料驗證失敗異常 (422)"""
+    """資料驗證錯誤異常"""
 
     def __init__(self, detail: str, field: Optional[str] = None):
         error_code = "VALIDATION_ERROR"
@@ -73,7 +73,7 @@ class ValidationError(ServiceError):
 
 
 class ExternalServiceError(ServiceError):
-    """外部服務異常 (503) - 包含 AI、網路設備等"""
+    """外部服務通訊異常"""
 
     def __init__(self, service_name: str, detail: str, error_code: Optional[str] = None):
         full_detail = f"外部服務異常 [{service_name}]: {detail}"
@@ -86,11 +86,11 @@ class ExternalServiceError(ServiceError):
 
 
 # =============================================================================
-# 便利建構函數 - 取代原本的細分異常類別
+# 異常建構工具函數
 # =============================================================================
 
 def device_error(device_ip: str, detail: str, error_code: str = "DEVICE_ERROR") -> ServiceError:
-    """設備相關異常建構函數"""
+    """建立網路設備相關異常"""
     return ServiceError(
         f"設備 {device_ip}: {detail}",
         error_code,
@@ -99,11 +99,11 @@ def device_error(device_ip: str, detail: str, error_code: str = "DEVICE_ERROR") 
     )
 
 def ai_error(provider: str, detail: str, error_code: str = "AI_ERROR") -> ExternalServiceError:
-    """AI 服務異常建構函數"""
+    """建立 AI 服務相關異常"""
     return ExternalServiceError(f"AI-{provider}", detail, error_code)
 
 def task_error(task_id: str, detail: str, error_code: str = "TASK_ERROR") -> ServiceError:
-    """任務異常建構函數"""
+    """建立任務管理相關異常"""
     return ServiceError(
         f"任務 {task_id}: {detail}",
         error_code,
@@ -112,7 +112,7 @@ def task_error(task_id: str, detail: str, error_code: str = "TASK_ERROR") -> Ser
     )
 
 def config_error(detail: str, config_path: Optional[str] = None) -> ServiceError:
-    """配置異常建構函數"""
+    """建立系統配置相關異常"""
     if config_path:
         detail = f"配置檔案 {config_path}: {detail}"
     return ServiceError(detail, "CONFIG_ERROR", status_code=500)
@@ -128,7 +128,7 @@ def _create_error_response(
     error_code: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
-    """創建統一格式的錯誤回應"""
+    """建立標準化錯誤回應"""
     from common import BaseResponse
 
     response_data = BaseResponse.error_response(
@@ -147,7 +147,7 @@ def _log_exception(
     level: int = logging.ERROR,
     include_traceback: bool = False,
 ) -> None:
-    """記錄異常日誌"""
+    """記錄異常相關日誌"""
     log_data = {
         "method": request.method,
         "url": str(request.url),
@@ -164,7 +164,7 @@ def _log_exception(
 
 
 async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
-    """處理所有 ServiceError 異常"""
+    """處理業務邏輯異常"""
     _log_exception(request, exc, level=logging.WARNING)
 
     # 準備額外詳情
@@ -183,7 +183,7 @@ async def service_error_handler(request: Request, exc: ServiceError) -> JSONResp
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """處理請求驗證錯誤"""
+    """處理 FastAPI 請求驗證錯誤"""
     _log_exception(request, exc, level=logging.INFO)
 
     # 格式化驗證錯誤
@@ -204,7 +204,7 @@ async def validation_exception_handler(
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """處理 HTTP 異常"""
+    """處理 HTTP 狀態碼異常"""
     log_level = logging.WARNING if exc.status_code < 500 else logging.ERROR
     _log_exception(request, exc, level=log_level)
 
@@ -235,7 +235,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """處理所有未預期的異常"""
+    """處理未捕捉的通用異常"""
     _log_exception(request, exc, level=logging.ERROR, include_traceback=True)
 
     import os
@@ -260,7 +260,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 def register_exception_handlers(app):
-    """註冊所有異常處理器到 FastAPI 應用"""
+    """在 FastAPI 應用中註冊異常處理器"""
     # 註冊核心異常處理器
     app.add_exception_handler(ServiceError, service_error_handler)
     app.add_exception_handler(AuthenticationError, service_error_handler)
@@ -278,18 +278,18 @@ def register_exception_handlers(app):
     # 註冊通用異常處理器（必須最後註冊）
     app.add_exception_handler(Exception, general_exception_handler)
 
-    logger.info("已註冊簡化版異常處理器")
+    logger.info("已註冊異常處理器")
 
 
 # =============================================================================
-# 向後相容性支援 - 保留重要的便利函數
+# 相容性支援和工具函數
 # =============================================================================
 
 def convert_to_service_error(exc: Exception, operation: str = "系統操作") -> ServiceError:
-    """便利函數：將任何異常轉換為 ServiceError"""
+    """將任意異常轉換為 ServiceError 類型"""
     exc_str = str(exc).lower()
 
-    # 基本的異常映射
+    # 根據異常訊息進行類型映射
     if any(keyword in exc_str for keyword in ["timeout", "超時", "timed out"]):
         return ServiceError(f"{operation}超時", "TIMEOUT_ERROR", 408)
     elif any(keyword in exc_str for keyword in ["connection", "連線", "connect"]):
@@ -306,10 +306,10 @@ def convert_to_service_error(exc: Exception, operation: str = "系統操作") ->
         return ServiceError(f"{operation}失敗: {str(exc)}", "UNKNOWN_ERROR", 500)
 
 
-# 向後相容性別名
+# 兼容性別名
 map_exception_to_service_error = convert_to_service_error
 
-# 舊式異常類別別名 (向後相容)
+# 兼容性異常類別別名
 DeviceNotFoundError = lambda device_ip: device_error(device_ip, "設備未找到", "DEVICE_NOT_FOUND")
 AINotAvailableError = lambda reason="AI 服務不可用": ai_error("Unknown", reason, "AI_NOT_AVAILABLE")
 TaskNotFoundError = lambda task_id: task_error(task_id, "任務不存在", "TASK_NOT_FOUND")

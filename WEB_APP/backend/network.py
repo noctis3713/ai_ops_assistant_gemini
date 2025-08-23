@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-統一網路工具模組
+網路連線和設備通信模組
 
-整合異步和同步網路功能到單一檔案，遵循 YAGNI 原則：
-- 異步網路功能（主要使用）
-- 同步網路功能（AI 工具使用）
-- 統一認證和錯誤處理
-- 監控功能
+提供網路設備的 SSH 連線和指令執行功能：
+- 異步 SSH 連線池管理和指令批次執行
+- 同步網路工具接口（AI 代理使用）
+- 設備認證管理和安全驗證
+- 健康檢查和連線監控功能
 
 Created: 2025-08-23
 Author: Claude Code Assistant
@@ -40,7 +40,10 @@ _local_data = threading.local()
 
 
 def set_device_scope_restriction(device_ips: Optional[List[str]]):
-    """設置當前線程的設備範圍限制"""
+    """限制 AI 工具可以存取的設備範圍
+    
+    用於 AI 查詢時限制指令只能在指定的設備上執行。
+    """
     _local_data.device_scope_restriction = device_ips
     if device_ips:
         logger.debug(f"設置設備範圍限制: {device_ips}")
@@ -49,12 +52,18 @@ def set_device_scope_restriction(device_ips: Optional[List[str]]):
 
 
 def get_device_scope_restriction() -> Optional[List[str]]:
-    """獲取當前線程的設備範圍限制"""
+    """獲取當前的設備存取範圍限制
+    
+    返回當前線程被限制可以存取的設備 IP 清單。
+    """
     return getattr(_local_data, "device_scope_restriction", None)
 
 
 def get_device_credentials(device_config=None):
-    """統一的設備認證管理（異步和同步共用）"""
+    """獲取網路設備的認證資訊
+    
+    優先使用設備個別配置，否則使用全域環境變數。
+    """
     if device_config:
         if isinstance(device_config, dict):
             username = device_config.get("username")
@@ -112,7 +121,10 @@ def get_device_credentials(device_config=None):
 
 
 def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
-    """根據設備 IP 查找對應的設備配置"""
+    """根據 IP 位址查找設備配置資訊
+    
+    從 devices.json 中查找符合 IP 的設備配置。
+    """
     try:
         from settings import get_settings
         settings = get_settings()
@@ -128,7 +140,10 @@ def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
 
 
 def classify_network_error(error_message: str) -> Dict[str, Any]:
-    """統一的網路錯誤分類"""
+    """分類網路連線和設備錯誤類型
+    
+    根據錯誤訊息判斷錯誤類型、嚴重程度和建議解決方法。
+    """
     error_lower = error_message.lower()
 
     if not error_message.startswith("錯誤："):
@@ -182,7 +197,10 @@ def classify_network_error(error_message: str) -> Dict[str, Any]:
 
 @dataclass
 class ExecutionResult:
-    """統一執行結果（用於異步和同步）"""
+    """單一設備指令執行的結果資料
+    
+    包含設備資訊、成功狀態、輸出內容和執行時間。
+    """
 
     device_ip: str
     device_name: str = ""
@@ -195,7 +213,10 @@ class ExecutionResult:
 
 @dataclass
 class BatchResult:
-    """統一批次執行結果（用於異步和同步）"""
+    """多個設備批次執行的全局結果
+    
+    匯總所有設備的執行結果和統計資訊。
+    """
 
     results: List[ExecutionResult] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
@@ -208,7 +229,11 @@ class BatchResult:
 
 
 class AsyncConnectionPool:
-    """異步連線池管理器"""
+    """異步 SSH 連線池管理器
+    
+    管理多個設備的 SSH 連線復用，支援連線池大小限制、
+    連線保活和自動清理功能。
+    """
 
     def __init__(self, max_connections: int = None):
         if max_connections is None:
@@ -300,7 +325,11 @@ class AsyncConnectionPool:
 
 
 class AsyncNetworkClient:
-    """統一的異步網路客戶端"""
+    """主要的異步網路設備通信客戶端
+    
+    提供高層次的設備指令執行、批次處理和健康檢查功能，
+    內建連線池管理和安全性驗證。
+    """
 
     def __init__(self):
         self.connection_pool = AsyncConnectionPool()

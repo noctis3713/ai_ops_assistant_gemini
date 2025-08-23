@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-統一配置系統 - 遵循 YAGNI 原則
-所有配置功能合併到單一檔案，移除過度抽象
-整合 ConfigManager 功能到此檔案
+系統配置管理模組
+
+提供集中化的應用程式配置和環境變數管理：
+- AI 服務配置（Gemini 和 Claude 金鑰）
+- 網路連線參數和設備認證
+- 日誌系統和除錯設定
+- 設備和群組配置載入
 """
 
 import json
@@ -22,13 +26,13 @@ logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     """
-    統一配置類別
+    主要配置管理類別
 
-    整合所有配置到單一類別，移除過度設計：
-    - 移除 Mixin 模式
-    - 移除動態委託
-    - 移除抽象基類
-    - 直接定義所有配置屬性
+    使用 Pydantic BaseSettings 提供簡單且安全的配置管理：
+    - 自動環境變數載入和驗證
+    - 型別安全的配置屬性
+    - JSON 和 YAML 配置檔案支援
+    - 配置快取和依賴注入
     """
 
     model_config = SettingsConfigDict(
@@ -102,19 +106,25 @@ class Settings(BaseSettings):
     # =========================================================================
 
     def is_ai_configured(self) -> bool:
-        """檢查是否有配置任何 AI 服務"""
+        """檢查 AI 服務是否已配置
+        
+        返回 True 如果 Gemini 或 Claude 中至少一個已設定 API 金鑰。
+        """
         return bool(self.GEMINI_API_KEY or self.CLAUDE_API_KEY)
 
     def get_gemini_configured(self) -> bool:
-        """檢查 Gemini 是否已配置"""
+        """檢查 Google Gemini AI 的配置狀態"""
         return bool(self.GEMINI_API_KEY)
 
     def get_claude_configured(self) -> bool:
-        """檢查 Claude 是否已配置"""
+        """檢查 Anthropic Claude AI 的配置狀態"""
         return bool(self.CLAUDE_API_KEY)
 
     def get_active_ai_provider(self) -> Optional[str]:
-        """取得當前啟用的 AI 服務"""
+        """獲取當前有效的 AI 服務提供者
+        
+        根據 AI_PROVIDER 設定和對應 API 金鑰的可用性回傳。
+        """
         if self.AI_PROVIDER == "claude" and self.CLAUDE_API_KEY:
             return "claude"
         elif self.AI_PROVIDER == "gemini" and self.GEMINI_API_KEY:
@@ -122,14 +132,17 @@ class Settings(BaseSettings):
         return None
 
     # =========================================================================
-    # 前端/後端配置載入 - 整合自 config.py
+    # 前端/後端配置管理
     # =========================================================================
 
     _frontend_config_cache: Optional[Dict[str, Any]] = None
     _backend_config_cache: Optional[Dict[str, Any]] = None
 
     def get_frontend_config(self) -> Dict[str, Any]:
-        """載入前端配置"""
+        """載入前端應用配置參數
+        
+        從 frontend_settings.yaml 讀取配置，支援快取機制。
+        """
         if self._frontend_config_cache is not None:
             return self._frontend_config_cache
 
@@ -148,7 +161,10 @@ class Settings(BaseSettings):
             return {}
 
     def get_backend_config(self) -> Dict[str, Any]:
-        """載入後端配置"""
+        """載入後端系統配置參數
+        
+        從 backend_settings.yaml 讀取配置，支援快取機制。
+        """
         if self._backend_config_cache is not None:
             return self._backend_config_cache
 
@@ -167,20 +183,29 @@ class Settings(BaseSettings):
             return {}
 
     def clear_frontend_config_cache(self):
-        """清除前端配置快取"""
+        """重新載入前端配置檔案
+        
+        清除內存快取，下次存取時重新讀取檔案。
+        """
         self._frontend_config_cache = None
 
     def clear_backend_config_cache(self):
-        """清除後端配置快取"""
+        """重新載入後端配置檔案
+        
+        清除內存快取，下次存取時重新讀取檔案。
+        """
         self._backend_config_cache = None
 
     def apply_backend_config_overrides(self):
-        """應用後端配置覆蓋"""
+        """應用後端配置覆寫設定
+        
+        預留功能，用於未來的配置覆寫支援。
+        """
         # 記錄配置更新操作
         pass
 
     # =========================================================================
-    # 設備配置管理 - 整合自 ConfigManager
+    # 設備配置管理
     # =========================================================================
 
     _devices_config: Optional[List[Dict[str, Any]]] = None
@@ -193,7 +218,10 @@ class Settings(BaseSettings):
         return Path(__file__).parent / "config"
 
     def get_devices_config(self) -> List[Dict[str, Any]]:
-        """載入設備配置 - 整合自 ConfigManager"""
+        """載入網路設備配置清單
+        
+        從 devices.json 讀取設備資訊，包含 IP、名稱和認證資訊。
+        """
         if self._devices_config is not None:
             return self._devices_config
 
@@ -216,7 +244,10 @@ class Settings(BaseSettings):
             return self._devices_config
 
     def get_groups_config(self) -> Dict[str, Any]:
-        """載入群組配置 - 整合自 ConfigManager"""
+        """載入設備群組配置資訊
+        
+        從 groups.json 讀取設備群組設定，支援群組化管理。
+        """
         if self._groups_config is not None:
             return self._groups_config
 
@@ -248,7 +279,10 @@ class Settings(BaseSettings):
             return self._groups_config
 
     def get_security_config(self) -> Dict[str, Any]:
-        """載入安全配置 - 整合自 ConfigManager"""
+        """載入安全政策和驗證配置
+        
+        從 security.json 讀取安全設定，用於指令驗證。
+        """
         if self._security_config is not None:
             return self._security_config
 
@@ -270,7 +304,10 @@ class Settings(BaseSettings):
             return self._security_config
 
     def get_device_by_ip(self, ip: str) -> Optional[Dict[str, Any]]:
-        """根據 IP 取得設備配置 - 整合自 ConfigManager"""
+        """根據 IP 位址查找設備配置
+        
+        返回符合 IP 的設備配置資訊，如果找不到則返回 None。
+        """
         devices = self.get_devices_config()
         for device in devices:
             if device.get("ip") == ip:
@@ -278,12 +315,18 @@ class Settings(BaseSettings):
         return None
 
     def get_all_device_ips(self) -> List[str]:
-        """取得所有設備 IP - 整合自 ConfigManager"""
+        """獲取系統中所有設備的 IP 位址清單
+        
+        返回所有已配置設備的 IP 位址列表。
+        """
         devices = self.get_devices_config()
         return [d.get("ip") for d in devices if d.get("ip")]
 
     def refresh_config(self):
-        """重新載入所有配置 - 整合自 ConfigManager"""
+        """刷新所有配置檔案的快取
+        
+        清除所有內存快取，強制重新讀取配置檔案。
+        """
         self._devices_config = None
         self._groups_config = None
         self._security_config = None
@@ -296,7 +339,11 @@ settings = Settings()
 
 
 def get_settings() -> Settings:
-    """取得全域設定實例"""
+    """獲取全域配置管理實例
+    
+    提供單例模式的配置存取，確保在應用程式中
+    的配置一致性。
+    """
     return settings
 
 
@@ -306,7 +353,10 @@ def get_settings() -> Settings:
 
 
 def validate_ip_address(ip_str: str) -> Tuple[bool, str]:
-    """驗證 IP 地址格式"""
+    """驗證 IP 位址格式的正確性
+    
+    支援 IPv4 和 IPv6 格式驗證，返回驗證結果和描述。
+    """
     if not ip_str or not isinstance(ip_str, str):
         return False, "IP 地址不能為空"
 
@@ -325,7 +375,11 @@ def validate_ip_address(ip_str: str) -> Tuple[bool, str]:
 
 
 def validate_device_list(device_list: List[str]) -> Tuple[bool, str, List[str]]:
-    """驗證設備 IP 列表"""
+    """驗證設備 IP 位址清單的有效性
+    
+    檢查清單中每個 IP 位址的格式，返回驗證結果、
+    訊息和有效的 IP 清單。
+    """
     if not device_list:
         return False, "設備列表不能為空", []
 
@@ -349,7 +403,10 @@ def validate_device_list(device_list: List[str]) -> Tuple[bool, str, List[str]]:
 
 
 class SimpleCommandValidator:
-    """指令驗證器"""
+    """網路設備指令安全性驗證器
+    
+    防止危險指令的執行，只允許安全的唯讀指令。
+    """
 
     # 預設安全配置
     DEFAULT_ALLOWED_PREFIXES = ["show", "ping", "traceroute", "display", "get"]
@@ -367,12 +424,19 @@ class SimpleCommandValidator:
     ]
 
     def __init__(self):
-        """初始化指令驗證器"""
+        """初始化安全驗證器
+        
+        設定允許的指令前綴和危險關鍵字清單。
+        """
         self.allowed_prefixes = self.DEFAULT_ALLOWED_PREFIXES.copy()
         self.dangerous_keywords = self.DEFAULT_DANGEROUS_KEYWORDS.copy()
 
     def validate_command(self, command: str) -> Tuple[bool, str]:
-        """驗證指令是否安全"""
+        """檢查指令的安全性
+        
+        驗證指令前綴、檢查危險關鍵字和特殊字元，
+        返回驗證結果和詳細訊息。
+        """
         if not command or not isinstance(command, str):
             return False, "指令不能為空"
 
@@ -405,7 +469,11 @@ class SimpleCommandValidator:
         return True, "指令安全驗證通過"
 
     def reload_config(self):
-        """重載安全配置，使用預設配置"""
+        """重新讀取安全政策配置
+        
+        從 security.json 更新允許的指令和危險關鍵字，
+        如果失敗則使用預設安全設定。
+        """
         try:
             # 直接使用全域 settings 實例
             security_config = settings.get_security_config()
@@ -429,7 +497,10 @@ _command_validator = None
 
 
 def get_command_validator() -> SimpleCommandValidator:
-    """獲取指令驗證器實例"""
+    """獲取安全指令驗證器實例
+    
+    單例模式的驗證器，確保一致的安全政策。
+    """
     global _command_validator
     if _command_validator is None:
         _command_validator = SimpleCommandValidator()
@@ -438,19 +509,28 @@ def get_command_validator() -> SimpleCommandValidator:
 
 # 便利函數
 def validate_device_ip(device_ip: str) -> bool:
-    """簡單的設備 IP 驗證（向後相容）"""
+    """快速驗證設備 IP 位址格式
+    
+    回傳 IP 位址驗證的布爾值結果。
+    """
     is_valid, _ = validate_ip_address(device_ip)
     return is_valid
 
 
 def validate_command_safety(command: str) -> Tuple[bool, str]:
-    """驗證指令安全性（向後相容）"""
+    """驗證指令安全性的便捷函數
+    
+    使用全域驗證器驗證指令，返回結果和訊息。
+    """
     validator = get_command_validator()
     return validator.validate_command(command)
 
 
 def is_safe_command(command: str) -> bool:
-    """檢查指令是否安全"""
+    """檢查指令是否通過安全檢查
+    
+    回傳指令安全檢查的布爾值結果。
+    """
     is_safe, _ = validate_command_safety(command)
     return is_safe
 

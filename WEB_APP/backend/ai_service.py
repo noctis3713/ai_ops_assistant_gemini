@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 服務模組 - 統一管理 AI 系統初始化、處理和工具整合
-支援 Google Gemini 和 Claude AI 雙引擎，提供智能網路分析和批次操作
+AI 智能分析服務模組
+
+提供網路設備的 AI 智能分析和查詢功能：
+- Google Gemini 和 Anthropic Claude 雙 AI 引擎支援
+- 網路設備指令執行和結果分析
+- 自動化的輸出摘要和長文本處理
+- ReAct 代理和工具串接
 """
 
 import asyncio
@@ -44,7 +49,11 @@ logger = logging.getLogger(__name__)
 
 
 def _get_few_shot_examples():
-    """使用 PromptManager 獲取思考鏈範例（重構版）"""
+    """獲取 AI 思考鏈示範範例
+    
+    透過提示詞管理器載入預定義的 ReAct 範例，
+    幫助 AI 理解如何逐步分析網路問題。
+    """
     try:
         # 獲取 PromptManager 實例
         prompt_manager = get_prompt_manager()
@@ -58,7 +67,10 @@ def _get_few_shot_examples():
 
 
 def get_ai_logger():
-    """建立 AI 專用日誌記錄器"""
+    """建立 AI 模組專用的日誌記錄器
+    
+    獨立的日誌通道，用於追蹤 AI 服務的執行狀態。
+    """
     import logging
 
     ai_logger = logging.getLogger("ai_service")
@@ -70,7 +82,11 @@ ai_logger = get_ai_logger()
 
 
 class OutputSummarizer:
-    """AI 輸出摘要器 - 處理超長指令輸出"""
+    """設備輸出內容的智能摘要服務
+    
+    當網路設備輸出過長時，使用 AI 進行摘要和總結，
+    保留關鍵資訊同時減少冗餘內容。
+    """
 
     def __init__(self, ai_provider: str = None, model_name: str = None):
         self.ai_provider = ai_provider or settings.AI_PROVIDER
@@ -85,14 +101,20 @@ class OutputSummarizer:
         self._initialize_ai_service()
 
     def _initialize_ai_service(self):
-        """初始化 AI 服務"""
+        """根據配置初始化對應的 AI 服務
+        
+        根據 ai_provider 設定選擇 Gemini 或 Claude 進行初始化。
+        """
         if self.ai_provider == "claude":
             self._initialize_claude()
         else:
             self._initialize_gemini()
 
     def _initialize_claude(self):
-        """初始化 Claude AI"""
+        """配置 Anthropic Claude 摘要服務
+        
+        使用 Claude API 金鑰和指定模型初始化摘要器。
+        """
         if not AI_AVAILABLE:
             logger.warning("未安裝 langchain_anthropic")
             return
@@ -116,7 +138,10 @@ class OutputSummarizer:
             self.llm = None
 
     def _initialize_gemini(self):
-        """初始化 Gemini AI"""
+        """配置 Google Gemini 摘要服務
+        
+        使用 Gemini API 金鑰和指定模型初始化摘要器。
+        """
         if not AI_AVAILABLE:
             logger.warning("未安裝 langchain_google_genai")
             return
@@ -137,14 +162,17 @@ class OutputSummarizer:
             self.llm = None
 
     def get_summary_prompt(self, command: str) -> str:
-        """摘要提示詞"""
-        return f"""請摘要以下網路指令輸出，保留關鍵診斷資訊，移除冗餘內容：
+        """產生設備輸出摘要的提示詞
+        
+        建立結構化的提示，指導 AI 保留關鍵訊息。
+        """
+        return f"""請摘要以下網路指令輸出，保留關鍵診斷資訊：
 
 指令：{command}
 
 要求：
 1. 保留錯誤、警告、異常狀態、重要數值
-2. 移除重複內容和無關細節
+2. 排除重複內容和無關細節
 3. 維持技術術語準確性
 4. 使用繁體中文
 5. 開頭標註：「[AI摘要] 原輸出過長，以下為智能摘要：」
@@ -152,7 +180,10 @@ class OutputSummarizer:
 請直接輸出摘要結果。"""
 
     def summarize_output(self, command: str, output: str) -> str:
-        """AI 摘要超長輸出"""
+        """使用 AI 摘要設備輸出內容
+        
+        將超長的設備輸出透過 AI 進行摘要，保留關鍵資訊。
+        """
         if not self.llm:
             logger.warning(f"AI 摘要器不可用: {command}")
             return self._fallback_truncate(command, output)
@@ -188,16 +219,30 @@ class OutputSummarizer:
     def _fallback_truncate(
         self, command: str, output: str, max_chars: int = 10000
     ) -> str:
-        """備援截斷"""
+        """當 AI 摘要失敗時的後備處理
+        
+        簡單地截斷輸出內容並附上警告訊息。
+        """
         return (
             output[:max_chars] + f"\n\n--- [警告] 指令 '{command}' 輸出過長已截斷 ---"
         )
 
 
 class AIService:
-    """AI 服務管理器 - 統一管理 AI 初始化、工具配置和查詢處理"""
+    """主要的 AI 智能分析服務管理器
+    
+    管理 AI 服務的初始化、工具配置和查詢處理：
+    - 支援 Gemini 和 Claude 雙引擎自動切換
+    - ReAct Agent 模式的思考鏈分析
+    - 網路設備指令工具介接
+    - 結構化輸出和格式化管理
+    """
 
     def __init__(self):
+        """初始化 AI 智能分析服務
+        
+        設定 AI 代理、輸出解析器和提示詞管理器。
+        """
         self.agent_executor = None
         self.ai_initialized = False
 
@@ -211,7 +256,10 @@ class AIService:
         self._initialize_ai()
 
     def _initialize_ai(self) -> bool:
-        """初始化 AI 系統（支援 Gemini 和 Claude）
+        """初始化和配置 AI 智能分析引擎
+
+        檢查 API 金鑰可用性，初始化選擇的 AI 提供者，
+        建立 ReAct 代理和工具連接。
 
         Returns:
             bool: 初始化是否成功
@@ -382,7 +430,7 @@ class AIService:
                 正確方式：
                 1. 第一次調用："202.153.183.18: show clock"
                 2. 第二次調用："202.153.183.18: show platform"
-                3. 整合兩次結果進行分析
+                3. 綜合兩次結果進行分析
 
                 **使用例子**: 
                 - "203.0.113.20: show environment" (查詢單一設備環境狀態)
@@ -424,10 +472,10 @@ class AIService:
         return tools
 
     def _create_custom_prompt_template(self) -> PromptTemplate:
-        """建立自定義的 ReAct 提示詞模板，整合 PydanticOutputParser 格式指令
+        """建立自定義的 ReAct 提示詞模板，包含 PydanticOutputParser 格式指令
 
         Returns:
-            PromptTemplate: 整合結構化輸出格式的提示詞模板
+            PromptTemplate: 包含結構化輸出格式的提示詞模板
         """
         # 獲取格式指令並處理特殊字符，避免 LangChain 變數衝突
         format_instructions = self.parser.get_format_instructions()
@@ -487,24 +535,27 @@ Question: {{input}}
         include_examples: bool = True,
         device_ips: List[str] = None,
     ) -> str:
-        """執行 AI 查詢，使用 PydanticOutputParser 異化輸出格式
+        """執行 AI 智能分析查詢
+
+        使用 ReAct 代理模式進行網路設備分析，產生結構化的
+        Markdown 格式分析報告。
 
         Args:
-            prompt: AI 查詢提示詞
+            prompt: 用戶的分析查詢請求
             timeout: 查詢超時時間（秒）
-            include_examples: 是否自動包含思考鏈範例（預設True）
-            device_ips: 限制執行的設備 IP 列表（可選）
+            include_examples: 是否包含思考鏈示範範例
+            device_ips: 限制分析的設備 IP 範圍
 
         Returns:
-            str: 格式化的 Markdown 結果
+            str: Markdown 格式的分析報告
 
         Raises:
-            ExternalServiceError: 當 AI 服務未初始化或查詢失敗時
+            ExternalServiceError: AI 服務不可用或查詢失敗
         """
         if not self.ai_initialized or not self.agent_executor:
             raise ai_error("Gemini", "AI 服務未啟用或初始化失敗", "AI_NOT_AVAILABLE")
 
-        # 使用 PromptManager 統一處理提示詞構建
+        # 使用 PromptManager 處理提示詞構建
         unique_id = uuid.uuid4()
         enhanced_prompt = self.prompt_manager.render_query_prompt(
             user_query=prompt,
@@ -687,10 +738,12 @@ Question: {{input}}
             return error_msg, 500
 
     def get_ai_status(self) -> Dict[str, Any]:
-        """取得 AI 服務狀態
+        """獲取 AI 智能分析服務的狀態資訊
+
+        提供 AI 可用性、初始化狀態和配置資訊。
 
         Returns:
-            AI 服務狀態字典
+            Dict: 包含 AI 服務狀態的詳細資訊
         """
         ai_provider = settings.AI_PROVIDER
 
@@ -711,7 +764,11 @@ _ai_service = None
 
 
 def get_ai_service() -> AIService:
-    """取得 AI 服務實例（簡化版本）"""
+    """獲取全域 AI 智能分析服務實例
+    
+    單例模式的 AI 服務，確保在應用程式中
+    使用相同的 AI 配置和狀態。
+    """
     global _ai_service
     if _ai_service is None:
         logger.info("建立 AI 服務實例")

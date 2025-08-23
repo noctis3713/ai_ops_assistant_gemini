@@ -54,10 +54,11 @@ networks:
 - **n8n 帳號**: 用戶名 `[請參考環境變數設定]` / 密碼 `[請參考環境變數設定]`
 
 ### 架構特點
-- **单一主程式**: `main.py` 統一入口
+- **統一主程式**: `main.py` 統一入口
 - **統一路由**: `unified_routes.py` 集中管理所有 API
 - **異步任務管理**: `AsyncTaskManager` 提供穩定的任務處理
 - **AI 服務整合**: 提供智能分析和查詢功能
+- **簡化管理**: 精簡的管理 API，專注核心功能
 
 ## API 端點總覽
 
@@ -70,7 +71,6 @@ networks:
 | `/api/devices/status` | GET | 設備狀態檢查 | 設備健康監控 |
 | `/api/ai-status` | GET | AI 服務狀態 | AI 功能監控 |
 | `/api/frontend-config` | GET | 前端配置 | 動態配置管理 |
-| `/api/backend-config` | GET | 後端配置 | 系統配置管理 |
 
 ### 任務執行 API
 | 端點 | 模式 | 執行類型 | 適用場景 |
@@ -94,25 +94,7 @@ networks:
 #### 管理 API
 | 端點 | 方法 | 用途 | 請求格式 |
 |------|------|------|----------|
-| `/api/admin/reload-config` | POST | 重載系統配置 | 需要 api_key 和 reload_configs |
-| `/api/admin/reload-prompts` | POST | 重載 AI 提示詞 | 無需參數 |
-| `/api/admin/health` | GET | 系統健康檢查 | 無需參數 |
 | `/api/admin/tasks/stats` | GET | 任務統計資訊 | 無需參數 |
-
-#### reload-config API 使用範例
-```json
-{
-  "method": "POST",
-  "url": "http://ai_ops_backend:8000/api/admin/reload-config",
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "body": {
-    "api_key": "your_admin_api_key",
-    "reload_configs": ["devices", "groups", "security"]
-  }
-}
-```
 
 ## n8n HTTP Request 節點標準配置
 
@@ -660,9 +642,6 @@ curl http://ai_ops_backend:8000/health
 # AI 服務狀態檢查
 curl -H "X-API-Key: [YOUR_API_KEY]" http://ai_ops_backend:8000/api/ai-status
 
-# 系統健康檢查
-curl -H "X-API-Key: [YOUR_API_KEY]" http://ai_ops_backend:8000/api/admin/health
-
 # 任務統計監控
 curl -H "X-API-Key: [YOUR_API_KEY]" http://ai_ops_backend:8000/api/admin/tasks/stats
 ```
@@ -695,12 +674,6 @@ docker system df
 
 # 任務管理器統計
 curl -H "X-API-Key: [YOUR_API_KEY]" http://ai_ops_backend:8000/api/admin/tasks/stats
-```
-
-#### 任務效能分析
-```bash
-# 系統健康檢查
-curl -H "X-API-Key: [YOUR_API_KEY]" http://ai_ops_backend:8000/api/admin/health
 ```
 
 ### 常見問題和解決方案

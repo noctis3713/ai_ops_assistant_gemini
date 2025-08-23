@@ -3,10 +3,10 @@
 """
 AI 網路維運助理主程式
 
-整合所有功能，遵循 YAGNI 原則：
-- 統一設定管理
-- 中間件管理
-- 統一路由
+提供網路設備指令執行和 AI 智能分析的 Web API 服務：
+- FastAPI 應用程式初始化和配置
+- CORS 和壓縮中間件管理
+- API 路由註冊和請求監控
 - 應用程式生命週期管理
 
 Created: 2025-08-22
@@ -31,7 +31,11 @@ from dotenv import load_dotenv
 
 # 智能環境變數載入
 def _load_env():
-    """載入環境變數"""
+    """自動載入環境變數檔案
+    
+    智能偵測執行環境並載入對應的 .env 檔案，
+    支援 Docker 容器和本地開發環境。
+    """
     is_docker = os.path.exists("/.dockerenv") or os.getenv("PYTHONPATH") == "/app"
 
     if is_docker:
@@ -66,7 +70,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 
-# 匯入統一路由模組
+# 匯入路由模組
 from unified_routes import admin_router, health_router, router
 
 # 設定日誌
@@ -77,7 +81,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 應用程式版本
+# 應用程式資訊
 APP_VERSION = "3.0.0"
 
 
@@ -88,7 +92,11 @@ APP_VERSION = "3.0.0"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """應用程式生命週期管理"""
+    """管理 FastAPI 應用程式的啟動和關閉流程
+    
+    啟動階段：初始化設定、任務管理器和 AI 服務
+    關閉階段：安全地釋放資源和連線
+    """
     # 啟動階段
     try:
         logger.info("開始啟動 AI 網路維運助理 API")
@@ -143,7 +151,11 @@ app = FastAPI(
 
 # CORS 配置
 def get_cors_origins():
-    """動態獲取 CORS 允許的來源"""
+    """取得跨域請求允許的來源清單
+    
+    支援本地開發、Docker 容器和外部 IP 存取，
+    可透過環境變數擴充允許的來源。
+    """
     origins = [
         # 容器間通信
         "http://frontend",
@@ -193,7 +205,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # 監控中間件
 @app.middleware("http")
 async def monitoring_middleware(request: Request, call_next):
-    """請求監控中間件"""
+    """HTTP 請求監控和日誌記錄
+    
+    為每個請求生成唯一 ID，記錄處理時間和狀態，
+    健康檢查請求使用較低的日誌等級避免噪音。
+    """
     import time
     import uuid
 
@@ -244,7 +260,7 @@ logger.info(f"中間件配置完成 - CORS 來源: {len(allowed_origins)} 個")
 app.include_router(health_router)  # 健康檢查路由 (無前綴)
 app.include_router(router)  # 主要 API 路由 (/api)
 app.include_router(admin_router)  # 管理路由 (/api/admin)
-logger.info("統一路由註冊完成")
+logger.info("路由註冊完成")
 
 # =============================================================================
 # 路由除錯
@@ -252,7 +268,11 @@ logger.info("統一路由註冊完成")
 
 
 def print_routes():
-    """印出所有路由"""
+    """顯示應用程式的所有 API 路由
+    
+    用於除錯和開發，列出所有已註冊的路由端點、
+    HTTP 方法和對應的處理函數。
+    """
     from fastapi.routing import APIRoute
 
     print("=" * 80)

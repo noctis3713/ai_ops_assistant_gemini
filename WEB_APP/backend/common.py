@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-統一的通用資料模型 - 企業級回應格式和共用類型定義
+通用資料模型和 API 回應格式定義模組
 
-此檔案整合了：
-- 統一 API 回應格式
-- AI 分析結果模型
-- 共用類型定義
+提供統一的資料結構和回應格式：
+- 標準化 API 回應格式
+- AI 分析結果結構化模型
+- 共用類型定義和泛型支援
 
-確保：
-- 完整的型別安全支援
+功能特點：
+- 型別安全支援和泛型設計
 - 自動時間戳記產生
-- 標準化錯誤代碼
+- 標準化錯誤代碼管理
 - IDE 智能提示支援
 
 Created: 2025-08-06
-Updated: 2025-08-23 (合併 ai_response.py)
+Updated: 2025-08-23
 Author: Claude Code Assistant
 """
 
@@ -29,18 +29,18 @@ T = TypeVar("T")
 
 
 class BaseResponse(BaseModel, Generic[T]):
-    """統一的 API 回應格式 - 企業級 Generic[T] 實現
+    """標準化 API 回應格式基礎類別
 
-    所有 API 端點都應該使用此格式包裝回應資料，確保：
-    - 統一的成功/失敗標識
-    - 可選的資料載荷 (Generic[T] 型別安全)
-    - 標準化的錯誤訊息和錯誤代碼
-    - 自動時間戳記
+    提供一致的 API 回應結構，包含：
+    - 成功/失敗狀態標識
+    - 泛型資料載荷 (Generic[T] 型別安全)
+    - 標準化錯誤訊息和錯誤代碼
+    - 自動時間戳記生成
 
-    特色功能:
-    - 完整的型別安全支援
-    - 自動時間戳記產生
-    - 標準化錯誤代碼
+    功能特點:
+    - 型別安全的泛型設計
+    - 自動時間戳記管理
+    - 錯誤代碼標準化
     - IDE 智能提示支援
     """
 
@@ -51,13 +51,13 @@ class BaseResponse(BaseModel, Generic[T]):
     timestamp: Optional[str] = None
 
     def __init__(self, **data):
-        # 自動產生時間戳記，確保每個回應都有時間資訊
+        # 自動產生時間戳記，為回應提供時間資訊
         if "timestamp" not in data or data["timestamp"] is None:
             data["timestamp"] = datetime.now().isoformat()
         super().__init__(**data)
 
     class Config:
-        """Pydantic 配置類別"""
+        """Pydantic 模型配置"""
 
         arbitrary_types_allowed = True
         json_encoders = {
@@ -77,7 +77,7 @@ class BaseResponse(BaseModel, Generic[T]):
     def success_response(
         cls, data: Optional[T] = None, message: str = "操作成功完成"
     ) -> "BaseResponse[T]":
-        """建立成功回應的便利方法
+        """建立成功回應的工具方法
 
         Args:
             data: 回應資料
@@ -92,7 +92,7 @@ class BaseResponse(BaseModel, Generic[T]):
     def error_response(
         cls, message: str, error_code: Optional[str] = None, data: Optional[T] = None
     ) -> "BaseResponse[T]":
-        """建立錯誤回應的便利方法
+        """建立錯誤回應的工具方法
 
         Args:
             message: 錯誤訊息
@@ -106,15 +106,15 @@ class BaseResponse(BaseModel, Generic[T]):
 
 
 # =============================================================================
-# AI 分析結果模型 (原 ai_response.py)
+# AI 分析結果模型定義
 # =============================================================================
 
 
 class NetworkAnalysisResponse(BaseModel):
     """AI 對網路設備診斷結果的結構化回應
 
-    這個模型定義了 AI 分析網路設備後應返回的標準格式，
-    每個欄位都有詳細的描述來引導 LLM 產出精確的內容。
+    定義 AI 網路設備診斷結果的標準化結構，
+    各欄位有詳細描述來指導 LLM 的精確輸出。
     """
 
     analysis_summary: str = Field(
@@ -125,7 +125,7 @@ class NetworkAnalysisResponse(BaseModel):
 
     key_findings: List[str] = Field(
         description="""從工具輸出中提取的關鍵數據點和發現。
-        遵循「具體優於概括」原則：
+        包含具體數據點：
         - 包含實際測量值和單位
         - 提供必要的上下文（如正常範圍、時間點等）
         - 涵蓋輸出中的所有重要資訊
@@ -160,22 +160,22 @@ class NetworkAnalysisResponse(BaseModel):
     )
 
     def to_markdown(self) -> str:
-        """將 Pydantic 物件轉換為格式化的 Markdown 字串
+        """將分析結果轉換為 Markdown 格式字串
 
-        這個方法將結構化的分析結果轉換回前端需要的 Markdown 格式，
-        保持與現有用戶界面的完全相容性。
+        將結構化的分析結果轉換為前端顯示需要的 Markdown 格式，
+        確保與現有用戶介面的相容性。
 
         Returns:
             str: 格式化的 Markdown 字串，符合現有前端顯示規範
         """
-        # 根據分析類型選擇不同的 Markdown 模板
+        # 根據分析類型選擇對應的 Markdown 模板
         if self.analysis_type == "multi_device":
             return self._to_multi_device_markdown()
         else:
             return self._to_single_device_markdown()
 
     def _to_single_device_markdown(self) -> str:
-        """單一設備分析的 Markdown 格式"""
+        """生成單一設備分析的 Markdown 格式"""
         output = "### 重點分析\n"
         output += f"- **狀態概況**: {self.analysis_summary}\n"
 
@@ -204,7 +204,7 @@ class NetworkAnalysisResponse(BaseModel):
         return output
 
     def _to_multi_device_markdown(self) -> str:
-        """多設備分析的 Markdown 格式"""
+        """生成多設備分析的 Markdown 格式"""
         device_count = self.device_count or 0
         successful_count = self.successful_device_count or 0
         failed_count = self.failed_device_count or 0
@@ -240,7 +240,7 @@ class NetworkAnalysisResponse(BaseModel):
         return output
 
     class Config:
-        """Pydantic 配置"""
+        """Pydantic 模型配置"""
 
         # 允許欄位別名，提供更好的 JSON Schema 生成
         validate_by_name = True
