@@ -120,35 +120,6 @@ class DeviceStatusInfo(BaseModel):
 
 
 # 管理功能相關模型
-class ReloadConfigRequest(BaseModel):
-    """配置重載請求模型"""
-
-    api_key: str
-    reload_configs: Optional[List[str]] = [
-        "devices",
-        "groups",
-        "security",
-        "frontend",
-        "backend",
-    ]
-
-
-class ReloadConfigResponse(BaseModel):
-    """配置重載回應模型"""
-
-    success: bool
-    message: str
-    reloaded_configs: List[str]
-    timestamp: str
-    errors: Optional[List[str]] = None
-
-
-class PromptReloadResponse(BaseModel):
-    """提示詞重載回應模型"""
-
-    success: bool
-    message: str
-    timestamp: str
 
 
 class AIStatusResponse(BaseModel):
@@ -169,26 +140,6 @@ class FrontendConfig(BaseModel):
     api: Dict[str, Any]
 
 
-class BackendConfig(BaseModel):
-    """後端動態配置模型"""
-
-    ai: Dict[str, Any] = Field(default_factory=dict)
-    network: Dict[str, Any] = Field(default_factory=dict)
-    cache: Dict[str, Any] = Field(default_factory=dict)
-    logging: Dict[str, Any] = Field(default_factory=dict)
-    async_: Dict[str, Any] = Field(default_factory=dict, alias="async")
-    prompts: Dict[str, Any] = Field(default_factory=dict)
-    security: Dict[str, Any] = Field(default_factory=dict)
-    performance: Dict[str, Any] = Field(default_factory=dict)
-
-
-class SystemHealthSummary(BaseModel):
-    """系統健康摘要模型"""
-
-    overall_status: str = Field(..., description="整體狀態")
-    task_manager_active_tasks: int = Field(..., description="活躍任務數")
-    uptime_seconds: float = Field(..., description="系統運行時間（秒）")
-    timestamp: str = Field(..., description="檢查時間戳")
 
 
 # =============================================================================
@@ -507,40 +458,6 @@ async def get_frontend_config():
         raise convert_to_service_error(e, "前端配置處理")
 
 
-@router.get("/backend-config", response_model=BaseResponse[BackendConfig])
-async def get_backend_config():
-    """取得後端動態配置"""
-    logger.info("收到後端動態配置查詢請求")
-
-    try:
-        # 直接獲取設定實例
-        app_settings = get_settings()
-
-        # 從配置檔案載入後端配置
-        config_data = app_settings.get_backend_config()
-
-        # 構建後端配置物件
-        backend_config = BackendConfig(
-            ai=config_data.get("ai", {}),
-            network=config_data.get("network", {}),
-            cache=config_data.get("cache", {}),
-            logging=config_data.get("logging", {}),
-            async_=config_data.get("async", {}),  # 使用別名處理 async 關鍵字
-            prompts=config_data.get("prompts", {}),
-            security=config_data.get("security", {}),
-            performance=config_data.get("performance", {}),
-        )
-
-        logger.info("後端動態配置從配置檔案載入完成")
-
-        return BaseResponse.success_response(
-            data=backend_config, message="後端配置獲取成功 (從 backend_settings.yaml)"
-        )
-
-    except Exception as e:
-        error_msg = f"獲取後端配置失敗: {str(e)}"
-        logger.error(error_msg)
-        raise convert_to_service_error(e, "後端配置處理")
 
 
 # =============================================================================
@@ -548,95 +465,8 @@ async def get_backend_config():
 # =============================================================================
 
 
-@admin_router.post("/reload-config", response_model=BaseResponse[ReloadConfigResponse])
-async def reload_config_endpoint(request: ReloadConfigRequest):
-    """重載配置檔案（管理員功能）"""
-    logger.info(f"收到配置重載請求: {request.reload_configs}")
-
-    # 直接獲取設定實例
-    app_settings = get_settings()
-
-    # 簡單的 API Key 驗證
-    if (
-        hasattr(app_settings, "ADMIN_API_KEY")
-        and request.api_key != app_settings.ADMIN_API_KEY
-    ):
-        logger.warning("配置重載請求 - API Key 驗證失敗")
-        raise AuthenticationError("無效的 API Key")
-
-    config_manager = get_config_manager()
-    reloaded_configs = []
-    errors = []
-
-    # 重載指定的配置類型
-    for config_type in request.reload_configs:
-        try:
-            if config_type in ["devices", "groups"]:
-                config_manager.refresh_config()
-                reloaded_configs.append(config_type)
-            elif config_type == "security":
-                from settings import get_command_validator
-
-                validator = get_command_validator()
-                validator.reload_config(config_manager)
-                config_manager.refresh_config()
-                reloaded_configs.append("security")
-            elif config_type == "frontend":
-                app_settings.clear_frontend_config_cache()
-                logger.info("前端配置快取已清除")
-                reloaded_configs.append("frontend")
-            elif config_type == "backend":
-                app_settings.clear_backend_config_cache()
-                app_settings.apply_backend_config_overrides()
-                logger.info("後端配置快取已清除並重新載入")
-                reloaded_configs.append("backend")
-            else:
-                errors.append(f"未知的配置類型: {config_type}")
-        except Exception as e:
-            error_msg = f"重載 {config_type} 配置失敗: {str(e)}"
-            errors.append(error_msg)
-            logger.error(error_msg)
-
-    success = len(reloaded_configs) > 0
-    message = f"成功重載 {len(reloaded_configs)} 個配置檔案"
-    if errors:
-        message += f"，{len(errors)} 個失敗"
-
-    logger.info(f"配置重載完成: 成功={len(reloaded_configs)}, 失敗={len(errors)}")
-
-    config_data = ReloadConfigResponse(
-        success=success,
-        message=message,
-        reloaded_configs=reloaded_configs,
-        timestamp=datetime.now().isoformat(),
-        errors=errors if errors else None,
-    )
-
-    return BaseResponse.success_response(data=config_data, message="系統配置熱重載完成")
 
 
-@admin_router.post("/reload-prompts", response_model=BaseResponse[PromptReloadResponse])
-async def reload_prompts():
-    """重載提示詞配置 - 管理員功能"""
-    logger.info("收到提示詞重載請求")
-
-    from prompt_manager import get_prompt_manager
-
-    # 獲取提示詞管理器實例並清除快取
-    prompt_manager = get_prompt_manager()
-    prompt_manager.clear_cache()
-
-    logger.info("提示詞配置重載成功")
-
-    prompt_data = PromptReloadResponse(
-        success=True,
-        message="提示詞配置已成功重載",
-        timestamp=datetime.now().isoformat(),
-    )
-
-    return BaseResponse.success_response(
-        data=prompt_data, message="AI 提示詞系統熱重載完成"
-    )
 
 
 # =============================================================================
@@ -650,38 +480,6 @@ async def simple_health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
-@admin_router.get("/health", response_model=BaseResponse[SystemHealthSummary])
-async def get_system_health():
-    """取得系統健康狀態摘要"""
-    try:
-        task_manager = get_task_manager()
-
-        # 計算活躍任務數
-        active_tasks = len(
-            [
-                task
-                for task in task_manager.tasks.values()
-                if task.status.value in ["pending", "running"]
-            ]
-        )
-
-        # 計算系統健康狀態
-        overall_status = "healthy" if active_tasks < 100 else "warning"
-
-        health_summary = SystemHealthSummary(
-            overall_status=overall_status,
-            task_manager_active_tasks=active_tasks,
-            uptime_seconds=time.time(),
-            timestamp=datetime.now().isoformat(),
-        )
-
-        return BaseResponse.success_response(health_summary, "系統健康檢查完成")
-
-    except Exception as e:
-        logger.error(f"系統健康檢查失敗: {e}")
-        return BaseResponse.error_response(
-            f"系統健康檢查失敗: {str(e)}", "HEALTH_CHECK_ERROR"
-        )
 
 
 @admin_router.get("/tasks/stats", response_model=BaseResponse[Dict[str, Any]])

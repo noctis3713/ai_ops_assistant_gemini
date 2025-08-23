@@ -1,5 +1,4 @@
 # 前端動態配置檔案 - 精簡優化版本
-# 支援通過 POST /api/admin/reload-config 進行熱重載
 # Created: 2025-08-05
 # Optimized: 2025-08-12 - 移除未使用配置項，減少維護負擔
 
