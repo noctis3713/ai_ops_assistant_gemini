@@ -16,7 +16,6 @@ import {
   type TaskResponse, 
   type BatchExecutionResponse 
 } from '@/types';
-import { logError, logSystemError, logSystemInfo, logUserError } from '@/errors';
 import { 
   PROGRESS_STAGE, 
   PROGRESS_STAGE_TEXT, 
@@ -85,12 +84,10 @@ export interface UseAsyncTasksReturn {
   /**
    * 當前輪詢狀態
    */
-  isPolling: boolean;
   
   /**
    * 錯誤狀態
    */
-  error: string | null;
 }
 
 export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasksReturn => {
@@ -217,13 +214,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       // 更新完成訊息
       progress.updateMessage(completionMessage);
-      
-      logSystemInfo('Task completed successfully', {
-        taskId: task.task_id,
-        resultCount: results.length,
-        successful,
-        failed,
-      });
     } else if (task.status === 'failed') {
       // 處理失敗結果
       progress.updateStage(PROGRESS_STAGE.FAILED);
@@ -231,11 +221,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       const failureMessage = task.error || '任務執行失敗';
       setStatus(failureMessage, 'error');
       progress.updateMessage(failureMessage);
-      
-      logError('Task failed', {
-        taskId: task.task_id,
-        error: task.error,
-      });
     } else if (task.status === 'cancelled') {
       // 處理取消結果
       progress.updateStage(PROGRESS_STAGE.CANCELLED);
@@ -288,15 +273,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setStatus(userFriendlyMessage, 'error');
     
     // 記錄詳細錯誤
-    logError(`${context} failed`, {
-      originalError: errorMessage,
-      userFriendlyMessage,
-      context,
-      isPolling: isPolling,
-      currentTaskId: currentTask?.task_id,
-      timestamp: new Date().toISOString(),
-    });
-  }, [transformErrorMessage, setStatus, isPolling, currentTask?.task_id]);
+  }, [transformErrorMessage, setStatus]);
 
   /**
    * 任務 ID 驗證 - 提取為獨立函數
@@ -304,13 +281,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   const validateTaskId = useCallback((taskId: string, context: string): boolean => {
     if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
       const errorMsg = `無效的任務 ID: '${taskId}'，${context}`;
-      logError('Invalid task ID provided', { 
-        taskId, 
-        type: typeof taskId,
-        isEmpty: !taskId,
-        isUndefinedString: taskId === 'undefined',
-        context
-      });
       handleError(new Error(errorMsg), '任務 ID 驗證失敗');
       return false;
     }
@@ -362,23 +332,13 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         onError: (error: Error, context: string) => {
           // 如果是 404 錯誤且正在輪詢，可能是任務已快速完成並被清理
           if (error.message.includes('404') && context.includes('polling')) {
-            console.error('Task may have completed quickly during polling, stopping polling', { 
-              taskId,
-              context,
-              error: error.message 
-            });
+            console.error('Task may have completed quickly during polling, stopping polling');
             
             // 設置任務已完成狀態並清理
             setStatus('任務已完成', 'success');
             cleanup();
             return;
           }
-          
-          logError('Task polling error', {
-            taskId,
-            context,
-            error: error.message,
-          });
           
           handleError(error, `輪詢失敗: ${context}`);
         },
@@ -400,11 +360,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       });
       
     } catch (error) {
-      logError('Task polling failed', {
-        taskId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      
       handleError(error, '輪詢任務狀態失敗');
       cleanup();
     }
@@ -443,8 +398,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     // 創建進度處理器
     const progress = createProgressHandler(request.devices.length);
 
-    const startTime = performance.now();
-
     try {
       // 第一階段：提交任務
       progress.updateStage(PROGRESS_STAGE.SUBMITTING);
@@ -455,54 +408,32 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       // 強化 response 驗證，適配 BaseResponse 格式變化
       if (!response) {
-        logError('batchExecuteAsync 回傳 null 或 undefined', { response });
         throw new Error('後端回應為空，任務建立失敗');
       }
       
       // 檢查 task_id 有效性
       if (!response.task_id) {
-        logError('任務建立回應缺少 task_id', { response });
         throw new Error('後端未返回任務 ID，任務建立失敗');
       }
       
       if (typeof response.task_id !== 'string') {
-        logError('任務 ID 格式錯誤', { 
-          taskId: response.task_id, 
-          type: typeof response.task_id 
-        });
         throw new Error('後端返回的任務 ID 格式錯誤');
       }
       
       if (response.task_id === 'undefined' || response.task_id === 'null' || response.task_id.trim() === '') {
-        logError('任務 ID 包含無效值', { taskId: response.task_id });
         throw new Error('後端返回無效的任務 ID，任務建立失敗');
       }
-      
-      logSystemInfo('非同步任務建立成功', {
-        taskId: response.task_id,
-        deviceCount: request.devices.length,
-        mode: request.mode
-      });
       
       // 第二階段：任務已提交
       progress.updateStage(PROGRESS_STAGE.SUBMITTED);
       setStatus(`任務已建立: ${response.task_id.substring(0, 20)}...`, 'success');
       
-      logSystemInfo('Async task created', {
-        taskId: response.task_id,
-        devices: request.devices,
-        mode: request.mode,
-      });
-      
       // 立即更新當前任務狀態（防止競態條件）
       setCurrentTask({
         task_id: response.task_id,
         task_type: 'batch_execute',
-        status: 'pending',
         params: {
-          devices: request.devices,
           command: request.command,
-          mode: request.mode,
         },
         created_at: new Date().toISOString(),
         progress: {
@@ -511,7 +442,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           details: {},
         },
         result: null,
-        error: undefined,
       });
       
       // 如果啟用自動輪詢，開始輪詢
@@ -524,7 +454,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
               // 任務已快速完成，處理結果並停止
               console.error('Quick task completion detected in executeAsync', {
                 taskId: response.task_id,
-                status: quickCheck.status,
+                status: quickCheck.status
               });
               
               handleFinalTaskResult(quickCheck);
@@ -537,8 +467,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
             
             if (errorMessage.includes('404')) {
               console.error('Task completed too quickly in executeAsync, assuming completion', { 
-                taskId: response.task_id,
-                error: errorMessage
+                taskId: response.task_id 
               });
               
               // 設置為已完成狀態並清理
@@ -548,7 +477,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
             } else {
               // 其他錯誤，繼續正常流程
               console.error('Quick check failed in executeAsync, continuing normally', {
-                taskId: response.task_id,
                 error: errorMessage
               });
             }
@@ -565,14 +493,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       return response.task_id;
 
     } catch (error) {
-      const duration = performance.now() - startTime;
-      logError('Failed to execute async task', {
-        duration,
-        deviceCount: request.devices.length,
-        mode: request.mode,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
       // 顯示失敗階段
       progress.updateStage(PROGRESS_STAGE.FAILED);
 
@@ -621,8 +541,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     // 初始化批次進度
     setProgressVisibility('batch', true, { totalDevices: request.devices.length });
 
-    const startTime = performance.now();
-
     try {
       // 創建 TaskPoller 實例並執行任務
       const taskPoller = new TaskPoller();
@@ -633,43 +551,28 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       // 強化任務建立回應驗證，適配 BaseResponse 格式
       if (!taskCreation) {
-        logError('executeAsyncAndWait: batchExecuteAsync 回傳空值', { taskCreation });
         throw new Error('後端回應為空，任務建立失敗');
       }
       
       if (!taskCreation.task_id) {
-        logError('executeAsyncAndWait: 任務建立回應缺少 task_id', { taskCreation });
         throw new Error('後端未返回任務 ID，任務建立失敗');
       }
       
       if (typeof taskCreation.task_id !== 'string' || taskCreation.task_id.trim() === '') {
-        logError('executeAsyncAndWait: 任務 ID 格式錯誤', { 
-          taskId: taskCreation.task_id, 
-          type: typeof taskCreation.task_id 
-        });
         throw new Error('後端返回的任務 ID 格式錯誤');
       }
       
       if (taskCreation.task_id === 'undefined' || taskCreation.task_id === 'null') {
-        logError('executeAsyncAndWait: 任務 ID 包含無效值', { taskId: taskCreation.task_id });
         throw new Error('後端返回無效的任務 ID，任務建立失敗');
       }
       
-      logSystemInfo('executeAsyncAndWait: 任務建立成功', {
-        taskId: taskCreation.task_id,
-        deviceCount: request.devices.length,
-        mode: request.mode
-      });
       
       // 立即更新當前任務狀態（防止競態條件）
       const initialTask: TaskResponse = {
         task_id: taskCreation.task_id,
         task_type: 'batch_execute',
-        status: 'pending',
         params: {
-          devices: request.devices,
           command: request.command,
-          mode: request.mode,
         },
         created_at: new Date().toISOString(),
         progress: {
@@ -678,7 +581,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           details: {},
         },
         result: null,
-        error: undefined,
       };
       setCurrentTask(initialTask);
       
@@ -689,7 +591,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           if (quickCheck.status === 'completed' || quickCheck.status === 'failed') {
             // 任務已快速完成，處理結果並停止後續輪詢
             console.error('Quick task completion detected', {
-              taskId: taskCreation.task_id,
               status: quickCheck.status
             });
             
@@ -714,8 +615,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           
           if (errorMessage.includes('404')) {
             console.error('Task completed too quickly to track, assuming completion', { 
-              taskId: taskCreation.task_id,
-              error: errorMessage
+              taskId: taskCreation.task_id 
             });
             
             // 設置為已完成狀態並清理
@@ -727,7 +627,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
           } else {
             // 其他錯誤，繼續正常輪詢
             console.error('Quick check failed, continuing with normal polling', {
-              taskId: taskCreation.task_id,
               error: errorMessage
             });
           }
@@ -748,12 +647,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         },
         
         // 錯誤處理回調
-        onError: (error: Error, context: string) => {
-          logError('Task polling error in executeAndWait', {
-            taskId: taskCreation.task_id,
-            context,
-            error: error.message,
-          });
+        onError: (/* error: Error, context: string */) => {
+          // 錯誤已由 taskPoller 內部處理
         },
         
         pollInterval,
@@ -783,8 +678,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         throw new Error('任務結果格式錯誤');
       }
       
-      const duration = performance.now() - startTime;
-
       setBatchResults(result.results);
       
       // 更新最終進度
@@ -800,25 +693,9 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         failed > 0 ? 'error' : 'success'
       );
       
-      logSystemInfo('Async task completed successfully', {
-        deviceCount: request.devices.length,
-        resultCount: result.results.length,
-        duration,
-        avgTimePerDevice: duration / request.devices.length,
-      });
-
       return result;
 
     } catch (error) {
-      const duration = performance.now() - startTime;
-      
-      logError('Failed to execute async task and wait', {
-        duration,
-        deviceCount: request.devices.length,
-        mode: request.mode,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
       handleError(error, '執行非同步任務失敗');
       throw error;
     } finally {
@@ -851,10 +728,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
   const startPolling = useCallback((taskId: string) => {
     // 強化任務 ID 驗證
     if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
-      logError('Invalid task ID provided to startPolling', { 
-        taskId, 
-        type: typeof taskId 
-      });
       handleError(new Error(`無效的任務 ID: '${taskId}'`), '開始輪詢失敗');
       return;
     }
@@ -875,7 +748,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
    */
   const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
     if (!currentTask) {
-      logError('Attempted to cancel task but no current task found');
       setStatus('沒有進行中的任務可以取消', 'warning');
       return false;
     }
@@ -886,28 +758,14 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       return false;
     }
 
-    logUser('Cancelling current task', {
-      taskId: currentTask.task_id,
-      status: currentTask.status,
-    });
-
     try {
-      setStatus('正在取消任務...', 'loading');
       const result = await cancelTask(currentTask.task_id);
       
-      // 清理所有錯誤狀態
-      setError(null);
-      
-      // 根據回應決定顯示訊息
-      if (result?.completed) {
-        setStatus('任務已完成', 'success');
-        console.error('Task was already completed when cancel was attempted', {
-          taskId: currentTask.task_id,
-        });
-      } else if (result?.cancelled) {
+      // 處理取消結果
+      if (result?.success || result?.cancelled) {
         setStatus('任務已成功取消', 'warning');
         console.error('Task cancelled successfully', {
-          taskId: currentTask.task_id,
+          taskId: currentTask.task_id
         });
       } else {
         // 後備處理 - 基於 message 內容判斷
@@ -920,8 +778,8 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         }
         
         console.error('Task processed successfully', {
-          taskId: currentTask.task_id,
           message: result?.message,
+          taskId: currentTask.task_id
         });
       }
       
@@ -939,23 +797,18 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
         cleanup();
         
         console.error('Task was already completed and cleaned up', {
-          taskId: currentTask.task_id,
-          error: errorMessage,
+          taskId: currentTask.task_id
         });
         
         return true; // 返回 true 表示"取消"成功（實際是任務已完成）
       }
       
       // 其他錯誤才是真正的取消失敗
-      logError('Failed to cancel task', {
-        taskId: currentTask.task_id,
-        error: errorMessage,
-      });
       
       handleError(error, '取消任務失敗');
       return false;
     }
-  }, [currentTask, setStatus, setError, handleError, cleanup]);
+  }, [currentTask, setStatus, handleError, cleanup]);
 
   /**
    * 手動查詢任務狀態
@@ -964,10 +817,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     // 強化任務 ID 驗證
     if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
       const errorMsg = `無效的任務 ID: '${taskId}'，無法查詢狀態`;
-      logError('Invalid task ID provided to queryTaskStatus', { 
-        taskId, 
-        type: typeof taskId 
-      });
       const error = new Error(errorMsg);
       handleError(error, '任務 ID 驗證失敗');
       throw error;
@@ -979,10 +828,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       
       return task;
     } catch (error) {
-      logError('Failed to query task status', {
-        taskId,
-        error: error instanceof Error ? error.message : String(error),
-      });
       
       handleError(error, '查詢任務狀態失敗');
       throw error;

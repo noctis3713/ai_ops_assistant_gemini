@@ -3,7 +3,6 @@
  * 統一處理 BaseResponse 格式，消除重複邏輯
  */
 import type { AxiosResponse } from 'axios';
-import { logApiInfo, logSystemError } from '@/errors';
 
 /**
  * 統一的 BaseResponse 介面定義
@@ -111,25 +110,8 @@ export const createApiHandler = <T>(
   fallbackData?: T
 ) => {
   return async (apiCall: () => Promise<AxiosResponse<BaseResponse<T>>>): Promise<T> => {
-    try {
-      const response = await apiCall();
-      const result = handleBaseResponse(response, `${context}失敗`, fallbackData);
-      
-      // 記錄成功的 API 調用
-      logApiInfo(`${context} API 成功`, { 
-        status: response.status,
-        hasData: result !== undefined && result !== null
-      });
-      
-      return result;
-    } catch (error) {
-      // 記錄失敗的 API 調用
-      logSystemError(`${context} API 失敗`, {
-        error: error instanceof Error ? error.message : String(error),
-        context
-      }, error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    }
+    const response = await apiCall();
+    return handleBaseResponse(response, `${context}失敗`, fallbackData);
   };
 };
 

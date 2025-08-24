@@ -2,7 +2,7 @@
  * API 客戶端配置 - 輕量化版本
  * 提供統一的 HTTP 客戶端和錯誤處理
  */
-import axios, { type AxiosResponse, type AxiosError, type AxiosRequestConfig } from 'axios';
+import axios, { type AxiosResponse, type AxiosError } from 'axios';
 import { type APIError } from '@/types';
 import { 
   API_CONFIG, 
@@ -10,22 +10,13 @@ import {
   RETRYABLE_STATUS_CODES,
   REQUEST_HEADERS 
 } from '@/config/api';
-import { logApiError, logApiInfo, logError } from '@/errors';
-import { RequestDeduplicator } from '@/utils/RequestDeduplicator';
 
-// 全局請求去重器 - 注入日誌功能
-const requestDeduplicator = new RequestDeduplicator({
-  logApi: (message: string, data?: Record<string, unknown>) => {
-    logApiInfo(message, data);
-  }
-});
 
 // 擴展 axios 配置，添加 metadata 屬性
 declare module 'axios' {
   export interface InternalAxiosRequestConfig {
     metadata?: {
       startTime?: number;
-      deduplicated?: boolean;
     };
   }
 }
@@ -40,14 +31,6 @@ export const apiClient = axios.create({
   },
 });
 
-// 重寫 axios 實例的 request 方法以支援去重
-const originalRequest = apiClient.request.bind(apiClient);
-(apiClient.request as unknown) = <T = unknown>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
-  return requestDeduplicator.deduplicateRequest(
-    config,
-    () => originalRequest<T>(config)
-  );
-};
 
 // 請求攔截器
 apiClient.interceptors.request.use(
@@ -59,7 +42,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     // 記錄請求錯誤到後端
-    logError('API Request Error', {
+    console.error('API Request Error', {
       message: error.message,
       code: error.code,
     });
@@ -80,7 +63,7 @@ apiClient.interceptors.response.use(
       const startTime = response.config.metadata?.startTime;
       const duration = startTime ? Math.round(performance.now() - startTime) : 0;
       
-      logApiInfo(`API Response: ${status} ${method} ${url}`, {
+      console.info(`API Response: ${status} ${method} ${url}`, {
         method,
         url,
         status,
@@ -111,18 +94,18 @@ apiClient.interceptors.response.use(
     // 根據錯誤類型記錄不同級別的日誌
     if (status >= 500) {
       // 伺服器錯誤
-      logError(`API Server Error: ${status} ${method} ${url}`, errorDetails);
+      console.error(`API Server Error: ${status} ${method} ${url}`, errorDetails);
     } else if (status >= 400) {
       // 客戶端錯誤
-      logError(`API Client Error: ${status} ${method} ${url}`, errorDetails);
+      console.error(`API Client Error: ${status} ${method} ${url}`, errorDetails);
     } else if (status === 0) {
       // 網路錯誤
-      logError(`Network Error: ${method} ${url}`, errorDetails);
+      console.error(`Network Error: ${method} ${url}`, errorDetails);
     }
     
     // 特別記錄 AI 相關錯誤
     if (url.includes('/ai-') || url.includes('ai-query') || status === 429) {
-      logError(`AI Service Error: ${status} ${url}`, {
+      console.error(`AI Service Error: ${status} ${url}`, {
         ...errorDetails,
         isAiService: true,
         rateLimited: status === 429,
@@ -156,7 +139,7 @@ function getErrorMessage(error: AxiosError): string {
       
       // BaseResponse 格式：{ success: false, message: "...", error_code: "..." }
       if (baseResponse.success === false && baseResponse.message) {
-        logError('API 回傳 BaseResponse 錯誤格式', {
+        console.error('API 回傳 BaseResponse 錯誤格式', {
           status,
           message: baseResponse.message,
           error_code: baseResponse.error_code,
@@ -218,7 +201,7 @@ export const createRetryableRequest = <T>(
               API_CONFIG.RETRY.MAX_DELAY
             );
             
-            logApiInfo(`API 請求重試`, {
+            console.info(`API 請求重試`, {
               attempt: retryCount + 1,
               maxRetries,
               delay,
@@ -236,18 +219,3 @@ export const createRetryableRequest = <T>(
   });
 };
 
-/**
- * 清除所有請求緩存
- * 用於錯誤恢復或狀態重置
- */
-export const clearRequestCache = (): void => {
-  requestDeduplicator.clearAll();
-};
-
-/**
- * 獲取請求快取統計資訊
- * 用於監控和除錯
- */
-export const getRequestCacheStats = () => {
-  return requestDeduplicator.getCacheStats();
-};

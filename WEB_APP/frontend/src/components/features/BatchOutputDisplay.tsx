@@ -7,7 +7,6 @@ import React, { useState, useEffect, useCallback, useMemo, useTransition, useDef
 import { useQuery } from '@tanstack/react-query';
 import { type BatchOutputDisplayProps } from '@/types';
 import BatchResultItem from './BatchResultItem';
-import VirtualizedResultList from './VirtualizedResultList';
 import Button from '@/components/common/Button';
 import { getDevices } from '@/api';
 import { findDeviceByIp } from '@/utils/utils';
@@ -28,8 +27,6 @@ const BatchOutputDisplay = ({
   // React 19: 使用 useDeferredValue 延遲非緊急的篩選更新
   const deferredFilterStatus = useDeferredValue(filterStatus);
   
-  // 虛擬化閾值 - 當結果數量超過此值時使用虛擬化渲染
-  const VIRTUALIZATION_THRESHOLD = 20;
 
   // 獲取設備資料用於描述查詢
   const { data: devices } = useQuery({
@@ -120,10 +117,6 @@ const BatchOutputDisplay = ({
 
   const { filteredResults, successCount, failedCount } = filterData;
 
-  // 判斷是否使用虛擬化渲染
-  const shouldUseVirtualization = useMemo(() => {
-    return filteredResults.length > VIRTUALIZATION_THRESHOLD;
-  }, [filteredResults.length, VIRTUALIZATION_THRESHOLD]);
 
   // 條件渲染必須在所有 Hooks 之後
   if (results.length === 0) {
@@ -204,16 +197,6 @@ const BatchOutputDisplay = ({
           <div className="card-body text-center text-terminal-text-muted">
             沒有符合篩選條件的結果
           </div>
-        ) : shouldUseVirtualization ? (
-          /* 大數據量時使用虛擬化渲染 */
-          <VirtualizedResultList
-            results={filteredResults}
-            expandedItems={expandedItems}
-            onToggleExpanded={toggleExpanded}
-            onCopy={copyToClipboard}
-            getDeviceDescription={getDeviceDescription}
-            containerHeight={500}
-          />
         ) : (
           /* 小數據量時使用普通渲染 */
           <div className="divide-y divide-gray-100">

@@ -6,7 +6,6 @@ import {
   type APIError 
 } from '@/types';
 import { useAppStore } from '@/store';
-import { logError, logSystemInfo } from '@/errors';
 import { useMemoizedFn, useCreation } from '@/hooks';
 
 interface BatchMutationCallbacks {
@@ -80,7 +79,7 @@ export const useBatchMutation = (callbacks: BatchMutationCallbacks = {}) => {
     onSuccess: (response) => {
       // 驗證回應資料格式
       if (!response) {
-        logError('批次執行成功但回應為空', { response });
+        console.error('批次執行成功但回應為空', { response });
         setStatus('執行完成，但未收到結果資料', 'warning');
         return;
       }
@@ -88,7 +87,7 @@ export const useBatchMutation = (callbacks: BatchMutationCallbacks = {}) => {
       // 確保 results 陣列存在且有效
       const results = Array.isArray(response.results) ? response.results : [];
       if (results.length === 0) {
-        logError('批次執行成功但結果陣列為空', { response });
+        console.error('批次執行成功但結果陣列為空', { response });
       }
       
       // 驗證 summary 物件存在
@@ -103,7 +102,7 @@ export const useBatchMutation = (callbacks: BatchMutationCallbacks = {}) => {
         setBatchResults(results);
         
         // 記錄成功資訊
-        logSystemInfo('批次執行成功完成', {
+        console.info('批次執行成功完成', {
           total: summary.total,
           successful: summary.successful,
           failed: summary.failed,
@@ -114,7 +113,7 @@ export const useBatchMutation = (callbacks: BatchMutationCallbacks = {}) => {
         stableCallbacks.onSuccess?.(response);
         
       } catch (error) {
-        logError('處理批次執行成功回應時發生錯誤', {
+        console.error('處理批次執行成功回應時發生錯誤', {
           error: error instanceof Error ? error.message : String(error),
           response
         });
@@ -127,7 +126,7 @@ export const useBatchMutation = (callbacks: BatchMutationCallbacks = {}) => {
       const friendlyMessage = mapErrorMessage(error.message);
       
       // 記錄錯誤
-      logError('批次執行失敗', { 
+      console.error('批次執行失敗', { 
         originalError: error.message,
         friendlyMessage 
       });

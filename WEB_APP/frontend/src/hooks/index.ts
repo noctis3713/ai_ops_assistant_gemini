@@ -43,11 +43,8 @@ export * from './useOptimizedAppState';
 export * from './useStoreActions';
 export * from './useOptimizedStoreSelectors';
 
-// 搜尋與預取
+// 搜尋
 export * from './useDebounceSearch';
-export * from './usePrefetch';
-export * from './useSmartPrefetch';
 
 // UI 與工具
 export * from './useTimer';
-export * from './useVirtualIntersection';

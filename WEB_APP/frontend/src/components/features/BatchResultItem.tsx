@@ -4,7 +4,6 @@
  */
 import React from 'react';
 import { type BatchResultItemProps } from '@/types';
-import { useAppStore } from '@/store';
 import { ERROR_STYLES, NEUTRAL_STYLES } from '@/config';
 import { handleCopyToClipboard } from '@/utils/commonHandlers';
 import { StatusIndicator } from '@/components/composite';

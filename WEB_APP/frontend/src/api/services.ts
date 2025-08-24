@@ -20,8 +20,6 @@ import {
   type TaskType
 } from '@/types';
 
-// 匯入新的錯誤處理系統
-import { logApiError, logSystemError } from '@/errors';
 
 // 導入新的回應處理工具
 import { 
@@ -166,15 +164,15 @@ export const createAIQueryTask = async (devices: string[], query: string, webhoo
 /**
  * 查詢任務狀態
  */
-export const getTaskStatus = async (taskId: string): Promise<any> => {
-  const response = await apiClient.get<BaseResponse<any>>(`${API_ENDPOINTS.TASKS}/${taskId}`);
+export const getTaskStatus = async (taskId: string): Promise<TaskResponse> => {
+  const response = await apiClient.get<BaseResponse<TaskResponse>>(`${API_ENDPOINTS.TASKS}/${taskId}`);
   return handleBaseResponse(response, '查詢任務狀態失敗');
 };
 
 /**
  * 輪詢任務直到完成
  */
-export const pollTaskUntilComplete = async (taskId: string, maxAttempts: number = 60): Promise<any> => {
+export const pollTaskUntilComplete = async (taskId: string, maxAttempts: number = 60): Promise<TaskResponse> => {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const status = await getTaskStatus(taskId);
     
@@ -269,7 +267,13 @@ export const getAIStatus = async (): Promise<AIStatus> => {
  */
 export const batchExecuteAsync = async (request: BatchExecuteRequest): Promise<TaskCreationResponse> => {
   // 根據 mode 決定操作類型和參數
-  let taskRequest: any;
+  let taskRequest: {
+    operation_type: string;
+    devices: string[];
+    command?: string;
+    query?: string;
+    webhook_url?: string;
+  };
   
   if (request.mode === 'ai') {
     // AI 查詢任務
@@ -668,7 +672,7 @@ export const getFrontendConfig = async (): Promise<LocalFrontendConfig> => {
     return simpleApiCall(response, '獲取前端配置', getDefaultFrontendConfig());
   } catch (error) {
     // 記錄錯誤並返回預設配置
-    logSystemError('無法獲取前端動態配置，使用預設配置', { error });
+    console.error('無法獲取前端動態配置，使用預設配置', { error });
     return getDefaultFrontendConfig();
   }
 };

@@ -8,9 +8,6 @@ import {
   useBatchExecution,
   useKeyboardShortcuts,
   useAsyncTasks,
-  usePrefetchCoreData,
-  useBackgroundRefresh,
-  useComponentPrefetch,
   useStoreActions,
   useOptimizedStoreSelectors
 } from '@/hooks';
@@ -23,7 +20,6 @@ import {
   Header,
   Footer,
 } from '@/components';
-import { ErrorBoundaryProvider, initializeErrorSystem } from '@/errors';
 import {
   DeviceSelectionSkeleton,
   CommandInputSkeleton,
@@ -45,14 +41,6 @@ function App() {
   // React 19: 使用 useTransition 管理非緊急更新
   const [isPendingNavigation, startNavigationTransition] = useTransition();
   
-  // 初始化錯誤處理系統
-  useEffect(() => {
-    initializeErrorSystem({
-      enableGlobalErrorHandler: true,
-      enableUnhandledRejectionHandler: true,
-      logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
-    });
-  }, []);
   
   // 全域狀態 - 使用優化的選擇器 hook
   const {
@@ -165,11 +153,6 @@ function App() {
   
   useKeyboardShortcuts(keyboardShortcutsOptions);
   
-  // 預取核心資料，提升首次載入體驗
-  usePrefetchCoreData();
-  
-  // 背景資料重新整理（僅在有執行中任務時啟用）
-  useBackgroundRefresh(isAsyncExecuting || isPolling);
 
   // 使用自定義 Hook 來集中處理狀態計算
   const { currentlyExecuting, statusText, statusClassName } = useAppStatus({
@@ -182,23 +165,16 @@ function App() {
     inputValue
   });
 
-  // 智能預載入功能
-  const {
-    deviceSelectionPrefetch,
-    batchOutputPrefetch,
-    aiQueryPrefetch
-  } = useComponentPrefetch();
 
 
   return (
-    <ErrorBoundaryProvider>
-      <div className="min-h-screen bg-terminal-bg">
+    <div className="min-h-screen bg-terminal-bg">
         <div className="max-w-6xl mx-auto p-6 min-h-screen flex flex-col">
           <Header />
 
         <main className="flex-1 flex flex-col space-y-4">
           {/* 輸入區域 */}
-            <section className="card" {...deviceSelectionPrefetch}>
+            <section className="card">
               <div className="card-body space-y-6">
                 {/* React 19: 增強 Suspense 邀界，支援操作狀態 */}
                 <Suspense 
@@ -265,7 +241,7 @@ function App() {
                     </div>
                   }
                 >
-                  <div {...aiQueryPrefetch}>
+                  <div>
                     <CommandInput
                     value={inputValue}
                     onChange={storeActions.setInputValue}
@@ -286,7 +262,7 @@ function App() {
             </section>
 
           {/* 輸出區域 */}
-            <section className="flex-1 flex flex-col min-h-0" {...batchOutputPrefetch}>
+            <section className="flex-1 flex flex-col min-h-0">
               {/* React 19: 優化 Suspense 邊界，支援漸進式渲染 */}
               <Suspense 
                 fallback={
@@ -314,7 +290,6 @@ function App() {
           <Footer />
         </div>
       </div>
-    </ErrorBoundaryProvider>
   );
 }
 

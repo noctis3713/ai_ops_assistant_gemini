@@ -26,4 +26,3 @@ export { default as DeviceGroupSelector } from './features/DeviceGroupSelector';
 export { default as DeviceList } from './features/DeviceList';
 export { default as DeviceSelectionSummary } from './features/DeviceSelectionSummary';
 export { default as SearchResultHint } from './features/SearchResultHint';
-export { default as VirtualizedResultList } from './features/VirtualizedResultList';

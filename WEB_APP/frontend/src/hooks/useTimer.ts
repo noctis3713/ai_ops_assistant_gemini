@@ -4,7 +4,6 @@
  * 防止記憶體洩漏，支援組件卸載時自動清理
  */
 import { useRef, useCallback, useEffect } from 'react';
-import { logError } from '@/errors';
 
 // Timer 類型定義
 type TimerId = NodeJS.Timeout;
@@ -49,8 +48,8 @@ export const useTimer = () => {
     const timerId = setTimeout(() => {
       try {
         callback();
-      } catch (error) {
-        logError('Timer callback 執行錯誤', { error });
+      } catch {
+        // 忽略回調中的錯誤，確保清理邏輯總是執行
       } finally {
         // 執行完成後自動清理
         timersRef.current.delete(timerId);
@@ -75,16 +74,16 @@ export const useTimer = () => {
     if (options?.immediate) {
       try {
         callback();
-      } catch (error) {
-        logError('Timer 立即執行 callback 錯誤', { error });
+      } catch {
+        // 忽略立即執行時的錯誤
       }
     }
 
     const timerId = setInterval(() => {
       try {
         callback();
-      } catch (error) {
-        logError('Timer interval callback 執行錯誤', { error });
+      } catch {
+        // 忽略間隔執行時的錯誤
       }
     }, delay);
 
