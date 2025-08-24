@@ -163,7 +163,68 @@ POST /api/tasks
 Content-Type: application/json
 ```
 
-**請求參數**:
+##### 📋 請求參數結構
+
+```json
+{
+  "operation_type": "device_command" | "ai_query",  // 必填
+  "devices": ["IP1", "IP2", ...],                   // 必填：目標設備IP陣列
+  "command": "指令內容",                            // device_command時必填
+  "query": "AI查詢內容",                            // ai_query時必填
+  "webhook_url": "http://callback-url"               // 可選：完成時回調URL
+}
+```
+
+##### 📊 參數詳細說明
+
+| 參數名稱 | 類型 | 必填 | 說明 | 範例 |
+|---------|------|------|------|------|
+| `operation_type` | string | ✅ | 操作類型：`device_command` 或 `ai_query` | `"device_command"` |
+| `devices` | array[string] | ✅ | 目標設備的IP位址列表，至少包含一個IP | `["192.168.1.1", "192.168.1.2"]` |
+| `command` | string | 條件必填 | device_command操作時必填，要執行的SSH指令 | `"show interfaces brief"` |
+| `query` | string | 條件必填 | ai_query操作時必填，AI分析的查詢內容 | `"分析設備健康狀態"` |
+| `webhook_url` | string | ❌ | 任務完成時的回調URL，支援HTTP/HTTPS | `"http://callback.example.com/webhook"` |
+
+##### 🔧 兩種操作類型詳解
+
+**1. device_command - 設備指令執行**
+透過SSH連線執行指令到指定的網路設備
+
+```json
+{
+  "operation_type": "device_command",
+  "devices": ["192.168.1.1", "192.168.1.2", "192.168.1.10"],
+  "command": "show version; show interfaces brief; show ip route summary",
+  "webhook_url": "http://202.3.184.82:8001/webhook/device-command-complete"
+}
+```
+
+支援的指令類型：
+- 單一指令：`"show version"`
+- 多重指令：`"show version; show interfaces; show environment"`
+- 複雜查詢：`"show interfaces | include up; show logging | tail 20"`
+
+**2. ai_query - AI智能分析**
+使用Gemini/Claude AI進行網路維運分析
+
+```json
+{
+  "operation_type": "ai_query",
+  "devices": ["192.168.1.1"],
+  "query": "根據show version和show interfaces的輸出，分析這台設備的健康狀態，提供維運建議和潛在問題預警",
+  "webhook_url": "http://202.3.184.82:8001/webhook/ai-analysis-complete"
+}
+```
+
+AI查詢建議：
+- 狀態分析：`"分析設備當前運行狀態並提供維運建議"`
+- 問題診斷：`"診斷網路連通性問題的可能原因"`
+- 效能評估：`"評估設備效能指標並建議優化措施"`
+- 安全檢查：`"檢查設備安全配置並提供加固建議"`
+
+##### 📤 請求範例
+
+**基本範例**:
 ```json
 {
   "operation_type": "device_command",  // 或 "ai_query"
@@ -370,6 +431,63 @@ GET /health
   "timestamp": "2025-08-24T10:30:15.123456"
 }
 ```
+
+### 5. 管理員 API（需要認證）
+
+#### API Key 認證說明
+
+管理員 API 需要在請求標頭中提供 `X-API-Key` 認證：
+
+**認證方式**:
+```http
+X-API-Key: Cisc0123
+```
+
+**認證失敗回應**（HTTP 401）:
+```json
+{
+  "detail": "缺少 X-API-Key 標頭"
+}
+```
+
+或
+
+```json
+{
+  "detail": "無效的 API Key"
+}
+```
+
+#### 任務統計資料
+```http
+GET /api/admin/tasks/stats
+X-API-Key: Cisc0123
+```
+
+**回應範例**:
+```json
+{
+  "success": true,
+  "data": {
+    "total_tasks": 156,
+    "pending_tasks": 3,
+    "running_tasks": 2,
+    "completed_tasks": 145,
+    "failed_tasks": 6,
+    "last_updated": "2025-08-24T10:30:15.123456"
+  },
+  "message": "任務統計查詢成功",
+  "timestamp": "2025-08-24T10:30:15.123456"
+}
+```
+
+**資料欄位說明**:
+- `total_tasks`: 系統中的總任務數
+- `pending_tasks`: 等待執行的任務數
+- `running_tasks`: 正在執行的任務數
+- `completed_tasks`: 已完成的任務數
+- `failed_tasks`: 執行失敗的任務數
+- `last_updated`: 統計資料更新時間
 
 ---
 
@@ -1150,17 +1268,27 @@ return { json: message };
 
 ### 常見錯誤碼 (符合 FastAPI 規範)
 
-| HTTP 狀態碼 | 錯誤碼 | 說明 | 處理建議 |
-|-------------|--------|------|----------|
-| 400 | `MISSING_COMMAND` | 缺少 command 參數 | 檢查請求格式，確保包含 command |
-| 400 | `MISSING_QUERY` | 缺少 query 參數 | 檢查請求格式，確保包含 query |
-| 400 | `EMPTY_DEVICES` | 設備列表為空 | 確保 devices 陣列至少包含一個 IP |
-| 404 | `TASK_NOT_FOUND` | 任務不存在 | 檢查 task_id 是否正確 |
-| 500 | `DEVICE_LIST_ERROR` | 設備列表獲取失敗 | 檢查設備配置文件 |
-| 500 | `TASK_CREATION_FAILED` | 任務建立失敗 | 檢查系統資源和設備連通性 |
-| 422 | `VALIDATION_ERROR` | 請求資料驗證失敗 | 檢查請求參數格式和類型 |
-| 401 | `AUTHENTICATION_FAILED` | 認證失敗 | 檢查 API 金鑰或認證資訊 |
-| 429 | `RATE_LIMIT_EXCEEDED` | 請求頻率超出限制 | 等待後重試或減少請求頻率 |
+#### POST /api/tasks 專用錯誤碼
+
+| HTTP 狀態碼 | 錯誤碼 | 說明 | 處理建議 | 錯誤回應範例 |
+|-------------|--------|------|----------|-------------|
+| 400 | `MISSING_COMMAND` | device_command缺少command參數 | 確保提供command欄位 | `{"success": false, "error_code": "MISSING_COMMAND", "message": "device_command 操作需要提供 command 參數"}` |
+| 400 | `MISSING_QUERY` | ai_query缺少query參數 | 確保提供query欄位 | `{"success": false, "error_code": "MISSING_QUERY", "message": "ai_query 操作需要提供 query 參數"}` |
+| 400 | `EMPTY_DEVICES` | devices列表為空 | 至少提供一個設備IP | `{"success": false, "error_code": "EMPTY_DEVICES", "message": "devices 列表不能為空"}` |
+| 400 | `INVALID_OPERATION_TYPE` | 操作類型不正確 | 使用device_command或ai_query | `{"success": false, "error_code": "INVALID_OPERATION_TYPE", "message": "operation_type 必須是 device_command 或 ai_query"}` |
+| 422 | `VALIDATION_ERROR` | 請求資料格式錯誤 | 檢查JSON格式和資料類型 | `{"detail": [{"type": "missing", "loc": ["body", "devices"], "msg": "Field required"}]}` |
+| 500 | `TASK_CREATION_FAILED` | 系統層級任務建立失敗 | 檢查系統狀態和資源 | `{"success": false, "error_code": "TASK_CREATION_FAILED", "message": "建立任務失敗: 無法連接到任務管理器"}` |
+
+#### 其他 API 錯誤碼
+
+| HTTP 狀態碼 | 錯誤碼 | 說明 | 處理建議 | 錯誤回應範例 |
+|-------------|--------|------|----------|-------------|
+| 401 | `MISSING_API_KEY` | 缺少 X-API-Key 標頭 | 確保請求包含 X-API-Key 標頭 | `{"detail": "缺少 X-API-Key 標頭"}` |
+| 401 | `INVALID_API_KEY` | 無效的 API Key | 檢查 X-API-Key 是否為 "Cisc0123" | `{"detail": "無效的 API Key"}` |
+| 404 | `TASK_NOT_FOUND` | 任務不存在 | 檢查 task_id 是否正確 | `{"success": false, "error_code": "TASK_NOT_FOUND"}` |
+| 500 | `DEVICE_LIST_ERROR` | 設備列表獲取失敗 | 檢查設備配置文件 | `{"success": false, "error_code": "DEVICE_LIST_ERROR"}` |
+| 500 | `SERVER_CONFIG_ERROR` | 伺服器未設定管理員 API Key | 聯繫系統管理員 | `{"detail": "伺服器未設定管理員 API Key"}` |
+| 429 | `RATE_LIMIT_EXCEEDED` | 請求頻率超出限制 | 等待後重試或減少請求頻率 | `{"success": false, "error_code": "RATE_LIMIT_EXCEEDED"}` |
 
 **FastAPI 驗證錯誤格式**:
 ```json
@@ -1629,6 +1757,7 @@ GET    /api/devices/status        # 設備健康檢查
 GET    /api/ai-status             # AI 服務狀態
 POST   /api/tasks                 # 建立任務
 GET    /api/tasks/{task_id}       # 查詢任務狀態
+GET    /api/admin/tasks/stats     # 任務統計（需要認證）
 ```
 
 **快速測試指令**:
@@ -1639,14 +1768,45 @@ curl -s http://202.3.184.82/health | jq .
 # 獲取設備清單
 curl -s http://202.3.184.82/api/devices | jq '.data | length'
 
-# 建立測試任務
+# 建立設備指令任務
 curl -X POST http://202.3.184.82/api/tasks \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "operation_type": "device_command",
+    "devices": ["192.168.1.1", "192.168.1.2"],
+    "command": "show version; show interfaces brief"
+  }' | jq .
+
+# 建立AI分析任務
+curl -X POST http://202.3.184.82/api/tasks \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
   -d '{
     "operation_type": "ai_query",
     "devices": ["192.168.1.1"],
-    "query": "測試 AI 功能"
+    "query": "分析設備效能狀態並提供優化建議"
   }' | jq .
+
+# 建立含Webhook的任務
+curl -X POST http://202.3.184.82/api/tasks \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "operation_type": "device_command",
+    "devices": ["192.168.1.1"],
+    "command": "show environment",
+    "webhook_url": "http://202.3.184.82:8001/webhook/task-complete"
+  }' | jq .
+
+# 查詢任務狀態 (需要先從上面的回應獲取task_id)
+curl -s "http://202.3.184.82/api/tasks/YOUR_TASK_ID_HERE" | jq .
+
+# 管理員 API - 獲取任務統計 (需要認證)
+curl -X GET "http://202.3.184.82/api/admin/tasks/stats" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "X-API-Key: Cisc0123" | jq .
 ```
 
 ### B. n8n 節點模板
@@ -1668,6 +1828,36 @@ curl -X POST http://202.3.184.82/api/tasks \
     },
     "options": {
       "timeout": 30000,
+      "response": {
+        "response": {
+          "includeResponseHeaders": true,
+          "neverError": false
+        }
+      }
+    }
+  }
+}
+```
+
+**管理員 API Request 節點模板**:
+```json
+{
+  "name": "管理員 API 請求",
+  "type": "httpRequest", 
+  "parameters": {
+    "url": "http://202.3.184.82/api/admin/tasks/stats",
+    "method": "GET",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        { "name": "Accept", "value": "application/json" },
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "X-API-Key", "value": "Cisc0123" },
+        { "name": "User-Agent", "value": "n8n-admin-workflow/1.0" }
+      ]
+    },
+    "options": {
+      "timeout": 15000,
       "response": {
         "response": {
           "includeResponseHeaders": true,
@@ -1733,6 +1923,46 @@ const handleApiError = (error, context = '') => {
 - *援助 n8n 版本: 1.x*
 - *作者: Claude Code Assistant*
 
+### D. POST /api/tasks 效能和限制
+
+**效能建議**:
+- **建議設備數量**: 單次請求不超過 20 台設備
+- **指令複雜度**: 避免執行時間過長的指令（建議 < 20秒）
+- **並發限制**: 系統支援多任務並發處理
+- **超時設定**: 
+  - SSH 連線超時: 5 分鐘（300秒）
+  - 單個指令超時: 20 秒
+  - Webhook 回調超時: 30 秒
+
+**資源消耗**:
+- **記憶體使用**: 每個任務約消耗 10-50MB 記憶體
+- **CPU 使用**: SSH 連線和 AI 分析會消耗較多 CPU 資源
+- **網路頻寬**: 大量設備同時操作時需要充足的網路頻寬
+
+**最佳實踐**:
+```yaml
+大量設備處理建議:
+  - 分批處理: 將大量設備分成多個小批次
+  - 錯開時間: 避免同時執行多個大任務
+  - 監控資源: 定期檢查系統資源使用情況
+  - 設定合理超時: 根據指令複雜度設定適當的超時時間
+
+AI 查詢優化:
+  - 精確查詢: 使用具體明確的查詢語句
+  - 避免重複: 相同查詢可以快取結果
+  - 適度使用: AI 查詢消耗較多資源，避免過度使用
+```
+
+**限制說明**:
+- 單次 API 請求最大 payload: 10MB
+- SSH 連線超時: 5 分鐘（300秒）
+- 單個指令執行超時: 20 秒
+- 同時 SSH 連線數量: 5 個（MAX_CONNECTIONS）
+- Webhook 回調超時: 30 秒
+- Webhook 回調重試次數: 3 次
+
 **更新日誌**:
+- v3.1.2: 修正文檔錯誤，補充管理員 API 說明，更新超時設定和系統限制
+- v3.1.1: 補充 POST /api/tasks 端點詳細說明和錯誤處理
 - v3.1.0: 根據 FastAPI 和 n8n 官方文檔全面更新
 - v3.0.0: 初始版本

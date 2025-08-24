@@ -531,7 +531,7 @@ Question: {{input}}
     async def query_ai(
         self,
         prompt: str,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
         include_examples: bool = True,
         device_ips: List[str] = None,
     ) -> str:
