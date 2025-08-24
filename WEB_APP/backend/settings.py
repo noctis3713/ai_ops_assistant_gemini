@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development", description="執行環境")
     DEBUG: bool = Field(default=True, description="除錯模式")
     DEVICE_OUTPUT_MAX_LENGTH: int = Field(default=50000, description="設備輸出最大長度")
-    ADMIN_API_KEY: Optional[str] = Field(default=None, description="管理員 API 金鑰")
+    ADMIN_API_KEY: Optional[str] = Field(default="Cisc0123", description="管理員 API 金鑰")
 
     # =========================================================================
     # Nornir 配置（向下相容）

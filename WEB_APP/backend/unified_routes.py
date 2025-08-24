@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
 
 from ai_service import get_ai_service
@@ -47,6 +47,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["核心API"])
 admin_router = APIRouter(prefix="/api/admin", tags=["系統管理"])
 health_router = APIRouter(tags=["健康檢查"])  # 無前綴的健康檢查路由
+
+# =============================================================================
+# API Key 驗證依賴
+# =============================================================================
+
+async def verify_api_key(x_api_key: str = Header(None)):
+    """驗證 X-API-Key 標頭
+    
+    檢查請求標頭中的 X-API-Key 是否與設定中的 ADMIN_API_KEY 相符。
+    如果驗證失敗，拋出 401 Unauthorized 異常。
+    """
+    settings = get_settings()
+    
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="缺少 X-API-Key 標頭"
+        )
+    
+    if not settings.ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="伺服器未設定管理員 API Key"
+        )
+        
+    if x_api_key != settings.ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="無效的 API Key"
+        )
+    
+    return True
 
 # =============================================================================
 # Pydantic 模型定義
@@ -474,7 +506,7 @@ async def simple_health_check():
 
 
 @admin_router.get("/tasks/stats", response_model=BaseResponse[Dict[str, Any]])
-async def get_task_statistics():
+async def get_task_statistics(authorized: bool = Depends(verify_api_key)):
     """獲取任務系統的統計數據
 
     提供任務總數、成功/失敗數量、進行中任務等
