@@ -141,13 +141,6 @@ class AIStatusResponse(BaseModel):
     current_provider: str
 
 
-# 配置相關模型
-class FrontendConfig(BaseModel):
-    """前端動態配置模型 - 遵循 YAGNI 原則，只包含實際使用的配置"""
-
-    api: Dict[str, Any]
-
-
 # =============================================================================
 # 任務管理路由
 # =============================================================================
@@ -458,39 +451,6 @@ async def get_ai_status():
 # =============================================================================
 # 配置管理路由
 # =============================================================================
-
-
-@router.get("/frontend-config", response_model=BaseResponse[FrontendConfig])
-async def get_frontend_config():
-    """取得前端應用的動態配置參數
-
-    包含輪詢間隔、UI 設定和 API 配置等，
-    用於前端應用的動態行為調整。
-    """
-    logger.info("收到前端動態配置查詢請求")
-
-    try:
-        # 直接獲取設定實例
-        app_settings = get_settings()
-
-        # 從配置檔案載入前端配置
-        config_data = app_settings.get_frontend_config()
-
-        # 構建前端配置物件 - 只載入實際使用的 API 配置
-        frontend_config = FrontendConfig(
-            api=config_data.get("api", {}),
-        )
-
-        logger.info("前端動態配置從配置檔案載入完成")
-
-        return BaseResponse.success_response(
-            data=frontend_config, message="前端配置獲取成功 (從 frontend_settings.yaml)"
-        )
-
-    except Exception as e:
-        error_msg = f"獲取前端配置失敗: {str(e)}"
-        logger.error(error_msg)
-        raise convert_to_service_error(e, "前端配置處理")
 
 
 # =============================================================================

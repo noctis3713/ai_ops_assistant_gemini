@@ -132,41 +132,6 @@ class Settings(BaseSettings):
         return None
 
     # =========================================================================
-    # 前端/後端配置管理
-    # =========================================================================
-
-    _frontend_config_cache: Optional[Dict[str, Any]] = None
-
-    def get_frontend_config(self) -> Dict[str, Any]:
-        """載入前端應用配置參數
-
-        從 frontend_settings.yaml 讀取配置，支援快取機制。
-        """
-        if self._frontend_config_cache is not None:
-            return self._frontend_config_cache
-
-        config_path = Path(__file__).parent / "config" / "frontend_settings.yaml"
-
-        try:
-            if config_path.exists():
-                with open(config_path, "r", encoding="utf-8") as f:
-                    self._frontend_config_cache = yaml.safe_load(f) or {}
-            else:
-                self._frontend_config_cache = {}
-
-            return self._frontend_config_cache
-        except Exception as e:
-            print(f"載入前端配置失敗: {e}")
-            return {}
-
-    def clear_frontend_config_cache(self):
-        """重新載入前端配置檔案
-
-        清除內存快取，下次存取時重新讀取檔案。
-        """
-        self._frontend_config_cache = None
-
-    # =========================================================================
     # 設備配置管理
     # =========================================================================
 
@@ -292,7 +257,6 @@ class Settings(BaseSettings):
         self._devices_config = None
         self._groups_config = None
         self._security_config = None
-        self._frontend_config_cache = None
 
 
 # 全域實例

@@ -47,7 +47,7 @@ const DeviceItem: React.FC<DeviceItemProps> = ({
           </span>
         </div>
         <p className="text-xs text-terminal-text-secondary truncate">
-          {device.ip} • {device.description}
+          {device.ip}
         </p>
       </div>
     </label>

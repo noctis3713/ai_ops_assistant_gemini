@@ -23,7 +23,7 @@ const BatchResultItem = ({
 }: OptimizedBatchResultItemProps) => {
   const handleCopyOutput = async () => {
     if (onCopy) {
-      const content = `設備: ${result.deviceName} • ${result.deviceIp} • ${deviceDescription}\n\n輸出:\n${result.output || '(無輸出)'}${result.error ? `\n\n錯誤:\n${result.error}` : ''}`;
+      const content = `設備: ${result.deviceName} • ${result.deviceIp}\n\n輸出:\n${result.output || '(無輸出)'}${result.error ? `\n\n錯誤:\n${result.error}` : ''}`;
       const success = await handleCopyToClipboard(content);
       if (success && onCopy) {
         onCopy(content); // 保持原有的回調行為
@@ -47,7 +47,7 @@ const BatchResultItem = ({
           <div className="flex items-center space-x-2">
             <StatusIndicator success={result.success} />
             <span className="font-medium text-terminal-text-primary">
-              {result.deviceName} • {result.deviceIp} • {deviceDescription}
+              {result.deviceName} • {result.deviceIp}
             </span>
           </div>
         </div>
