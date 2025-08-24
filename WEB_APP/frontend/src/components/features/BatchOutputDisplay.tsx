@@ -14,9 +14,7 @@ import { handleCopyToClipboard } from '@/utils/commonHandlers';
 
 const BatchOutputDisplay = ({ 
   results, 
-  onClear,
-  statusText,
-  statusClassName
+  onClear
 }: BatchOutputDisplayProps) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');
@@ -122,11 +120,7 @@ const BatchOutputDisplay = ({
   if (results.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        {statusText && (
-          <div className={statusClassName}>
-            {statusText}
-          </div>
-        )}
+        {/* 移除底部狀態提示文字顯示 */}
       </div>
     );
   }

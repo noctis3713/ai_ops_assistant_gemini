@@ -18,8 +18,7 @@ const BatchResultItem = ({
   result, 
   isExpanded, 
   onExpand, 
-  onCopy,
-  deviceDescription = '' // 預設空字串
+  onCopy
 }: OptimizedBatchResultItemProps) => {
   const handleCopyOutput = async () => {
     if (onCopy) {

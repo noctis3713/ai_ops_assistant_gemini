@@ -12,8 +12,7 @@ export const useStoreActions = () => {
     setSelectedDevices: useAppStore.getState().setSelectedDevices,
     setInputValue: useAppStore.getState().setInputValue,
     clearExecutionData: useAppStore.getState().clearExecutionData,
-    setProgressVisibility: useAppStore.getState().setProgressVisibility,
-    setIsAsyncMode: useAppStore.getState().setIsAsyncMode
+    setProgressVisibility: useAppStore.getState().setProgressVisibility
   }), []);
 
   return storeActions;

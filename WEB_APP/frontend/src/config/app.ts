@@ -110,9 +110,9 @@ export const DEFAULT_TEXT = {
   
   // 執行結果區域狀態提示
   RESULT_STATUS: {
-    SELECT_DEVICE: '請選擇要操作的設備...',
-    INPUT_COMMAND: '等待輸入指令...',
-    WAITING_RESULT: '請執行...',
+    SELECT_DEVICE: '',
+    INPUT_COMMAND: '',
+    WAITING_RESULT: '',
   },
   
   // 輸入提示文字

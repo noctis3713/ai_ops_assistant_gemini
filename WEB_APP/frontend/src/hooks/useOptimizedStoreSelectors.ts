@@ -24,7 +24,6 @@ export const useOptimizedStoreSelectors = () => {
       
       // 執行狀態
       isExecuting: state.isExecuting,
-      isBatchExecution: state.isBatchExecution,
       
       // 進度狀態
       progress: state.progress,
@@ -35,7 +34,6 @@ export const useOptimizedStoreSelectors = () => {
       
       // 結果和任務
       batchResults: state.batchResults,
-      isAsyncMode: state.isAsyncMode,
       currentTask: state.currentTask,
       taskPollingActive: state.taskPollingActive
     }))

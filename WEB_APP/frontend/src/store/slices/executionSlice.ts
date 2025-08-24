@@ -20,7 +20,6 @@ import {
 // 執行切片初始狀態
 export const initialExecutionState = {
   isExecuting: false,
-  isBatchExecution: false,
   
   // 進度狀態
   progress: {
@@ -42,7 +41,6 @@ export const initialExecutionState = {
   
   // 非同步任務狀態
   currentTask: null,
-  isAsyncMode: false,
   taskPollingActive: false,
 } as const;
 
@@ -63,9 +61,6 @@ export const createExecutionSlice: StateCreator<
     set({ isExecuting }, false, 'execution:setIsExecuting');
   },
 
-  setIsBatchExecution: (isBatch) => {
-    set({ isBatchExecution: isBatch }, false, 'execution:setIsBatchExecution');
-  },
 
   // 優化的進度動作 - 防止相同值重複更新
   setProgress: (progressUpdate) => {
@@ -162,9 +157,6 @@ export const createExecutionSlice: StateCreator<
     set({ currentTask: task }, false, 'execution:setCurrentTask');
   },
 
-  setIsAsyncMode: (isAsync) => {
-    set({ isAsyncMode: isAsync }, false, 'execution:setIsAsyncMode');
-  },
 
   setTaskPollingActive: (active) => {
     set({ taskPollingActive: active }, false, 'execution:setTaskPollingActive');

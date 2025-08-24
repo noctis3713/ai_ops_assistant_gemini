@@ -18,10 +18,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
   placeholder,
   progress,
   status,
-  isAsyncMode,
-  onToggleAsyncMode,
   currentTask,
-  onCancelTask,
   taskPollingActive,
 }) => {
   // 處理 Enter 鍵執行 - 接受 ESLint 依賴建議
@@ -113,46 +110,22 @@ const CommandInput: React.FC<CommandInputProps> = ({
         )}
       </div>
 
-      {/* 第一行：非同步執行按鈕和任務狀態 */}
-      <div className="mb-2 flex items-center space-x-3">
-        {/* 非同步執行按鈕 */}
-        <button
-          onClick={() => onToggleAsyncMode?.(!isAsyncMode)}
-          disabled={isExecuting}
-          className={`px-5 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
-            isAsyncMode
-              ? 'bg-blue-100 text-blue-800 shadow-sm'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          } ${isExecuting ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          非同步執行
-        </button>
-
-        {/* 任務狀態顯示 */}
-        {isAsyncMode && currentTask && (
-          <div className="flex items-center space-x-2">
-            <div className="text-xs text-terminal-text-secondary">
-              任務：{currentTask.task_id.substring(0, 8)}...
-            </div>
-            {taskPollingActive && (
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-terminal-primary rounded-full animate-pulse"></div>
-                <span className="text-xs text-terminal-text-secondary">輪詢中</span>
-              </div>
-            )}
-            {currentTask.status === 'running' && onCancelTask && (
-              <button
-                onClick={onCancelTask}
-                className="px-2 py-1 text-xs font-medium text-terminal-error hover:bg-terminal-error-light rounded transition-colors"
-              >
-                取消執行
-              </button>
-            )}
+      {/* 任務狀態顯示 */}
+      {currentTask && (
+        <div className="mb-2 flex items-center space-x-2">
+          <div className="text-xs text-terminal-text-secondary font-mono">
+            任務：{currentTask.task_id}
           </div>
-        )}
-      </div>
+          {taskPollingActive && (
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-terminal-primary rounded-full animate-pulse"></div>
+              <span className="text-xs text-terminal-text-secondary">輪詢中</span>
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* 第二行：執行按鈕 */}
+      {/* 執行按鈕 */}
       <div className="mb-3">
         <Button 
           onClick={onExecute}
@@ -163,7 +136,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
         </Button>
       </div>
         
-      {/* 第三行：進度條 */}
+      {/* 進度條 */}
       {(progress?.isVisible || status?.message) && (
         <div className="mb-0">
           <CompactProgressBar 

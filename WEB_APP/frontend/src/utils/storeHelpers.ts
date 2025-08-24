@@ -18,7 +18,7 @@ import { PERFORMANCE_CONFIG } from '@/store/storeMiddlewares';
 
 // 任務完成處理邏輯 - 批次更新優化
 export const createTaskCompletionHandler = (store: AppStore) => (taskResult: unknown) => {
-  const { setBatchResults, setStatus, setProgressVisibility, setIsExecuting, setIsBatchExecution, clearExecutionData } = store;
+  const { setBatchResults, setStatus, setProgressVisibility, setIsExecuting, clearExecutionData } = store;
   
   // 類型安全的結果設定
   const results = (taskResult && typeof taskResult === 'object' && 'results' in taskResult && Array.isArray(taskResult.results)) 
@@ -40,22 +40,20 @@ export const createTaskCompletionHandler = (store: AppStore) => (taskResult: unk
   setTimeout(() => {
     setProgressVisibility('batch', false);
     setIsExecuting(false);
-    setIsBatchExecution(false);
     clearExecutionData({ timestamp: true });
   }, PERFORMANCE_CONFIG.BATCH_UPDATE_DELAY_MS);
 };
 
 // 執行開始處理邏輯 - 批次更新優化
-export const createExecutionStartHandler = (store: AppStore) => (params: { deviceCount: number; isBatch?: boolean }) => {
+export const createExecutionStartHandler = (store: AppStore) => (params: { deviceCount: number }) => {
   const { 
     setIsExecuting, 
-    setIsBatchExecution, 
     setProgressVisibility, 
     setExecutionStartTime, 
     clearExecutionData
   } = store;
   
-  const { deviceCount, isBatch = false } = params;
+  const { deviceCount } = params;
   const timestamp = Date.now();
   
   // 優化：先停止所有狀態更新，再批次設定
@@ -66,18 +64,15 @@ export const createExecutionStartHandler = (store: AppStore) => (params: { devic
   setIsExecuting(true);
   setExecutionStartTime(timestamp);
   
-  if (isBatch) {
-    setIsBatchExecution(true);
-    // 使用微延遲確保執行狀態先設定完成
-    setTimeout(() => {
-      setProgressVisibility('batch', true, { totalDevices: deviceCount });
-    }, PERFORMANCE_CONFIG.BATCH_UPDATE_DELAY_MS);
-  }
+  // 使用微延遲確保執行狀態先設定完成
+  setTimeout(() => {
+    setProgressVisibility('batch', true, { totalDevices: deviceCount });
+  }, PERFORMANCE_CONFIG.BATCH_UPDATE_DELAY_MS);
 };
 
 // 執行錯誤處理邏輯 - 批次更新優化
 export const createExecutionErrorHandler = (store: AppStore) => (error: unknown, context?: string) => {
-  const { setStatus, setProgressVisibility, setIsExecuting, setIsBatchExecution } = store;
+  const { setStatus, setProgressVisibility, setIsExecuting } = store;
   
   // 類型安全的錯誤訊息處理
   const errorMessage = typeof error === 'string' ? error 
@@ -95,7 +90,6 @@ export const createExecutionErrorHandler = (store: AppStore) => (error: unknown,
   setTimeout(() => {
     setProgressVisibility('batch', false);
     setIsExecuting(false);
-    setIsBatchExecution(false);
   }, PERFORMANCE_CONFIG.BATCH_UPDATE_DELAY_MS);
 };
 
@@ -103,7 +97,6 @@ export const createExecutionErrorHandler = (store: AppStore) => (error: unknown,
 export const createAsyncTaskStartHandler = (store: AppStore) => (taskId: string, deviceCount: number) => {
   const { 
     setCurrentTask, 
-    setIsAsyncMode, 
     setTaskPollingActive, 
     setProgressVisibility,
     setExecutionStartTime,
@@ -114,7 +107,6 @@ export const createAsyncTaskStartHandler = (store: AppStore) => (taskId: string,
   clearExecutionData({ results: true });
   
   // 設定非同步任務狀態
-  setIsAsyncMode(true);
   setTaskPollingActive(true);
   setProgressVisibility('batch', true, { totalDevices: deviceCount });
   setExecutionStartTime(Date.now());
@@ -144,23 +136,19 @@ export const createAsyncTaskStartHandler = (store: AppStore) => (taskId: string,
 export const createStateResetHandler = (store: AppStore) => () => {
   const { 
     setIsExecuting, 
-    setIsBatchExecution, 
     setProgressVisibility,
     clearExecutionData,
-    setIsAsyncMode,
     setTaskPollingActive,
     setCurrentTask
   } = store;
   
   // 重置所有執行相關狀態
   setIsExecuting(false);
-  setIsBatchExecution(false);
   setProgressVisibility('batch', false);
   setProgressVisibility('normal', false);
   clearExecutionData({ status: true, results: true, timestamp: true });
   
   // 重置非同步任務狀態
-  setIsAsyncMode(false);
   setTaskPollingActive(false);
   setCurrentTask(null);
 };
@@ -183,7 +171,6 @@ export const createSmartToggleHandler = (store: AppStore) => (action: 'clear_all
       store.setProgressVisibility('batch', false);
       store.setProgressVisibility('normal', false);
       store.setIsExecuting(false);
-      store.setIsBatchExecution(false);
       break;
       
     case 'switch_mode': {

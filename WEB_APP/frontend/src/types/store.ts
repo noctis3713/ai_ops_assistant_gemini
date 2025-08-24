@@ -19,7 +19,6 @@ export interface AppState {
   
   // 執行狀態
   isExecuting: boolean;
-  isBatchExecution: boolean;
   
   // 進度狀態
   progress: ProgressState;
@@ -37,7 +36,6 @@ export interface AppState {
   
   // 非同步任務狀態
   currentTask: TaskResponse | null;
-  isAsyncMode: boolean;
   taskPollingActive: boolean;
 }
 
@@ -50,7 +48,6 @@ export interface AppActions {
   
   // 執行狀態動作
   setIsExecuting: (isExecuting: boolean) => void;
-  setIsBatchExecution: (isBatch: boolean) => void;
   
   // 簡化的進度動作
   setProgress: (progress: Partial<ProgressState>) => void;
@@ -72,8 +69,7 @@ export interface AppActions {
   
   // 非同步任務動作
   setCurrentTask: (task: TaskResponse | null) => void;
-  setIsAsyncMode: (isAsync: boolean) => void;
-  setTaskPollingActive: (active: boolean) => void;
+    setTaskPollingActive: (active: boolean) => void;
   updateTaskProgress: (taskId: string, progress: number, stage: string) => void;
   
   // =============================================================================
@@ -165,28 +161,24 @@ export interface UiSlice {
 export interface ExecutionSlice {
   // 狀態
   isExecuting: boolean;
-  isBatchExecution: boolean;
   progress: ProgressState;
   batchProgress: BatchProgressState;
   executionStartTime: number | null;
   
   // 非同步任務狀態
   currentTask: TaskResponse | null;
-  isAsyncMode: boolean;
   taskPollingActive: boolean;
   
   // 基礎動作
   setIsExecuting: (isExecuting: boolean) => void;
-  setIsBatchExecution: (isBatch: boolean) => void;
-  setProgress: (progress: Partial<ProgressState>) => void;
+    setProgress: (progress: Partial<ProgressState>) => void;
   setBatchProgress: (progress: Partial<BatchProgressState>) => void;
   setProgressVisibility: (type: 'normal' | 'batch', visible: boolean, initialData?: { percentage?: number; totalDevices?: number }) => void;
   setExecutionStartTime: (timestamp: number) => void;
   
   // 非同步任務動作
   setCurrentTask: (task: TaskResponse | null) => void;
-  setIsAsyncMode: (isAsync: boolean) => void;
-  setTaskPollingActive: (active: boolean) => void;
+    setTaskPollingActive: (active: boolean) => void;
   updateTaskProgress: (taskId: string, progress: number, stage: string) => void;
   
   // 高階動作
@@ -229,7 +221,6 @@ export const initialAppState: AppState = {
   selectedDevices: [],
   inputValue: '',
   isExecuting: false,
-  isBatchExecution: false,
   progress: {
     isVisible: false,
     percentage: 0,
@@ -250,6 +241,5 @@ export const initialAppState: AppState = {
   batchResults: [],
   executionStartTime: null,
   currentTask: null,
-  isAsyncMode: false,
   taskPollingActive: false,
 };

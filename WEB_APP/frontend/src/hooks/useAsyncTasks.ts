@@ -6,8 +6,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   batchExecuteAsync, 
-  getTaskStatus, 
-  cancelTask,
+  getTaskStatus,
   TaskPoller
 } from '@/api';
 import { useAppStore } from '@/store';
@@ -107,9 +106,7 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
 
   // Store 狀態
   const {
-    currentTask,
     setCurrentTask,
-    setIsAsyncMode,
     setTaskPollingActive,
     updateTaskProgress,
     setBatchResults,
@@ -387,7 +384,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setError(null);
     setIsExecuting(true);
     setStoreExecuting(true);
-    setIsAsyncMode(true);
     
     // 記錄執行開始時間
     setExecutionStartTime(Date.now());
@@ -499,7 +495,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
       handleError(error, '建立非同步任務失敗');
       setIsExecuting(false);
       setStoreExecuting(false);
-      setIsAsyncMode(false);
       setProgressVisibility('batch', false);
       throw error;
     } finally {
@@ -513,7 +508,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setCurrentTask,
     setStatus,
     setStoreExecuting,
-    setIsAsyncMode,
     setExecutionStartTime,
     setProgressVisibility,
     createProgressHandler,
@@ -533,7 +527,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     setError(null);
     setIsExecuting(true);
     setStoreExecuting(true);
-    setIsAsyncMode(true);
     
     // 記錄執行開始時間
     setExecutionStartTime(Date.now());
@@ -701,12 +694,10 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     } finally {
       setIsExecuting(false);
       setStoreExecuting(false);
-      setIsAsyncMode(false);
       setProgressVisibility('batch', false);
     }
   }, [
     setStoreExecuting,
-    setIsAsyncMode,
     setExecutionStartTime,
     setProgressVisibility,
     setCurrentTask,
@@ -743,72 +734,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     cleanup();
   }, [cleanup]);
 
-  /**
-   * 取消當前任務 - 增強版本，智能處理快速完成的任務
-   */
-  const cancelCurrentTask = useCallback(async (): Promise<boolean> => {
-    if (!currentTask) {
-      setStatus('沒有進行中的任務可以取消', 'warning');
-      return false;
-    }
-
-    // 檢查任務是否可以取消
-    if (currentTask.status === 'completed' || currentTask.status === 'failed' || currentTask.status === 'cancelled') {
-      setStatus('任務已結束，無法取消', 'warning');
-      return false;
-    }
-
-    try {
-      const result = await cancelTask(currentTask.task_id);
-      
-      // 處理取消結果
-      if (result?.success || result?.cancelled) {
-        setStatus('任務已成功取消', 'warning');
-        console.error('Task cancelled successfully', {
-          taskId: currentTask.task_id
-        });
-      } else {
-        // 後備處理 - 基於 message 內容判斷
-        if (result?.message?.includes('已完成')) {
-          setStatus('任務已完成', 'success');
-        } else if (result?.message?.includes('已取消')) {
-          setStatus('任務已成功取消', 'warning');
-        } else {
-          setStatus('任務已處理完成', 'success');
-        }
-        
-        console.error('Task processed successfully', {
-          message: result?.message,
-          taskId: currentTask.task_id
-        });
-      }
-      
-      cleanup();
-      return true;
-      
-    } catch (error) {
-      // 智能錯誤處理 - 關鍵改進
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // 檢查是否是 404 錯誤（任務已完成並被清理）
-      if (errorMessage.includes('404') || errorMessage.includes('任務不存在') || errorMessage.includes('任務已完成並被自動清理')) {
-        // 404 錯誤表示任務已完成並被清理，這實際上是成功的
-        setStatus('任務已完成', 'success');
-        cleanup();
-        
-        console.error('Task was already completed and cleaned up', {
-          taskId: currentTask.task_id
-        });
-        
-        return true; // 返回 true 表示"取消"成功（實際是任務已完成）
-      }
-      
-      // 其他錯誤才是真正的取消失敗
-      
-      handleError(error, '取消任務失敗');
-      return false;
-    }
-  }, [currentTask, setStatus, handleError, cleanup]);
 
   /**
    * 手動查詢任務狀態
@@ -839,7 +764,6 @@ export const useAsyncTasks = (options: UseAsyncTasksOptions = {}): UseAsyncTasks
     executeAsyncAndWait,
     startPolling,
     stopPolling,
-    cancelCurrentTask,
     queryTaskStatus,
     isExecuting,
     isPolling,

@@ -5,7 +5,6 @@ import { useCallback, useMemo, lazy, Suspense, useRef, useEffect, useTransition 
 
 // 本地導入
 import { 
-  useBatchExecution,
   useKeyboardShortcuts,
   useAsyncTasks,
   useStoreActions,
@@ -50,7 +49,6 @@ function App() {
     status,
     batchProgress,
     batchResults,
-    isAsyncMode,
     currentTask,
     taskPollingActive
   } = useOptimizedStoreSelectors();
@@ -59,7 +57,6 @@ function App() {
   const selectedDevicesRef = useRef(selectedDevices);
   const inputValueRef = useRef(inputValue);
   const modeRef = useRef(mode);
-  const isAsyncModeRef = useRef(isAsyncMode);
 
   // 更新 ref 值
   useEffect(() => {
@@ -74,9 +71,6 @@ function App() {
     modeRef.current = mode;
   }, [mode]);
 
-  useEffect(() => {
-    isAsyncModeRef.current = isAsyncMode;
-  }, [isAsyncMode]);
 
   // 使用自定義 hook 獲取穩定的 store 動作引用
   const storeActions = useStoreActions();
@@ -98,10 +92,8 @@ function App() {
       }));
     }
   });
-  const { executeBatch, isBatchExecuting } = useBatchExecution();
   const { 
     executeAsyncAndWait, 
-    cancelCurrentTask, 
     isExecuting: isAsyncExecuting, 
     isPolling 
   } = useAsyncTasks();
@@ -111,31 +103,24 @@ function App() {
     window.location.reload();
   }, []);
 
-  // 統一執行邏輯 - 使用 ref 減少依賴 (useCallback 優化版)
+  // 統一執行邏輯 - 只使用非同步模式
   const handleExecute = useCallback(async () => {
     const currentSelectedDevices = selectedDevicesRef.current;
     const currentInputValue = inputValueRef.current;
     const currentMode = modeRef.current;
-    const currentIsAsyncMode = isAsyncModeRef.current;
 
     if (currentSelectedDevices.length === 0) return;
 
-    if (currentIsAsyncMode) {
-      // 非同步模式執行
-      try {
-        await executeAsyncAndWait({
-          devices: currentSelectedDevices,
-          command: currentInputValue,
-          mode: currentMode === 'ai' ? 'ai' : 'command',
-        });
-      } catch {
-        // 非同步執行錯誤由 executeAsyncAndWait 內部處理
-      }
-    } else {
-      // 同步模式執行
-      executeBatch(currentSelectedDevices, currentInputValue);
+    try {
+      await executeAsyncAndWait({
+        devices: currentSelectedDevices,
+        command: currentInputValue,
+        mode: currentMode === 'ai' ? 'ai' : 'command',
+      });
+    } catch {
+      // 執行錯誤由 executeAsyncAndWait 內部處理
     }
-  }, [executeAsyncAndWait, executeBatch]); // 只保留穩定的函數依賴
+  }, [executeAsyncAndWait]);
 
 
   // 手動清空結果 - 使用 storeActions 優化版本
@@ -148,18 +133,16 @@ function App() {
   // 鍵盤快捷鍵 (使用 useMemo 避免每次重新創建選項物件)
   const keyboardShortcutsOptions = useMemo(() => ({
     onExecute: handleExecute,
-    isExecuting: isBatchExecuting,
-  }), [handleExecute, isBatchExecuting]);
+    isExecuting: isAsyncExecuting,
+  }), [handleExecute, isAsyncExecuting]);
   
   useKeyboardShortcuts(keyboardShortcutsOptions);
   
 
   // 使用自定義 Hook 來集中處理狀態計算
   const { currentlyExecuting, statusText, statusClassName } = useAppStatus({
-    isAsyncMode,
     isAsyncExecuting,
     isPolling,
-    isBatchExecuting,
     batchResultsLength: batchResults.length,
     selectedDevicesLength: selectedDevices.length,
     inputValue
@@ -250,10 +233,7 @@ function App() {
                     isExecuting={currentlyExecuting}
                     progress={batchProgress}
                     status={status}
-                    isAsyncMode={isAsyncMode}
-                    onToggleAsyncMode={storeActions.setIsAsyncMode}
                     currentTask={currentTask}
-                    onCancelTask={cancelCurrentTask}
                     taskPollingActive={taskPollingActive}
                     />
                   </div>

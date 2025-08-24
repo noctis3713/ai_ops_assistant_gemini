@@ -6,7 +6,7 @@
  * import {
  *   useMemoizedFn,     // 來自 utils
  *   useMount,          // 來自 lifecycle  
- *   useExecutionCore,  // 來自 batch-execution
+ *   useAsyncTasks,     // 來自非同步任務
  *   useDeviceFilter,   // 來自業務 hooks
  * } from '@/hooks';
  * ```
@@ -26,9 +26,6 @@ export * from './features';
 // 包含複雜邏輯的高級 Hooks
 export * from './advanced';
 
-// ========== 批次執行模組 ==========
-// 完整的批次執行相關 hooks
-export * from './batch-execution';
 
 // ========== 業務 Hooks ==========
 // 設備管理

@@ -84,11 +84,7 @@ export interface CommandInputProps {
   placeholder?: string;
   progress?: BatchProgressState;
   status?: StatusMessage;
-  // 新增非同步模式相關屬性
-  isAsyncMode: boolean;
-  onToggleAsyncMode: (enabled: boolean) => void;
   currentTask?: TaskResponse | null;
-  onCancelTask?: () => void;
   taskPollingActive?: boolean;
 }
 
@@ -96,8 +92,6 @@ export interface CommandInputProps {
 export interface BatchOutputDisplayProps {
   results: BatchExecutionResult[];
   onClear: () => void;
-  statusText?: string;
-  statusClassName?: string;
 }
 
 // 批次結果項目
