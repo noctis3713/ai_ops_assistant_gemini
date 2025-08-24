@@ -4,11 +4,12 @@
  * 使用 useTransition 優化漸進式渲染
  */
 import React, { useState, useEffect, useCallback, useMemo, useTransition, useDeferredValue } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { type BatchOutputDisplayProps } from '@/types';
 import BatchResultItem from './BatchResultItem';
 import VirtualizedResultList from './VirtualizedResultList';
 import Button from '@/components/common/Button';
-import { useDevices } from '@/services';
+import { getDevices } from '@/api';
 import { findDeviceByIp } from '@/utils/utils';
 import { handleCopyToClipboard } from '@/utils/commonHandlers';
 
@@ -31,7 +32,21 @@ const BatchOutputDisplay = ({
   const VIRTUALIZATION_THRESHOLD = 20;
 
   // 獲取設備資料用於描述查詢
-  const { data: devices } = useDevices();
+  const { data: devices } = useQuery({
+    queryKey: ['devices'],
+    queryFn: getDevices,
+    staleTime: 5 * 60 * 1000,
+    // 新增 select 來處理後端 device_type, location 與前端 model, description 的不一致
+    select: (apiData) => {
+      if (!Array.isArray(apiData)) return [];
+      return apiData.map(device => ({
+        ip: device.ip,
+        name: device.name,
+        model: device.device_type || 'unknown',     // device_type → model
+        description: device.location || ''          // location → description
+      }));
+    }
+  });
 
   // 設備描述查詢函數 - 使用 useCallback 確保穩定引用
   const getDeviceDescription = useCallback((deviceIp: string) => {

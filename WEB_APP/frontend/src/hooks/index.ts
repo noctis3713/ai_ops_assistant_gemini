@@ -7,7 +7,7 @@
  *   useMemoizedFn,     // 來自 utils
  *   useMount,          // 來自 lifecycle  
  *   useExecutionCore,  // 來自 batch-execution
- *   useDevices,        // 來自業務 hooks
+ *   useDeviceFilter,   // 來自業務 hooks
  * } from '@/hooks';
  * ```
  * 
@@ -32,8 +32,6 @@ export * from './batch-execution';
 
 // ========== 業務 Hooks ==========
 // 設備管理
-export * from './useDevices';
-export * from './useDeviceGroups';
 export * from './useDeviceFilter';
 
 // 應用狀態與互動

@@ -4,9 +4,10 @@
  * 內含折疊顯示、模糊搜尋、群組選擇功能
  */
 import React, { useState, useCallback, useMemo } from 'react';
-import { type MultiDeviceSelectorProps } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { type MultiDeviceSelectorProps, type DeviceGroup } from '@/types';
 import { useDeviceFilter } from '@/hooks';
-import { useDeviceGroups } from '@/services';
+import { getDeviceGroups } from '@/api';
 import { WARNING_STYLES, DEVICE_GROUPS } from '@/config';
 import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
 import DeviceSearchBox from './DeviceSearchBox';
@@ -26,8 +27,27 @@ const MultiDeviceSelector = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   
-  // 獲取設備群組資料 - 強化容錯處理
-  const { data: deviceGroups = [], isLoading: groupsLoading, error: groupsError } = useDeviceGroups();
+  // 直接使用 useQuery 獲取設備群組資料
+  const { 
+    data: deviceGroups = [], 
+    isLoading: groupsLoading, 
+    error: groupsError 
+  } = useQuery<DeviceGroup[], Error>({
+    queryKey: ['device-groups'],
+    queryFn: getDeviceGroups,
+    staleTime: 5 * 60 * 1000, // 快取 5 分鐘，避免不必要的重複請求
+    // 新增 select 選項來轉換 API 回傳的資料
+    select: (apiData) => {
+      if (!Array.isArray(apiData)) return []; // 防呆，確保資料是陣列
+      // 將後端格式 (group_name, devices) 轉換為前端需要的格式 (name, device_count)
+      return apiData.map(group => ({
+        name: group.group_name,                    // group_name → name
+        description: group.description || '',
+        device_count: group.devices?.length || 0, // 計算設備數量
+        platform: group.platform || 'unknown'     // 提供預設平台
+      }));
+    }
+  });
   
 
   // 檢查設備資料是否為空的原因

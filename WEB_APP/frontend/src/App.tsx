@@ -15,12 +15,9 @@ import {
   useOptimizedStoreSelectors
 } from '@/hooks';
 
-// 新的服務層導入
-import { 
-  useDevices,
-  initializeServices
-} from '@/services';
-import { useQueryClient } from '@tanstack/react-query';
+// 直接導入 API 函數
+import { getDevices } from '@/api';
+import { useQuery } from '@tanstack/react-query';
 import { useAppStatus } from '@/hooks/useAppStatus';
 import {
   Header,
@@ -48,18 +45,14 @@ function App() {
   // React 19: 使用 useTransition 管理非緊急更新
   const [isPendingNavigation, startNavigationTransition] = useTransition();
   
-  // 初始化服務層
-  const queryClient = useQueryClient();
+  // 初始化錯誤處理系統
   useEffect(() => {
-    initializeServices(queryClient);
-    
-    // 初始化錯誤處理系統
     initializeErrorSystem({
       enableGlobalErrorHandler: true,
       enableUnhandledRejectionHandler: true,
       logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
     });
-  }, [queryClient]);
+  }, []);
   
   // 全域狀態 - 使用優化的選擇器 hook
   const {
@@ -100,8 +93,23 @@ function App() {
   // 使用自定義 hook 獲取穩定的 store 動作引用
   const storeActions = useStoreActions();
 
-  // API Hooks
-  const { data: devices = [], isLoading: devicesLoading, error: devicesError } = useDevices();
+  // 直接使用 useQuery 獲取設備資料
+  const { data: devices = [], isLoading: devicesLoading, error: devicesError } = useQuery({
+    queryKey: ['devices'],
+    queryFn: getDevices,
+    staleTime: 5 * 60 * 1000, // 快取 5 分鐘
+    gcTime: 10 * 60 * 1000,   // 10 分鐘
+    // 新增 select 來處理後端 device_type, location 與前端 model, description 的不一致
+    select: (apiData) => {
+      if (!Array.isArray(apiData)) return [];
+      return apiData.map(device => ({
+        ip: device.ip,
+        name: device.name,
+        model: device.device_type || 'unknown',     // device_type → model
+        description: device.location || ''          // location → description
+      }));
+    }
+  });
   const { executeBatch, isBatchExecuting } = useBatchExecution();
   const { 
     executeAsyncAndWait, 
