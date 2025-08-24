@@ -5,7 +5,7 @@ API 路由管理模組
 
 提供完整的 REST API 端點和請求處理：
 - 任務建立和狀態查詢 API
-- 網路設備和群組管理 API  
+- 網路設備和群組管理 API
 - AI 服務狀態和配置 API
 - 系統監控和管理 API
 
@@ -30,8 +30,8 @@ from common import BaseResponse
 from exceptions import (
     AuthenticationError,
     ServiceError,
-    device_error,
     convert_to_service_error,
+    device_error,
 )
 
 # 導入核心服務模組
@@ -56,7 +56,7 @@ health_router = APIRouter(tags=["健康檢查"])  # 無前綴的健康檢查路�
 # 任務相關模型
 class TaskRequest(BaseModel):
     """任務建立請求的資料模型
-    
+
     包含任務類型、目標設備和執行參數。
     """
 
@@ -71,7 +71,7 @@ class TaskRequest(BaseModel):
 
 class TaskCreateResponse(BaseModel):
     """任務成功建立後的回應資料
-    
+
     包含任務 ID、狀態和追蹤 URL。
     """
 
@@ -83,7 +83,7 @@ class TaskCreateResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     """任務執行狀態查詢回應
-    
+
     包含執行進度、結果資料和錯誤訊息。
     """
 
@@ -143,13 +143,9 @@ class AIStatusResponse(BaseModel):
 
 # 配置相關模型
 class FrontendConfig(BaseModel):
-    """前端動態配置模型"""
+    """前端動態配置模型 - 遵循 YAGNI 原則，只包含實際使用的配置"""
 
-    polling: Dict[str, Any]
-    ui: Dict[str, Any]
     api: Dict[str, Any]
-
-
 
 
 # =============================================================================
@@ -160,11 +156,11 @@ class FrontendConfig(BaseModel):
 @router.post("/tasks", response_model=BaseResponse[TaskCreateResponse])
 async def create_task(request: TaskRequest):
     """建立新的網路任務
-    
+
     支援兩種操作類型：
     - device_command: 執行設備指令
     - ai_query: AI 智能分析查詢
-    
+
     返回任務 ID 和追蹤連結，任務將在背景異步執行。
     """
 
@@ -219,7 +215,7 @@ async def create_task(request: TaskRequest):
 @router.get("/tasks/{task_id}", response_model=BaseResponse[TaskStatusResponse])
 async def get_task_status(task_id: str):
     """查詢指定任務的執行狀態
-    
+
     提供即時的任務進度、執行結果和錯誤資訊。
     支援 pending、running、completed、failed 四種狀態。
     """
@@ -261,7 +257,7 @@ async def get_task_status(task_id: str):
 @router.get("/devices", response_model=BaseResponse[List[DeviceInfo]])
 async def get_devices():
     """取得系統中配置的所有網路設備
-    
+
     返回設備 IP、名稱、位置和類型等詳細資訊，
     用於前端設備選擇和管理介面。
     """
@@ -301,7 +297,7 @@ async def get_devices():
 @router.get("/device-groups", response_model=BaseResponse[List[DeviceGroup]])
 async def get_device_groups():
     """取得網路設備的群組配置
-    
+
     返回所有已配置的設備群組，包含群組名稱、
     成員設備清單和描述資訊。
     """
@@ -339,7 +335,7 @@ async def get_device_groups():
 @router.get("/devices/status", response_model=BaseResponse[List[DeviceStatusInfo]])
 async def get_devices_status():
     """批次檢查所有設備的連線狀態
-    
+
     透過 SSH 連線測試檢查每台設備的健康狀態，
     返回設備名稱、IP、狀態和回應時間。
     """
@@ -356,11 +352,11 @@ async def get_devices_status():
         if not device_ips:
             return BaseResponse.success_response([], "沒有設備需要檢查")
 
-        # 使用異步批次執行器進行健康檢查
-        from network import async_batch_executor
+        # 使用異步網路客戶端進行健康檢查
+        from network import async_network_client
 
         start_time = time.time()
-        health_results = await async_batch_executor.health_check_devices(device_ips)
+        health_results = await async_network_client.health_check_devices(device_ips)
         end_time = time.time()
 
         # 建立狀態回應
@@ -406,7 +402,7 @@ async def get_devices_status():
 @router.get("/ai-status", response_model=BaseResponse[AIStatusResponse])
 async def get_ai_status():
     """獲取 AI 服務的初始化狀態和配置資訊
-    
+
     檢查 Gemini 和 Claude API 金鑰配置狀態，
     提供 AI 功能可用性和配置建議。
     """
@@ -467,7 +463,7 @@ async def get_ai_status():
 @router.get("/frontend-config", response_model=BaseResponse[FrontendConfig])
 async def get_frontend_config():
     """取得前端應用的動態配置參數
-    
+
     包含輪詢間隔、UI 設定和 API 配置等，
     用於前端應用的動態行為調整。
     """
@@ -480,10 +476,8 @@ async def get_frontend_config():
         # 從配置檔案載入前端配置
         config_data = app_settings.get_frontend_config()
 
-        # 構建前端配置物件
+        # 構建前端配置物件 - 只載入實際使用的 API 配置
         frontend_config = FrontendConfig(
-            polling=config_data.get("polling", {}),
-            ui=config_data.get("ui", {}),
             api=config_data.get("api", {}),
         )
 
@@ -499,15 +493,9 @@ async def get_frontend_config():
         raise convert_to_service_error(e, "前端配置處理")
 
 
-
-
 # =============================================================================
 # 管理功能路由 (需要 API Key)
 # =============================================================================
-
-
-
-
 
 
 # =============================================================================
@@ -518,19 +506,17 @@ async def get_frontend_config():
 @health_router.get("/health")
 async def simple_health_check():
     """基本系統健康狀態檢查
-    
+
     用於負載平衡器、Docker 容器編排和監控系統的
     快速狀態檢查，無需認證。
     """
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
-
-
 @admin_router.get("/tasks/stats", response_model=BaseResponse[Dict[str, Any]])
 async def get_task_statistics():
     """獲取任務系統的統計數據
-    
+
     提供任務總數、成功/失敗數量、進行中任務等
     統計資訊，用於系統監控和效能分析。
     """

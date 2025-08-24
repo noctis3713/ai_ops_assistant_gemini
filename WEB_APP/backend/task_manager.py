@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class TaskStatus(Enum):
     """任務執行狀態枚舉定義
-    
+
     定義任務在生命週期中的各種狀態。
     """
 
@@ -43,7 +43,7 @@ class TaskStatus(Enum):
 @dataclass
 class TaskProgress:
     """任務執行進度和狀態資訊
-    
+
     追蹤任務執行的百分比、當前階段和詳細資訊。
     """
 
@@ -66,7 +66,7 @@ class TaskProgress:
 @dataclass
 class Task:
     """任務實體的資料結構
-    
+
     包含任務的完整資訊：識別符、操作類型、進度和結果。
     """
 
@@ -85,14 +85,14 @@ class Task:
 
 class AsyncTaskManager:
     """任務管理和異步執行引擎
-    
+
     負責任務的建立、執行、狀態管理和結果儲存，
     支援多個任務並行執行和線程安全的狀態訪問。
     """
 
     def __init__(self):
         """初始化任務管理器
-        
+
         建立任務儲存和異步鎖，確保線程安全。
         """
         self.tasks: Dict[str, Task] = {}
@@ -105,12 +105,12 @@ class AsyncTaskManager:
         webhook_url: Optional[str] = None,
     ) -> str:
         """建立並啟動新的異步任務
-        
+
         Args:
             operation_type: 操作類型，device_command 或 ai_query
             payload: 任務執行所需的參數資料
             webhook_url: 任務完成後的回調 URL
-            
+
         Returns:
             任務的唯一識別符
         """
@@ -135,7 +135,7 @@ class AsyncTaskManager:
 
     async def get_task(self, task_id: str) -> Optional[Task]:
         """根據 ID 獲取任務的詳細資訊
-        
+
         線程安全地返回任務的當前狀態和結果。
         """
         async with self._lock:
@@ -143,7 +143,7 @@ class AsyncTaskManager:
 
     async def _execute_task(self, task_id: str):
         """任務執行的主要流程管理
-        
+
         根據任務類型調用相應的執行器，處理錯誤和通知。
         """
         async with self._lock:
@@ -187,7 +187,7 @@ class AsyncTaskManager:
 
     async def _execute_device_command(self, task: Task) -> Dict[str, Any]:
         """執行網路設備指令任務
-        
+
         透過 SSH 連線向指定設備執行指令，收集結果和處理錯誤。
         """
         devices = task.payload.get("devices", [])
@@ -200,12 +200,12 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 25, "驗證設備連線...")
 
         # 導入網路工具
-        from network import async_batch_executor
+        from network import async_network_client
 
         await self._update_progress(task.task_id, 50, "執行指令中...")
 
         # 執行批次指令
-        result = await async_batch_executor.run_batch_command(command, devices)
+        result = await async_network_client.run_batch_command(command, devices)
 
         await self._update_progress(task.task_id, 75, "處理結果...")
 
@@ -214,11 +214,11 @@ class AsyncTaskManager:
 
         settings = get_settings()
 
-        # 直接格式化結果，處理 AsyncBatchResult 結構
+        # 直接格式化結果，處理 BatchResult 結構
         formatted_results = []
         successful_count = 0
 
-        # result 是 AsyncBatchResult 對象，包含 results 列表
+        # result 是 BatchResult 對象，包含 results 列表
         execution_results = result.results if hasattr(result, "results") else []
 
         for execution_result in execution_results:
@@ -259,7 +259,7 @@ class AsyncTaskManager:
 
     async def _execute_ai_query(self, task: Task) -> Dict[str, Any]:
         """執行 AI 智能分析任務
-        
+
         調用 AI 服務進行網路設備或系統狀態的智能分析。
         """
         devices = task.payload.get("devices", [])
@@ -326,7 +326,7 @@ class AsyncTaskManager:
 
     async def _update_progress(self, task_id: str, percentage: float, stage: str):
         """線程安全地更新任務進度
-        
+
         更新任務的執行百分比和當前階段描述。
         """
         async with self._lock:
@@ -336,7 +336,7 @@ class AsyncTaskManager:
 
     async def _send_webhook(self, task: Task):
         """發送任務完成的 Webhook 通知
-        
+
         向指定的 URL 發送 HTTP POST 請求，包含任務結果。
         """
         if not task.webhook_url:
@@ -378,7 +378,7 @@ _task_manager = None
 
 def get_task_manager() -> AsyncTaskManager:
     """獲取全域任務管理器實例
-    
+
     單例模式的任務管理器，確保在應用程式中
     使用相同的任務儲存和管理實例。
     """

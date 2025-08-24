@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 # 智能環境變數載入
 def _load_env():
     """自動載入環境變數檔案
-    
+
     智能偵測執行環境並載入對應的 .env 檔案，
     支援 Docker 容器和本地開發環境。
     """
@@ -93,7 +93,7 @@ APP_VERSION = "3.0.0"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """管理 FastAPI 應用程式的啟動和關閉流程
-    
+
     啟動階段：初始化設定、任務管理器和 AI 服務
     關閉階段：安全地釋放資源和連線
     """
@@ -149,10 +149,11 @@ app = FastAPI(
 # 中間件配置
 # =============================================================================
 
+
 # CORS 配置
 def get_cors_origins():
     """取得跨域請求允許的來源清單
-    
+
     支援本地開發、Docker 容器和外部 IP 存取，
     可透過環境變數擴充允許的來源。
     """
@@ -168,25 +169,26 @@ def get_cors_origins():
         "http://localhost:80",
         "http://127.0.0.1:80",
     ]
-    
+
     # 從環境變數添加外部 IP
     external_ip = os.getenv("EXTERNAL_IP")
     if external_ip:
         origins.append(f"http://{external_ip}")
         origins.append(f"https://{external_ip}")
-    
-    # 從環境變數添加內部 IP  
+
+    # 從環境變數添加內部 IP
     internal_ip = os.getenv("INTERNAL_IP")
     if internal_ip:
         origins.append(f"http://{internal_ip}")
-    
+
     # 從環境變數添加其他允許的來源
     cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS")
     if cors_origins_env:
         additional_origins = cors_origins_env.split(",")
         origins.extend([origin.strip() for origin in additional_origins])
-    
+
     return origins
+
 
 allowed_origins = get_cors_origins()
 
@@ -206,7 +208,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 @app.middleware("http")
 async def monitoring_middleware(request: Request, call_next):
     """HTTP 請求監控和日誌記錄
-    
+
     為每個請求生成唯一 ID，記錄處理時間和狀態，
     健康檢查請求使用較低的日誌等級避免噪音。
     """
@@ -269,7 +271,7 @@ logger.info("路由註冊完成")
 
 def print_routes():
     """顯示應用程式的所有 API 路由
-    
+
     用於除錯和開發，列出所有已註冊的路由端點、
     HTTP 方法和對應的處理函數。
     """

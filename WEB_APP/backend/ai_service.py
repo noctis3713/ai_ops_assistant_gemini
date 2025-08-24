@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 def _get_few_shot_examples():
     """獲取 AI 思考鏈示範範例
-    
+
     透過提示詞管理器載入預定義的 ReAct 範例，
     幫助 AI 理解如何逐步分析網路問題。
     """
@@ -68,7 +68,7 @@ def _get_few_shot_examples():
 
 def get_ai_logger():
     """建立 AI 模組專用的日誌記錄器
-    
+
     獨立的日誌通道，用於追蹤 AI 服務的執行狀態。
     """
     import logging
@@ -83,7 +83,7 @@ ai_logger = get_ai_logger()
 
 class OutputSummarizer:
     """設備輸出內容的智能摘要服務
-    
+
     當網路設備輸出過長時，使用 AI 進行摘要和總結，
     保留關鍵資訊同時減少冗餘內容。
     """
@@ -102,7 +102,7 @@ class OutputSummarizer:
 
     def _initialize_ai_service(self):
         """根據配置初始化對應的 AI 服務
-        
+
         根據 ai_provider 設定選擇 Gemini 或 Claude 進行初始化。
         """
         if self.ai_provider == "claude":
@@ -112,7 +112,7 @@ class OutputSummarizer:
 
     def _initialize_claude(self):
         """配置 Anthropic Claude 摘要服務
-        
+
         使用 Claude API 金鑰和指定模型初始化摘要器。
         """
         if not AI_AVAILABLE:
@@ -139,7 +139,7 @@ class OutputSummarizer:
 
     def _initialize_gemini(self):
         """配置 Google Gemini 摘要服務
-        
+
         使用 Gemini API 金鑰和指定模型初始化摘要器。
         """
         if not AI_AVAILABLE:
@@ -163,7 +163,7 @@ class OutputSummarizer:
 
     def get_summary_prompt(self, command: str) -> str:
         """產生設備輸出摘要的提示詞
-        
+
         建立結構化的提示，指導 AI 保留關鍵訊息。
         """
         return f"""請摘要以下網路指令輸出，保留關鍵診斷資訊：
@@ -181,7 +181,7 @@ class OutputSummarizer:
 
     def summarize_output(self, command: str, output: str) -> str:
         """使用 AI 摘要設備輸出內容
-        
+
         將超長的設備輸出透過 AI 進行摘要，保留關鍵資訊。
         """
         if not self.llm:
@@ -220,7 +220,7 @@ class OutputSummarizer:
         self, command: str, output: str, max_chars: int = 10000
     ) -> str:
         """當 AI 摘要失敗時的後備處理
-        
+
         簡單地截斷輸出內容並附上警告訊息。
         """
         return (
@@ -230,7 +230,7 @@ class OutputSummarizer:
 
 class AIService:
     """主要的 AI 智能分析服務管理器
-    
+
     管理 AI 服務的初始化、工具配置和查詢處理：
     - 支援 Gemini 和 Claude 雙引擎自動切換
     - ReAct Agent 模式的思考鏈分析
@@ -240,7 +240,7 @@ class AIService:
 
     def __init__(self):
         """初始化 AI 智能分析服務
-        
+
         設定 AI 代理、輸出解析器和提示詞管理器。
         """
         self.agent_executor = None
@@ -765,7 +765,7 @@ _ai_service = None
 
 def get_ai_service() -> AIService:
     """獲取全域 AI 智能分析服務實例
-    
+
     單例模式的 AI 服務，確保在應用程式中
     使用相同的 AI 配置和狀態。
     """

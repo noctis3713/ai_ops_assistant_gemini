@@ -144,10 +144,12 @@ class PromptManager:
             raise ServiceError(
                 f"提示詞模板檔案不存在: {template_path}",
                 "PROMPT_TEMPLATE_NOT_FOUND",
-                500
+                500,
             )
         except jinja2.TemplateError as e:
-            raise ServiceError(f"提示詞模板渲染失敗: {e}", "PROMPT_TEMPLATE_RENDER_ERROR", 500)
+            raise ServiceError(
+                f"提示詞模板渲染失敗: {e}", "PROMPT_TEMPLATE_RENDER_ERROR", 500
+            )
 
     def render_system_prompt(self, **kwargs) -> str:
         """渲染系統提示詞"""

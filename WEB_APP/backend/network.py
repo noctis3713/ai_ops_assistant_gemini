@@ -30,8 +30,7 @@ from asyncssh import SSHClientConnection
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 
-from settings import settings
-from settings import get_command_validator
+from settings import get_command_validator, settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ _local_data = threading.local()
 
 def set_device_scope_restriction(device_ips: Optional[List[str]]):
     """限制 AI 工具可以存取的設備範圍
-    
+
     用於 AI 查詢時限制指令只能在指定的設備上執行。
     """
     _local_data.device_scope_restriction = device_ips
@@ -53,7 +52,7 @@ def set_device_scope_restriction(device_ips: Optional[List[str]]):
 
 def get_device_scope_restriction() -> Optional[List[str]]:
     """獲取當前的設備存取範圍限制
-    
+
     返回當前線程被限制可以存取的設備 IP 清單。
     """
     return getattr(_local_data, "device_scope_restriction", None)
@@ -61,7 +60,7 @@ def get_device_scope_restriction() -> Optional[List[str]]:
 
 def get_device_credentials(device_config=None):
     """獲取網路設備的認證資訊
-    
+
     優先使用設備個別配置，否則使用全域環境變數。
     """
     if device_config:
@@ -122,14 +121,15 @@ def get_device_credentials(device_config=None):
 
 def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
     """根據 IP 位址查找設備配置資訊
-    
+
     從 devices.json 中查找符合 IP 的設備配置。
     """
     try:
         from settings import get_settings
+
         settings = get_settings()
         devices_config = settings.get_devices_config()
-        
+
         for device in devices_config:
             if device.get("ip") == device_ip:
                 return device
@@ -141,7 +141,7 @@ def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
 
 def classify_network_error(error_message: str) -> Dict[str, Any]:
     """分類網路連線和設備錯誤類型
-    
+
     根據錯誤訊息判斷錯誤類型、嚴重程度和建議解決方法。
     """
     error_lower = error_message.lower()
@@ -198,7 +198,7 @@ def classify_network_error(error_message: str) -> Dict[str, Any]:
 @dataclass
 class ExecutionResult:
     """單一設備指令執行的結果資料
-    
+
     包含設備資訊、成功狀態、輸出內容和執行時間。
     """
 
@@ -214,7 +214,7 @@ class ExecutionResult:
 @dataclass
 class BatchResult:
     """多個設備批次執行的全局結果
-    
+
     匯總所有設備的執行結果和統計資訊。
     """
 
@@ -230,7 +230,7 @@ class BatchResult:
 
 class AsyncConnectionPool:
     """異步 SSH 連線池管理器
-    
+
     管理多個設備的 SSH 連線復用，支援連線池大小限制、
     連線保活和自動清理功能。
     """
@@ -326,7 +326,7 @@ class AsyncConnectionPool:
 
 class AsyncNetworkClient:
     """主要的異步網路設備通信客戶端
-    
+
     提供高層次的設備指令執行、批次處理和健康檢查功能，
     內建連線池管理和安全性驗證。
     """
@@ -404,7 +404,9 @@ class AsyncNetworkClient:
         async def execute_with_semaphore(device_ip: str):
             async with semaphore:
                 device_config = (
-                    device_configs.get(device_ip) if device_configs else get_device_config_by_ip(device_ip)
+                    device_configs.get(device_ip)
+                    if device_configs
+                    else get_device_config_by_ip(device_ip)
                 )
                 return await self.execute_command(device_ip, command, device_config)
 
@@ -462,7 +464,9 @@ class AsyncNetworkClient:
                 # 查找設備配置
                 device_config = get_device_config_by_ip(device_ip)
                 # 健康檢查 - 嘗試建立連線
-                conn = await self.connection_pool.get_connection(device_ip, device_config)
+                conn = await self.connection_pool.get_connection(
+                    device_ip, device_config
+                )
                 health_results[device_ip] = conn is not None
             except Exception as e:
                 logger.debug(f"設備 {device_ip} 健康檢查失敗: {e}")
@@ -622,13 +626,3 @@ async def async_batch_execute(
 ) -> BatchResult:
     """批次執行指令（異步便利函數）"""
     return await async_network_client.batch_execute(devices, command, device_configs)
-
-
-# =============================================================================
-# 向下相容別名
-# =============================================================================
-
-# 為了保持向下相容性，提供舊的命名
-AsyncExecutionResult = ExecutionResult
-AsyncBatchResult = BatchResult
-async_batch_executor = async_network_client

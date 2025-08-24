@@ -5,7 +5,7 @@
 
 提供統一的異常處理機制：
 - 核心異常類別定義
-- 標準化錯誤回應格式  
+- 標準化錯誤回應格式
 - FastAPI 異常處理器
 
 Created: 2025-08-23
@@ -41,11 +41,11 @@ class ServiceError(Exception):
     """通用業務邏輯異常基礎類別"""
 
     def __init__(
-        self, 
-        detail: str, 
-        error_code: Optional[str] = None, 
+        self,
+        detail: str,
+        error_code: Optional[str] = None,
         status_code: int = 400,
-        **kwargs
+        **kwargs,
     ):
         self.detail = detail
         self.error_code = error_code or "SERVICE_ERROR"
@@ -75,13 +75,15 @@ class ValidationError(ServiceError):
 class ExternalServiceError(ServiceError):
     """外部服務通訊異常"""
 
-    def __init__(self, service_name: str, detail: str, error_code: Optional[str] = None):
+    def __init__(
+        self, service_name: str, detail: str, error_code: Optional[str] = None
+    ):
         full_detail = f"外部服務異常 [{service_name}]: {detail}"
         super().__init__(
-            full_detail, 
-            error_code or "EXTERNAL_SERVICE_ERROR", 
+            full_detail,
+            error_code or "EXTERNAL_SERVICE_ERROR",
             status_code=503,
-            service_name=service_name
+            service_name=service_name,
         )
 
 
@@ -89,27 +91,31 @@ class ExternalServiceError(ServiceError):
 # 異常建構工具函數
 # =============================================================================
 
-def device_error(device_ip: str, detail: str, error_code: str = "DEVICE_ERROR") -> ServiceError:
+
+def device_error(
+    device_ip: str, detail: str, error_code: str = "DEVICE_ERROR"
+) -> ServiceError:
     """建立網路設備相關異常"""
     return ServiceError(
-        f"設備 {device_ip}: {detail}",
-        error_code,
-        status_code=422,
-        device_ip=device_ip
+        f"設備 {device_ip}: {detail}", error_code, status_code=422, device_ip=device_ip
     )
 
-def ai_error(provider: str, detail: str, error_code: str = "AI_ERROR") -> ExternalServiceError:
+
+def ai_error(
+    provider: str, detail: str, error_code: str = "AI_ERROR"
+) -> ExternalServiceError:
     """建立 AI 服務相關異常"""
     return ExternalServiceError(f"AI-{provider}", detail, error_code)
 
-def task_error(task_id: str, detail: str, error_code: str = "TASK_ERROR") -> ServiceError:
+
+def task_error(
+    task_id: str, detail: str, error_code: str = "TASK_ERROR"
+) -> ServiceError:
     """建立任務管理相關異常"""
     return ServiceError(
-        f"任務 {task_id}: {detail}",
-        error_code,
-        status_code=422,
-        task_id=task_id
+        f"任務 {task_id}: {detail}", error_code, status_code=422, task_id=task_id
     )
+
 
 def config_error(detail: str, config_path: Optional[str] = None) -> ServiceError:
     """建立系統配置相關異常"""
@@ -121,6 +127,7 @@ def config_error(detail: str, config_path: Optional[str] = None) -> ServiceError
 # =============================================================================
 # 異常處理器
 # =============================================================================
+
 
 def _create_error_response(
     status_code: int,
@@ -169,7 +176,7 @@ async def service_error_handler(request: Request, exc: ServiceError) -> JSONResp
 
     # 準備額外詳情
     details = {}
-    if hasattr(exc, 'extra_info') and exc.extra_info:
+    if hasattr(exc, "extra_info") and exc.extra_info:
         details.update(exc.extra_info)
 
     return _create_error_response(
@@ -239,6 +246,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     _log_exception(request, exc, level=logging.ERROR, include_traceback=True)
 
     import os
+
     is_debug = os.getenv("DEBUG", "false").lower() == "true"
 
     if is_debug:
@@ -285,7 +293,10 @@ def register_exception_handlers(app):
 # 相容性支援和工具函數
 # =============================================================================
 
-def convert_to_service_error(exc: Exception, operation: str = "系統操作") -> ServiceError:
+
+def convert_to_service_error(
+    exc: Exception, operation: str = "系統操作"
+) -> ServiceError:
     """將任意異常轉換為 ServiceError 類型"""
     exc_str = str(exc).lower()
 
@@ -310,7 +321,11 @@ def convert_to_service_error(exc: Exception, operation: str = "系統操作") ->
 map_exception_to_service_error = convert_to_service_error
 
 # 兼容性異常類別別名
-DeviceNotFoundError = lambda device_ip: device_error(device_ip, "設備未找到", "DEVICE_NOT_FOUND")
-AINotAvailableError = lambda reason="AI 服務不可用": ai_error("Unknown", reason, "AI_NOT_AVAILABLE")
+DeviceNotFoundError = lambda device_ip: device_error(
+    device_ip, "設備未找到", "DEVICE_NOT_FOUND"
+)
+AINotAvailableError = lambda reason="AI 服務不可用": ai_error(
+    "Unknown", reason, "AI_NOT_AVAILABLE"
+)
 TaskNotFoundError = lambda task_id: task_error(task_id, "任務不存在", "TASK_NOT_FOUND")
 ConfigNotFoundError = lambda path: config_error(f"配置檔案不存在: {path}", path)
