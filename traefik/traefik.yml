@@ -38,6 +38,8 @@ providers:
     exposedByDefault: false  # 只有標記的容器才會被代理
     network: "ai-ops-network"  # 使用指定的 Docker 網路
     watch: true  # 即時監控容器變化
+    # 限制只發現帶有特定標籤的服務，避免跨網路誤發現
+    constraints: "Label(`traefik.constraint-label`,`ai-ops`)"
 
 # =============================================================================
 # 日誌配置
