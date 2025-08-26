@@ -548,7 +548,7 @@ class AIService:
         # 建立 ReAct 工作流程模板
         template = f"""{escaped_base_prompt}
 
-Answer the following questions as best you can. You have access to the following tools:
+Execute the user's request by strictly following your directives. You have access to the following tools:
 
 {{tools}}
 
