@@ -484,6 +484,17 @@ export type TaskResult =
   | null;                   // 尚未完成
 
 // 任務狀態回應
+// Token 成本資訊介面
+export interface TokenCost {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  provider: string;
+  model: string;
+  is_estimated: boolean;
+}
+
 export interface TaskResponse {
   task_id: string;
   task_type: TaskType;
@@ -496,6 +507,7 @@ export interface TaskResponse {
   result?: TaskResult;  // 舊格式：結果在 result 欄位
   results?: TaskResult; // 新格式：結果在 results 欄位（與後端一致）
   error?: string;
+  token_cost?: TokenCost; // 新增：Token 使用量和成本資訊（僅 AI 查詢任務有此欄位）
 }
 
 // 任務列表回應

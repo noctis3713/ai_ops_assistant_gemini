@@ -128,6 +128,7 @@ class TaskStatusResponse(BaseModel):
     progress: Dict[str, Any]
     results: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    token_cost: Optional[Dict[str, Any]] = Field(default=None, description="Token 使用量和成本資訊（僅 AI 查詢任務有此欄位）")
 
 
 # 設備相關模型
@@ -261,6 +262,7 @@ async def get_task_status(task_id: str):
         progress=task.progress.to_dict(),
         results=task.results,
         error=task.error,
+        token_cost=getattr(task, 'token_cost', None),
     )
 
     message = "任務查詢成功"

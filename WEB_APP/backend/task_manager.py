@@ -81,6 +81,7 @@ class Task:
     results: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     webhook_url: Optional[str] = None
+    token_cost: Optional[Dict[str, Any]] = None
 
 
 class AsyncTaskManager:
@@ -278,7 +279,17 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 50, "執行 AI 分析...")
 
         # 執行 AI 查詢
-        ai_response = await ai_service.query_ai(prompt=query, task_id=task.task_id, device_ips=devices)
+        ai_result = await ai_service.query_ai(prompt=query, task_id=task.task_id, device_ips=devices)
+        
+        # 提取 AI 回應文本和成本資訊
+        ai_response = ai_result["response"]
+        token_cost = ai_result.get("token_cost")
+        
+        # 儲存成本資訊到任務中
+        if token_cost:
+            async with self._lock:
+                task.token_cost = token_cost
+                logger.info(f"任務 {task.task_id} Token 成本資訊已記錄: {token_cost['estimated_cost_usd']:.6f} USD")
 
         await self._update_progress(task.task_id, 75, "格式化 AI 回應...")
 

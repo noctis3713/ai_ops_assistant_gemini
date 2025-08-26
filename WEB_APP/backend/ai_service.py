@@ -78,33 +78,33 @@ def get_ai_logger():
     ai_logger = logging.getLogger("ai_service")
     # 使用 DEBUG 級別以顯示更多診斷資訊
     ai_logger.setLevel(logging.DEBUG)
-    
+
     # 確保 ai_logger 不會重複添加 handler
     if not ai_logger.handlers:
         # 創建控制台處理器，用於 token 使用量的特殊顯示
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
-        
+
         # 創建自定義格式器，突出顯示 TOKEN_USAGE 信息
         class TokenUsageFormatter(logging.Formatter):
             def format(self, record):
-                if 'TOKEN_USAGE_ESTIMATED:' in record.getMessage():
+                if "TOKEN_USAGE_ESTIMATED:" in record.getMessage():
                     # 為 token 估算值創建特殊格式
                     return f"📊 [TOKEN-估算] {record.getMessage().replace('TOKEN_USAGE_ESTIMATED: ', '')}"
-                elif 'TOKEN_USAGE:' in record.getMessage():
+                elif "TOKEN_USAGE:" in record.getMessage():
                     # 為 token 使用量創建特殊格式
                     return f"💰 [TOKEN] {record.getMessage()}"
                 else:
                     # 使用統一標準格式
                     return f"🤖 [AI] {record.levelname}: {record.getMessage()}"
-        
+
         formatter = TokenUsageFormatter()
         console_handler.setFormatter(formatter)
         ai_logger.addHandler(console_handler)
-        
+
         # 防止日誌消息傳播到根日誌記錄器（避免重複）
         ai_logger.propagate = False
-    
+
     return ai_logger
 
 
@@ -284,7 +284,9 @@ class AIService:
 
         # 初始化 Token 使用量追蹤
         self.usage_callback = UsageMetadataCallbackHandler() if AI_AVAILABLE else None
-        ai_logger.debug(f"UsageMetadataCallbackHandler 初始化: {self.usage_callback is not None}")
+        ai_logger.debug(
+            f"UsageMetadataCallbackHandler 初始化: {self.usage_callback is not None}"
+        )
 
         # 初始化 AI 系統
         self._initialize_ai()
@@ -345,11 +347,11 @@ class AIService:
             prompt_template = self._create_custom_prompt_template()
             agent = create_react_agent(llm, tools, prompt_template)
             self.agent_executor = AgentExecutor(
-                agent=agent, 
-                tools=tools, 
-                verbose=False, 
+                agent=agent,
+                tools=tools,
+                verbose=False,
                 handle_parsing_errors=True,
-                return_intermediate_steps=True  # 啟用中間步驟返回以便提取 token 使用量
+                return_intermediate_steps=True,  # 啟用中間步驟返回以便提取 token 使用量
             )
 
             # 記錄初始化成功
@@ -381,15 +383,17 @@ class AIService:
             # 從 Settings 讀取 Claude 模型
             claude_model = settings.CLAUDE_MODEL
             llm = ChatAnthropic(
-                model=claude_model, 
-                temperature=0, 
+                model=claude_model,
+                temperature=0,
                 anthropic_api_key=api_key,
-                callbacks=[self.usage_callback] if self.usage_callback else []
+                callbacks=[self.usage_callback] if self.usage_callback else [],
             )
             # 記錄初始化資訊
             init_message = f"使用 Claude AI 作為主要 AI 提供者 - 模型: {claude_model}"
             logger.info(init_message)
-            ai_logger.debug(f"Claude LLM 初始化完成，callback 已配置: {self.usage_callback is not None}")
+            ai_logger.debug(
+                f"Claude LLM 初始化完成，callback 已配置: {self.usage_callback is not None}"
+            )
             return llm
         except Exception as e:
             logger.error(f"Claude AI 初始化失敗: {e}")
@@ -412,16 +416,18 @@ class AIService:
             logger.info(init_start_msg)
 
             llm = ChatGoogleGenerativeAI(
-                model=gemini_model, 
-                temperature=0, 
+                model=gemini_model,
+                temperature=0,
                 google_api_key=api_key,
-                callbacks=[self.usage_callback] if self.usage_callback else []
+                callbacks=[self.usage_callback] if self.usage_callback else [],
             )
 
             # 記錄成功訊息
             success_msg = f"Gemini AI 初始化成功 - 模型: {gemini_model}"
             logger.info(success_msg)
-            ai_logger.debug(f"Gemini LLM 初始化完成，callback 已配置: {self.usage_callback is not None}")
+            ai_logger.debug(
+                f"Gemini LLM 初始化完成，callback 已配置: {self.usage_callback is not None}"
+            )
             return llm
 
         except Exception as e:
@@ -622,14 +628,14 @@ Question: {{input}}
             # 重置 callback 以便收集新的使用量數據
             if self.usage_callback:
                 # 清空現有的使用量數據，而不是重新創建 callback
-                if hasattr(self.usage_callback, 'usage_metadata'):
+                if hasattr(self.usage_callback, "usage_metadata"):
                     self.usage_callback.usage_metadata = {}
                 ai_logger.debug("清空 UsageMetadataCallbackHandler 準備收集新數據")
-            
+
             # 執行 AI 查詢 - 同時在 LLM 和 Agent 層級設置 callback
             config = {"callbacks": [self.usage_callback]} if self.usage_callback else {}
             ai_logger.debug(f"AgentExecutor 配置: {config}")
-            
+
             result = await asyncio.wait_for(
                 asyncio.to_thread(
                     self.agent_executor.invoke, {"input": enhanced_prompt}, config
@@ -664,8 +670,10 @@ Question: {{input}}
                 # 記錄 Token 使用量
                 self._log_token_usage(task_id, result)
 
-                # 轉換為 Markdown 格式返回前端
-                return structured_response.to_markdown()
+                # 轉換為 Markdown 格式並包含成本資訊返回前端
+                return self._create_query_result(
+                    structured_response.to_markdown(), task_id, result
+                )
 
             except Exception as parse_error:
                 # 如果結構化解析失敗，嘗試後備解析
@@ -704,7 +712,7 @@ Question: {{input}}
                     ai_logger.info("使用後備解析策略")
                     # 記錄 Token 使用量
                     self._log_token_usage(task_id, result)
-                    return cleaned_response
+                    return self._create_query_result(cleaned_response, task_id, result)
                 else:
                     raise Exception(f"結構化解析和後備解析都失敗: {parse_error}")
 
@@ -734,33 +742,36 @@ Question: {{input}}
             # 清除線程本地設備範圍限制，確保不會影響後續查詢
             set_device_scope_restriction(None)
 
-    def _calculate_token_cost(self, provider: str, model: str, input_tokens: int, output_tokens: int) -> float:
+    def _calculate_token_cost(
+        self, provider: str, model: str, input_tokens: int, output_tokens: int
+    ) -> float:
         """計算 Token 使用成本
-        
+
         Args:
             provider: AI 提供者 (claude/gemini)
             model: 模型名稱
             input_tokens: 輸入 token 數量
             output_tokens: 輸出 token 數量
-            
+
         Returns:
             float: 估算成本（美元）
         """
         # Claude 定價（每 1,000 tokens）
         claude_pricing = {
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
+            "claude-3-5-haiku-20241022": {"input": 0.00025, "output": 0.00125},
             "claude-3-sonnet-20240229": {"input": 0.003, "output": 0.015},
             "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
             "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
         }
-        
+
         # Gemini 定價（每 1,000 tokens）
         gemini_pricing = {
             "gemini-1.5-flash": {"input": 0.00015, "output": 0.0006},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
             "gemini-pro": {"input": 0.00125, "output": 0.005},  # 向後相容
         }
-        
+
         try:
             if provider == "claude":
                 pricing = claude_pricing.get(model)
@@ -774,45 +785,62 @@ Question: {{input}}
                     pricing = gemini_pricing["gemini-1.5-flash"]
             else:
                 return 0.0
-            
+
             # 計算成本：(tokens / 1000) * price_per_1000
             input_cost = (input_tokens / 1000.0) * pricing["input"]
             output_cost = (output_tokens / 1000.0) * pricing["output"]
             total_cost = input_cost + output_cost
-            
+
             return round(total_cost, 6)  # 保留 6 位小數
-            
+
         except Exception as e:
             ai_logger.warning(f"成本計算失敗: {e}")
             return 0.0
 
     def _extract_token_usage(self, result: Any) -> Dict[str, int]:
         """從結果中提取 Token 使用量
-        
+
         Args:
             result: AI 查詢的結果
-            
+
         Returns:
             Dict: 包含 token 使用量的字典
         """
         usage_data = {}
-        
+
         # 方法1: 從 callback handler 取得
-        if self.usage_callback and hasattr(self.usage_callback, 'usage_metadata'):
+        if self.usage_callback and hasattr(self.usage_callback, "usage_metadata"):
             callback_data = self.usage_callback.usage_metadata
             if callback_data:
                 ai_logger.debug(f"從 callback 取得 token 數據: {callback_data}")
-                usage_data.update(callback_data)
-        
+
+                # 處理嵌套的 callback 數據結構 (按模型名稱分組的格式)
+                if isinstance(callback_data, dict):
+                    for key, value in callback_data.items():
+                        if isinstance(value, dict) and "input_tokens" in value:
+                            # 這是按模型名稱嵌套的結構，提取內層的 token 數據
+                            ai_logger.debug(f"從模型 {key} 提取 token 數據: {value}")
+                            usage_data.update(value)
+                            break  # 只需要第一個模型的數據
+                    else:
+                        # 如果沒有嵌套結構，直接使用原始數據
+                        usage_data.update(callback_data)
+
         # 方法2: 從 AgentExecutor 結果的 intermediate_steps 提取
         if isinstance(result, dict) and "intermediate_steps" in result:
-            ai_logger.debug("檢測到 AgentExecutor 結果，嘗試從 intermediate_steps 提取 token 資訊")
+            ai_logger.debug(
+                "檢測到 AgentExecutor 結果，嘗試從 intermediate_steps 提取 token 資訊"
+            )
             intermediate_steps = result["intermediate_steps"]
-            accumulated_tokens = self._extract_from_intermediate_steps(intermediate_steps)
+            accumulated_tokens = self._extract_from_intermediate_steps(
+                intermediate_steps
+            )
             if accumulated_tokens:
-                ai_logger.debug(f"從 intermediate_steps 取得累積 token 數據: {accumulated_tokens}")
+                ai_logger.debug(
+                    f"從 intermediate_steps 取得累積 token 數據: {accumulated_tokens}"
+                )
                 usage_data.update(accumulated_tokens)
-        
+
         # 方法3: 從結果 metadata 中提取（適用於直接 LLM 調用）
         if isinstance(result, dict):
             # 檢查是否有 usage_metadata
@@ -820,25 +848,29 @@ Question: {{input}}
                 metadata = result["usage_metadata"]
                 ai_logger.debug(f"從結果 metadata 取得 token 數據: {metadata}")
                 usage_data.update(metadata)
-            
+
             # 檢查 Agent 結果中的 LLM 調用記錄
             if "output" in result:
                 output = result["output"]
-                if hasattr(output, 'usage_metadata'):
-                    ai_logger.debug(f"從 output usage_metadata 取得 token 數據: {output.usage_metadata}")
+                if hasattr(output, "usage_metadata"):
+                    ai_logger.debug(
+                        f"從 output usage_metadata 取得 token 數據: {output.usage_metadata}"
+                    )
                     usage_data.update(output.usage_metadata)
-        
+
         # 方法4: 檢查結果物件的屬性
-        if hasattr(result, 'usage_metadata') and result.usage_metadata:
+        if hasattr(result, "usage_metadata") and result.usage_metadata:
             ai_logger.debug(f"從結果物件屬性取得 token 數據: {result.usage_metadata}")
             usage_data.update(result.usage_metadata)
-        
+
         # 方法5: 從 Gemini response_metadata 提取（特殊處理）
         gemini_tokens = self._extract_gemini_token_usage(result)
         if gemini_tokens:
-            ai_logger.debug(f"從 Gemini response_metadata 取得 token 數據: {gemini_tokens}")
+            ai_logger.debug(
+                f"從 Gemini response_metadata 取得 token 數據: {gemini_tokens}"
+            )
             usage_data.update(gemini_tokens)
-        
+
         # 方法6: 如果是 Gemini 但沒有原生數據，則使用文本估算
         if settings.AI_PROVIDER == "gemini" and not usage_data:
             ai_logger.debug("Gemini 無原生 token 數據，嘗試文本估算")
@@ -846,69 +878,76 @@ Question: {{input}}
             if estimated_tokens:
                 usage_data.update(estimated_tokens)
                 ai_logger.debug(f"使用文本估算 Gemini tokens: {estimated_tokens}")
-        
+
         # 確保 total_tokens 計算正確
-        if usage_data and 'total_tokens' not in usage_data:
-            input_tokens = usage_data.get('input_tokens', 0)
-            output_tokens = usage_data.get('output_tokens', 0)
+        if usage_data and "total_tokens" not in usage_data:
+            input_tokens = usage_data.get("input_tokens", 0)
+            output_tokens = usage_data.get("output_tokens", 0)
             if input_tokens > 0 or output_tokens > 0:
-                usage_data['total_tokens'] = input_tokens + output_tokens
-        
+                usage_data["total_tokens"] = input_tokens + output_tokens
+
         return usage_data
 
-    def _extract_from_intermediate_steps(self, intermediate_steps: List) -> Dict[str, int]:
+    def _extract_from_intermediate_steps(
+        self, intermediate_steps: List
+    ) -> Dict[str, int]:
         """從 AgentExecutor 的 intermediate_steps 提取 Token 使用量
-        
+
         Args:
             intermediate_steps: AgentExecutor 的中間執行步驟
-            
+
         Returns:
             Dict: 累積的 token 使用量
         """
         total_input_tokens = 0
         total_output_tokens = 0
-        
+
         for step in intermediate_steps:
             try:
                 if isinstance(step, tuple) and len(step) >= 2:
                     action, observation = step[0], step[1]
-                    
+
                     # 檢查 action 是否有 usage 資訊
-                    if hasattr(action, 'usage_metadata') and action.usage_metadata:
+                    if hasattr(action, "usage_metadata") and action.usage_metadata:
                         usage = action.usage_metadata
-                        total_input_tokens += usage.get('input_tokens', 0)
-                        total_output_tokens += usage.get('output_tokens', 0)
+                        total_input_tokens += usage.get("input_tokens", 0)
+                        total_output_tokens += usage.get("output_tokens", 0)
                         ai_logger.debug(f"從 action 提取 tokens: {usage}")
-                    
+
                     # 檢查 observation 是否有 usage 資訊
-                    if hasattr(observation, 'usage_metadata') and observation.usage_metadata:
+                    if (
+                        hasattr(observation, "usage_metadata")
+                        and observation.usage_metadata
+                    ):
                         usage = observation.usage_metadata
-                        total_input_tokens += usage.get('input_tokens', 0)
-                        total_output_tokens += usage.get('output_tokens', 0)
+                        total_input_tokens += usage.get("input_tokens", 0)
+                        total_output_tokens += usage.get("output_tokens", 0)
                         ai_logger.debug(f"從 observation 提取 tokens: {usage}")
-                    
+
                     # 檢查 observation 字串中是否包含 usage 資訊
-                    if isinstance(observation, str) and 'usage_metadata' in observation:
-                        ai_logger.debug(f"觀察到 observation 包含 usage_metadata: {observation[:200]}")
-                        
+                    if isinstance(observation, str) and "usage_metadata" in observation:
+                        ai_logger.debug(
+                            f"觀察到 observation 包含 usage_metadata: {observation[:200]}"
+                        )
+
             except Exception as e:
                 ai_logger.debug(f"處理 intermediate_step 時發生錯誤: {e}")
                 continue
-        
+
         if total_input_tokens > 0 or total_output_tokens > 0:
             return {
-                'input_tokens': total_input_tokens,
-                'output_tokens': total_output_tokens,
-                'total_tokens': total_input_tokens + total_output_tokens
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+                "total_tokens": total_input_tokens + total_output_tokens,
             }
         return {}
 
     def _extract_gemini_token_usage(self, result: Any) -> Dict[str, int]:
         """從 Gemini 特定的 response_metadata 提取 Token 使用量
-        
+
         Args:
             result: AI 查詢結果
-            
+
         Returns:
             Dict: Gemini token 使用量
         """
@@ -916,7 +955,7 @@ Question: {{input}}
             # 檢查是否是 Gemini 提供者
             if settings.AI_PROVIDER != "gemini":
                 return {}
-            
+
             # 嘗試從不同層級的 response_metadata 提取
             if isinstance(result, dict):
                 # 檢查頂層 response_metadata
@@ -926,115 +965,128 @@ Question: {{input}}
                         tokens = self._parse_gemini_metadata(metadata)
                         if tokens:
                             return tokens
-                
+
                 # 檢查 output 的 response_metadata
                 if "output" in result:
                     output = result["output"]
-                    if hasattr(output, 'response_metadata'):
+                    if hasattr(output, "response_metadata"):
                         tokens = self._parse_gemini_metadata(output.response_metadata)
                         if tokens:
                             return tokens
-            
+
             # 檢查結果物件的 response_metadata
-            if hasattr(result, 'response_metadata'):
+            if hasattr(result, "response_metadata"):
                 tokens = self._parse_gemini_metadata(result.response_metadata)
                 if tokens:
                     return tokens
-            
+
         except Exception as e:
             ai_logger.debug(f"提取 Gemini token 使用量時發生錯誤: {e}")
-            
+
         return {}
 
     def _parse_gemini_metadata(self, metadata: Dict) -> Dict[str, int]:
         """解析 Gemini 的 metadata 格式
-        
+
         Args:
             metadata: Gemini 的 response metadata
-            
+
         Returns:
             Dict: 解析後的 token 使用量
         """
         try:
             # Gemini 的 token 使用量可能在不同的鍵中
             possible_keys = [
-                'usage_metadata',
-                'token_count', 
-                'usage',
-                'promptTokenCount',
-                'candidatesTokenCount',
-                'totalTokenCount'
+                "usage_metadata",
+                "token_count",
+                "usage",
+                "promptTokenCount",
+                "candidatesTokenCount",
+                "totalTokenCount",
             ]
-            
+
             for key in possible_keys:
                 if key in metadata:
                     usage_info = metadata[key]
                     ai_logger.debug(f"發現 Gemini metadata 中的 {key}: {usage_info}")
-                    
+
                     if isinstance(usage_info, dict):
                         # 標準格式
-                        if 'input_tokens' in usage_info and 'output_tokens' in usage_info:
+                        if (
+                            "input_tokens" in usage_info
+                            and "output_tokens" in usage_info
+                        ):
                             return usage_info
-                        
+
                         # Gemini 特定格式
-                        input_tokens = usage_info.get('promptTokenCount', usage_info.get('prompt_token_count', 0))
-                        output_tokens = usage_info.get('candidatesTokenCount', usage_info.get('candidates_token_count', 0))
-                        total_tokens = usage_info.get('totalTokenCount', usage_info.get('total_token_count', 0))
-                        
+                        input_tokens = usage_info.get(
+                            "promptTokenCount", usage_info.get("prompt_token_count", 0)
+                        )
+                        output_tokens = usage_info.get(
+                            "candidatesTokenCount",
+                            usage_info.get("candidates_token_count", 0),
+                        )
+                        total_tokens = usage_info.get(
+                            "totalTokenCount", usage_info.get("total_token_count", 0)
+                        )
+
                         if input_tokens > 0 or output_tokens > 0:
                             return {
-                                'input_tokens': input_tokens,
-                                'output_tokens': output_tokens,
-                                'total_tokens': total_tokens or (input_tokens + output_tokens)
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "total_tokens": total_tokens
+                                or (input_tokens + output_tokens),
                             }
-            
+
         except Exception as e:
             ai_logger.debug(f"解析 Gemini metadata 時發生錯誤: {e}")
-            
+
         return {}
 
     def _estimate_tokens(self, text: str) -> int:
         """估算文本的 token 數量
-        
+
         基於經驗公式：
         - 英文：約 4 字符 = 1 token
         - 中文：約 2 字符 = 1 token
         - 混合文本：使用加權平均
-        
+
         Args:
             text: 要估算的文本
-            
+
         Returns:
             int: 估算的 token 數量
         """
         if not text:
             return 0
-            
+
         # 計算字符數
         char_count = len(text)
-        
+
         # 統計中文字符數量 (Unicode 範圍)
         chinese_chars = 0
         for char in text:
-            if '\u4e00' <= char <= '\u9fff':  # 中文字符範圍
+            if "\u4e00" <= char <= "\u9fff":  # 中文字符範圍
                 chinese_chars += 1
-        
+
         # 估算邏輯
         english_chars = char_count - chinese_chars
-        
+
         # 中文：2 字符 = 1 token，英文：4 字符 = 1 token
         estimated_tokens = (chinese_chars / 2.0) + (english_chars / 4.0)
-        
+
         # 至少返回 1 個 token（如果有文本內容）
         return max(1, int(estimated_tokens)) if text.strip() else 0
 
-    def _extract_token_usage_for_gemini(self, prompt: str, response: str) -> Dict[str, any]:
+    def _extract_token_usage_for_gemini(
+        self, prompt: str, response: str
+    ) -> Dict[str, any]:
         """為 Gemini 估算 token 使用量
-        
+
         Args:
             prompt: 輸入提示文本
             response: 輸出回應文本
-            
+
         Returns:
             Dict: 包含估算 token 使用量的字典，標記為估算值
         """
@@ -1042,82 +1094,92 @@ Question: {{input}}
             input_tokens = self._estimate_tokens(prompt)
             output_tokens = self._estimate_tokens(response)
             total_tokens = input_tokens + output_tokens
-            
+
             return {
-                'input_tokens': input_tokens,
-                'output_tokens': output_tokens,
-                'total_tokens': total_tokens,
-                'estimated': True,  # 標記為估算值
-                'method': 'char_based_estimation'
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "estimated": True,  # 標記為估算值
+                "method": "char_based_estimation",
             }
-            
+
         except Exception as e:
             ai_logger.debug(f"Gemini token 估算失敗: {e}")
             return {}
 
     def _extract_gemini_tokens_from_texts(self, result: Any) -> Dict[str, int]:
         """從 AgentExecutor 結果中提取文本並估算 Gemini token
-        
+
         Args:
             result: AgentExecutor 的結果
-            
+
         Returns:
             Dict: 估算的 token 使用量
         """
         try:
             if not isinstance(result, dict):
                 return {}
-            
+
             # 提取輸入文本
-            input_text = result.get('input', '')
-            
+            input_text = result.get("input", "")
+
             # 提取輸出文本
-            output_text = result.get('output', '')
-            if not output_text and hasattr(result.get('output'), 'content'):
-                output_text = result.get('output').content
-            
+            output_text = result.get("output", "")
+            if not output_text and hasattr(result.get("output"), "content"):
+                output_text = result.get("output").content
+
             if input_text or output_text:
-                estimated_usage = self._extract_token_usage_for_gemini(input_text, output_text)
+                estimated_usage = self._extract_token_usage_for_gemini(
+                    input_text, output_text
+                )
                 if estimated_usage:
-                    ai_logger.debug(f"基於文本估算 Gemini tokens: 輸入={input_text[:50]}..., 輸出={output_text[:50]}...")
+                    ai_logger.debug(
+                        f"基於文本估算 Gemini tokens: 輸入={input_text[:50]}..., 輸出={output_text[:50]}..."
+                    )
                     return estimated_usage
-                    
+
         except Exception as e:
             ai_logger.debug(f"從文本估算 Gemini token 時發生錯誤: {e}")
-            
+
         return {}
-    
+
     def _log_token_usage(self, task_id: str, result: Any = None):
         """記錄 Token 使用量到日誌
-        
+
         Args:
             task_id: 任務的唯一識別碼
             result: AI 查詢結果（可選，用於提取額外的 token 資訊）
         """
         # 從多個來源提取 token 使用量
         usage_data = self._extract_token_usage(result)
-        
-        ai_logger.debug(f"Token 日誌檢查 - callback 存在: {self.usage_callback is not None}")
+
+        ai_logger.debug(
+            f"Token 日誌檢查 - callback 存在: {self.usage_callback is not None}"
+        )
         ai_logger.debug(f"提取到的 usage 數據: {usage_data}")
-        
+
         if not usage_data:
             ai_logger.warning("無 Token 使用量數據可記錄")
             return
-        
+
         provider = settings.AI_PROVIDER
         model = settings.CLAUDE_MODEL if provider == "claude" else settings.GEMINI_MODEL
         input_tokens = usage_data.get("input_tokens", 0)
         output_tokens = usage_data.get("output_tokens", 0)
         total_tokens = usage_data.get("total_tokens", 0)
-        
-        ai_logger.debug(f"Token 數據提取 - 輸入: {input_tokens}, 輸出: {output_tokens}, 總計: {total_tokens}")
-        
+
+        ai_logger.debug(
+            f"Token 數據提取 - 輸入: {input_tokens}, 輸出: {output_tokens}, 總計: {total_tokens}"
+        )
+
         # 檢查是否為估算值
-        is_estimated = usage_data.get('estimated', False)
-        
+        is_estimated = usage_data.get("estimated", False)
+
         # 計算成本
-        estimated_cost = self._calculate_token_cost(provider, model, input_tokens, output_tokens)
-        
+        estimated_cost = self._calculate_token_cost(
+            provider, model, input_tokens, output_tokens
+        )
+
         # 記錄詳細的 Token 使用量和成本
         token_info = {
             "task_id": task_id,
@@ -1128,9 +1190,9 @@ Question: {{input}}
             "total_tokens": total_tokens,
             "estimated_cost_usd": estimated_cost,
             "is_estimated": is_estimated,
-            "estimation_method": usage_data.get('method', '') if is_estimated else None
+            "estimation_method": usage_data.get("method", "") if is_estimated else None,
         }
-        
+
         # 格式化 TOKEN_USAGE 日誌以便於閱讀
         if is_estimated:
             # Gemini 估算值的特殊格式
@@ -1151,16 +1213,62 @@ Question: {{input}}
                 f"Cost: ${estimated_cost:.6f} USD"
             )
             ai_logger.info(f"TOKEN_USAGE: {formatted_usage}")
-        
+
         # 同時記錄原始 JSON 格式供 API 解析使用
         ai_logger.debug(f"TOKEN_USAGE_RAW: {token_info}")
-        
-        # 實時控制台摘要顯示
-        self._display_token_summary(provider, total_tokens, estimated_cost, is_estimated)
 
-    def _display_token_summary(self, provider: str, total_tokens: int, cost: float, is_estimated: bool = False):
+        # 實時控制台摘要顯示
+        self._display_token_summary(
+            provider, total_tokens, estimated_cost, is_estimated
+        )
+
+    def _create_query_result(
+        self, response_text: str, task_id: str, result: Any = None
+    ) -> Dict[str, Any]:
+        """建立包含成本資訊的查詢結果
+
+        Args:
+            response_text: AI 回應文本
+            task_id: 任務 ID
+            result: 原始 AI 結果（用於提取成本資訊）
+
+        Returns:
+            Dict: 包含 response 和 token_cost 的結果
+        """
+        # 提取成本資訊
+        token_cost = None
+        usage_data = self._extract_token_usage(result)
+
+        if usage_data:
+            provider = settings.AI_PROVIDER
+            model = (
+                settings.CLAUDE_MODEL if provider == "claude" else settings.GEMINI_MODEL
+            )
+            input_tokens = usage_data.get("input_tokens", 0)
+            output_tokens = usage_data.get("output_tokens", 0)
+            total_tokens = usage_data.get("total_tokens", 0)
+            is_estimated = usage_data.get("estimated", False)
+            estimated_cost = self._calculate_token_cost(
+                provider, model, input_tokens, output_tokens
+            )
+
+            token_cost = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "estimated_cost_usd": estimated_cost,
+                "provider": provider,
+                "model": model,
+                "is_estimated": is_estimated,
+            }
+
+        return {"response": response_text, "token_cost": token_cost}
+
+    def _display_token_summary(
+        self, provider: str, total_tokens: int, cost: float, is_estimated: bool = False
+    ):
         """在控制台顯示 Token 使用量摘要
-        
+
         Args:
             provider: AI 提供者
             total_tokens: 總 Token 數
@@ -1170,14 +1278,22 @@ Question: {{input}}
         # 根據是否為估算值選擇不同的顯示格式
         if is_estimated:
             if cost > 0.01:  # 成本超過 1 美分時特別標記
-                logger.warning(f"🔥 高成本查詢 - {provider.upper()}: ~{total_tokens} tokens (~${cost:.4f}) 📊估算")
+                logger.warning(
+                    f"🔥 高成本查詢 - {provider.upper()}: ~{total_tokens} tokens (~${cost:.4f}) 📊估算"
+                )
             else:
-                logger.info(f"📊 AI 查詢完成 - {provider.upper()}: ~{total_tokens} tokens (~${cost:.4f}) 估算")
+                logger.info(
+                    f"📊 AI 查詢完成 - {provider.upper()}: ~{total_tokens} tokens (~${cost:.4f}) 估算"
+                )
         else:
             if cost > 0.01:  # 成本超過 1 美分時特別標記
-                logger.warning(f"🔥 高成本查詢 - {provider.upper()}: {total_tokens} tokens (${cost:.4f})")
+                logger.warning(
+                    f"🔥 高成本查詢 - {provider.upper()}: {total_tokens} tokens (${cost:.4f})"
+                )
             else:
-                logger.info(f"💡 AI 查詢完成 - {provider.upper()}: {total_tokens} tokens (${cost:.4f})")
+                logger.info(
+                    f"💡 AI 查詢完成 - {provider.upper()}: {total_tokens} tokens (${cost:.4f})"
+                )
 
     def classify_ai_error(self, error_str: str) -> Tuple[str, int]:
         """分類 AI API 錯誤並返回錯誤訊息和狀態碼
