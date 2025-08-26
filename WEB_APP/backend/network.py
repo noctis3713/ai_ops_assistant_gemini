@@ -30,7 +30,8 @@ from asyncssh import SSHClientConnection
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 
-from settings import get_command_validator, settings
+from settings import get_command_validator
+import settings as settings_module
 
 logger = logging.getLogger(__name__)
 
@@ -82,16 +83,16 @@ def get_device_credentials(device_config=None):
                 "password": device_config.password,
             }
 
-    device_type = settings.DEVICE_TYPE
-    username = settings.DEVICE_USERNAME
-    password = settings.DEVICE_PASSWORD
+    device_type = settings_module.settings.DEVICE_TYPE
+    username = settings_module.settings.DEVICE_USERNAME
+    password = settings_module.settings.DEVICE_PASSWORD
 
     if not username or not password:
         try:
             from settings import get_settings
 
-            settings = get_settings()
-            devices_config = settings.get_devices_config()
+            settings_instance = get_settings()
+            devices_config = settings_instance.get_devices_config()
 
             available_devices = []
             for device in devices_config:
@@ -127,8 +128,8 @@ def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
     try:
         from settings import get_settings
 
-        settings = get_settings()
-        devices_config = settings.get_devices_config()
+        settings_instance = get_settings()
+        devices_config = settings_instance.get_devices_config()
 
         for device in devices_config:
             if device.get("ip") == device_ip:
@@ -237,12 +238,12 @@ class AsyncConnectionPool:
 
     def __init__(self, max_connections: int = None):
         if max_connections is None:
-            max_connections = settings.MAX_CONNECTIONS
+            max_connections = settings_module.settings.MAX_CONNECTIONS
         self.max_connections = max_connections
         self.connections: Dict[str, SSHClientConnection] = {}
         self.connection_times: Dict[str, float] = {}
         self.lock = asyncio.Lock()
-        self.timeout = settings.CONNECTION_TIMEOUT
+        self.timeout = settings_module.settings.CONNECTION_TIMEOUT
 
         logger.info(
             f"AsyncConnectionPool 已初始化 - max_connections: {max_connections}"
@@ -286,13 +287,13 @@ class AsyncConnectionPool:
                 # 設定 keepalive 參數以維持連線池中的連線活性
                 # 每隔 60 秒發送探測封包，最多容許 5 次失敗後斷線
                 conn.set_keepalive(
-                    settings.SSH_KEEPALIVE_INTERVAL,  # interval: 60 秒
-                    settings.SSH_KEEPALIVE_COUNT      # count: 5 次失敗後斷線
+                    settings_module.settings.SSH_KEEPALIVE_INTERVAL,  # interval: 60 秒
+                    settings_module.settings.SSH_KEEPALIVE_COUNT      # count: 5 次失敗後斷線
                 )
 
                 self.connections[device_ip] = conn
                 self.connection_times[device_ip] = current_time
-                logger.info(f"建立新的異步連線: {device_ip} (keepalive: {settings.SSH_KEEPALIVE_INTERVAL}s)")
+                logger.info(f"建立新的異步連線: {device_ip} (keepalive: {settings_module.settings.SSH_KEEPALIVE_INTERVAL}s)")
                 return conn
 
             except Exception as e:
@@ -373,7 +374,7 @@ class AsyncNetworkClient:
 
             # 執行指令
             if timeout is None:
-                timeout = settings.COMMAND_TIMEOUT
+                timeout = settings_module.settings.COMMAND_TIMEOUT
 
             ssh_result = await conn.run(command, timeout=timeout)
 
@@ -401,7 +402,7 @@ class AsyncNetworkClient:
     ) -> BatchResult:
         """批次執行指令"""
         if max_concurrent is None:
-            max_concurrent = settings.MAX_WORKERS
+            max_concurrent = settings_module.settings.MAX_WORKERS
 
         start_time = time.time()
 
@@ -538,8 +539,8 @@ def batch_command_wrapper(input_str: str) -> str:
             try:
                 from settings import get_settings
 
-                settings = get_settings()
-                devices_config = settings.get_devices_config()
+                settings_instance = get_settings()
+                devices_config = settings_instance.get_devices_config()
                 device_ips = [
                     device.get("ip") for device in devices_config if device.get("ip")
                 ]
