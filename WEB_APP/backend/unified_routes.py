@@ -536,3 +536,11 @@ async def get_task_statistics(authorized: bool = Depends(verify_api_key)):
         return BaseResponse.error_response(
             f"任務統計查詢失敗: {str(e)}", "TASK_STATS_ERROR"
         )
+
+
+# =============================================================================
+# Token 使用量 API 端點
+# =============================================================================
+
+# Token 使用量相關功能已移除
+# Token 記錄僅在 Docker 控制台日誌中顯示，不再支援 API 查詢

@@ -51,5 +51,20 @@ template_paths:
   tool_descriptions_with_search: "tool_descriptions_with_search.j2"
   tool_descriptions: "tool_descriptions.j2"
 
-template_version: "1.1.0"
-last_updated: "2025-08-02"
+template_version: "2.0.0"
+last_updated: "2025-08-26"
+
+# 新增基準範圍定義
+normal_ranges:
+  cpu_utilization_max: 80
+  memory_utilization_max: 85
+  temperature_max: 60
+  interface_error_rate_max: 0.01
+
+# 診斷指令映射
+diagnostic_mappings:
+  cpu: ["show processes cpu history", "show processes cpu"]
+  memory: ["show processes memory sorted"]
+  temperature: ["show environment summary"]
+  interfaces: ["show ip interface brief"]
+  logs: ["show logging", "show logging | include ERROR|WARN"]

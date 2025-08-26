@@ -1,6 +1,14 @@
-{# 工具描述模板 - 增強版 #}
-<tools_guide>
-**BatchCommandRunner**（唯一可用工具）
+{# 工具描述模板 - 增強版 v2.0.0 #}
+<tool_usage_protocol>
+**BatchCommandRunner (唯一可用的網路工具)**
+
+**思考協議 (Thought Protocol)**：
+1. **識別 (Identify)**：從使用者查詢中，提取所有需要執行的 `show` 指令列表。
+2. **拆分 (Decompose)**：將多指令查詢拆解為一系列單一指令的工具呼叫。
+3. **執行 (Execute)**：依序、獨立地呼叫 `BatchCommandRunner` 執行每一個指令。
+4. **觀察 (Observe)**：仔細檢查每一次工具回傳的 JSON，特別是 `successful_results` 和 `failed_results`。
+5. **驗證與修正 (Verify & Correct)**：如果出現 `failed_results`，分析 `error_details`。如果 `suggestion` 提示可以修正指令，則再次呼叫工具進行重試。
+6. **整合 (Synthesize)**：在 **所有** 指令都成功執行（或已嘗試修正）後，整合所有 `Observation` 的資訊，產生最終分析。
 
 **功能說明**：
 - 網路設備指令執行工具 - 自動執行安全的 show 類指令並返回結構化結果
@@ -17,15 +25,24 @@
 - `"device_ip1,device_ip2: command"`（多設備執行同一指令）
 - `"command"`（所有設備執行同一指令）
 
-**多指令執行範例**：
-錯誤方式：
-- `"202.153.183.18: show clock; show platform"` ❌ (不支援分號分隔)
-- `"202.153.183.18: show clock and show platform"` ❌ (不支援 and 連接)
+**多指令執行範例 (MANDATORY)**：
+使用者查詢："幫我看看 203.0.113.20 的版本和介面狀態"
 
-正確方式：
-1. 第一次調用：`"202.153.183.18: show clock"`
-2. 第二次調用：`"202.153.183.18: show platform"`
-3. 整合兩次結果進行分析
+**錯誤思考鏈** ❌:
+Thought: 我需要執行 `show version` 和 `show interface brief`。我可以一次性呼叫。
+Action: BatchCommandRunner
+Action Input: `"203.0.113.20: show version; show interface brief"`
+
+**正確思考鏈** ✅:
+Thought: 我需要執行 `show version` 和 `show interface brief`。根據協議，我必須將它們拆分為兩次獨立的工具呼叫。
+Action: BatchCommandRunner
+Action Input: `"203.0.113.20: show version"`
+Observation: [收到第一次呼叫的 JSON 結果]
+Thought: 第一次呼叫成功。現在我需要執行第二個指令。
+Action: BatchCommandRunner
+Action Input: `"203.0.113.20: show interface brief"`
+Observation: [收到第二次呼叫的 JSON 結果]
+Thought: 所有指令都已執行完畢，現在我可以整合這兩次 `Observation` 的結果來產生最終答案。
 
 **回傳 JSON 結構**：
 {% raw %}
@@ -62,4 +79,4 @@
 - 必須基於實際執行結果進行分析，禁止憑空猜測
 - 如果有 failed_results，必須逐項說明錯誤原因與建議
 - 所有數據點都要來自 BatchCommandRunner 的實際輸出
-</tools_guide>
+</tool_usage_protocol>

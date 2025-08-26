@@ -278,7 +278,7 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 50, "執行 AI 分析...")
 
         # 執行 AI 查詢
-        ai_response = await ai_service.query_ai(prompt=query, device_ips=devices)
+        ai_response = await ai_service.query_ai(prompt=query, task_id=task.task_id, device_ips=devices)
 
         await self._update_progress(task.task_id, 75, "格式化 AI 回應...")
 

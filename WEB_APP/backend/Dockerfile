@@ -45,7 +45,7 @@ COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
 # 建立必要的目錄結構
-RUN mkdir -p /app/logs /app/config /app/prompts && \
+RUN mkdir -p /app/config /app/prompts && \
     chown -R appuser:appuser /app
 
 # 複製應用程式代碼
@@ -57,10 +57,8 @@ ENV PYTHONPATH="/app" \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
-# 建立啟動腳本來確保日誌目錄存在
+# 建立啟動腳本
 RUN echo '#!/bin/bash\n\
-mkdir -p /app/logs\n\
-touch /app/logs/app.log /app/logs/ai.log /app/logs/network.log\n\
 exec uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info' > /app/start.sh && \
     chmod +x /app/start.sh
 
