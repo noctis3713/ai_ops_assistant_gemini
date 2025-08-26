@@ -284,10 +284,10 @@ class AsyncConnectionPool:
                 )
                 
                 # 設定 keepalive 參數以維持連線池中的連線活性
-                # 每隔指定秒數發送探測封包，防止網路設備因閒置而切斷連線
+                # 每隔 60 秒發送探測封包，最多容許 5 次失敗後斷線
                 conn.set_keepalive(
-                    interval=settings.SSH_KEEPALIVE_INTERVAL,
-                    count=settings.SSH_KEEPALIVE_COUNT
+                    settings.SSH_KEEPALIVE_INTERVAL,  # interval: 60 秒
+                    settings.SSH_KEEPALIVE_COUNT      # count: 5 次失敗後斷線
                 )
 
                 self.connections[device_ip] = conn
