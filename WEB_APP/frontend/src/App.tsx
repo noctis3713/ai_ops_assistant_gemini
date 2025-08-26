@@ -8,7 +8,8 @@ import {
   useKeyboardShortcuts,
   useAsyncTasks,
   useStoreActions,
-  useOptimizedStoreSelectors
+  useOptimizedStoreSelectors,
+  useSmartPreload
 } from '@/hooks';
 
 // 直接導入 API 函數
@@ -137,6 +138,9 @@ function App() {
   }), [handleExecute, isAsyncExecuting]);
   
   useKeyboardShortcuts(keyboardShortcutsOptions);
+  
+  // 智慧預載入 - 啟用所有 6 種預載入策略
+  useSmartPreload();
   
 
   // 使用自定義 Hook 來集中處理狀態計算

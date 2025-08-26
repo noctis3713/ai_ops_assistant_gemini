@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { type AppStore } from '@/types';
 import { createOptimizedStore } from './storeMiddlewares';
+import { createSelectors } from './createSelectors';
 import {
   createDeviceSlice,
   createUiSlice,
@@ -9,8 +10,8 @@ import {
   createConfigSlice
 } from './slices';
 
-// 使用 Slices Pattern 組合所有狀態切片
-export const useAppStore = create<AppStore>()(
+// 基礎 store - 使用 Slices Pattern 組合所有狀態切片
+const useAppStoreBase = create<AppStore>()(
   createOptimizedStore<AppStore>(
     (...a) => ({
       // 組合所有切片 - 順序重要，確保依賴關係正確
@@ -22,6 +23,9 @@ export const useAppStore = create<AppStore>()(
     'app-store-slices' // 更新 store 名稱以反映新架構
   )
 );
+
+// 導出帶有自動選擇器的 store
+export const useAppStore = createSelectors(useAppStoreBase);
 
 // 開發環境效能監控
 if (process.env.NODE_ENV === 'development') {

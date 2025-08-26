@@ -1,6 +1,11 @@
 /**
  * Zustand 狀態選擇器
  * 提供細粒度的狀態訂閱，減少不必要的重渲染
+ * 
+ * @optimization 使用指南：
+ * - 單一原始值：直接使用，不需要 useShallow
+ * - 陣列/物件：使用 useShallow 避免不必要的重渲染
+ * - 計算值：使用 useMemo 配合選擇器
  */
 import { type AppStore } from '@/types';
 

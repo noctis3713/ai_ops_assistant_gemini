@@ -39,6 +39,7 @@ export * from './useAppSelector';
 export * from './useOptimizedAppState';
 export * from './useStoreActions';
 export * from './useOptimizedStoreSelectors';
+export * from './useSmartPreload';
 
 // 搜尋
 export * from './useDebounceSearch';
