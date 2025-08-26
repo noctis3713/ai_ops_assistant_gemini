@@ -281,11 +281,18 @@ class AsyncConnectionPool:
                     connect_timeout=5,
                     login_timeout=10,
                     known_hosts=None,
+                    keepalive=settings.SSH_KEEPALIVE_INTERVAL,
+                )
+                
+                # 設定 keepalive 參數以維持連線池中的連線活性
+                conn.set_keepalive(
+                    interval=settings.SSH_KEEPALIVE_INTERVAL,
+                    count=settings.SSH_KEEPALIVE_COUNT
                 )
 
                 self.connections[device_ip] = conn
                 self.connection_times[device_ip] = current_time
-                logger.info(f"建立新的異步連線: {device_ip}")
+                logger.info(f"建立新的異步連線: {device_ip} (keepalive: {settings.SSH_KEEPALIVE_INTERVAL}s)")
                 return conn
 
             except Exception as e:

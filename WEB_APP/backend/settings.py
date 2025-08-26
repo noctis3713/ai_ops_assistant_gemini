@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     MAX_CONNECTIONS: int = Field(default=5, description="最大 SSH 連線數")
     CONNECTION_TIMEOUT: int = Field(default=300, description="連線逾時時間 (秒)")
     COMMAND_TIMEOUT: int = Field(default=20, description="指令執行逾時時間 (秒)")
+    SSH_KEEPALIVE_INTERVAL: int = Field(default=60, description="SSH keepalive 間隔 (秒)")
+    SSH_KEEPALIVE_COUNT: int = Field(default=5, description="SSH keepalive 最大失敗次數")
     DEVICE_USERNAME: Optional[str] = Field(default=None, description="設備預設用戶名")
     DEVICE_PASSWORD: Optional[str] = Field(default=None, description="設備預設密碼")
     DEVICE_TYPE: str = Field(default="cisco_ios", description="預設設備類型")
