@@ -281,10 +281,10 @@ class AsyncConnectionPool:
                     connect_timeout=5,
                     login_timeout=10,
                     known_hosts=None,
-                    keepalive=settings.SSH_KEEPALIVE_INTERVAL,
                 )
                 
                 # 設定 keepalive 參數以維持連線池中的連線活性
+                # 每隔指定秒數發送探測封包，防止網路設備因閒置而切斷連線
                 conn.set_keepalive(
                     interval=settings.SSH_KEEPALIVE_INTERVAL,
                     count=settings.SSH_KEEPALIVE_COUNT
