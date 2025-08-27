@@ -18,6 +18,22 @@ import uuid
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
+# 預先設定 Google API 環境變數以避免 ADC 錯誤
+# 必須在導入 langchain_google_genai 之前設定
+def _setup_google_credentials():
+    """在模組導入前預先設定 Google API 認證環境變數"""
+    try:
+        from settings import settings
+        if settings.GEMINI_API_KEY:
+            os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+            os.environ["GOOGLE_GENERATIVE_AI_API_KEY"] = settings.GEMINI_API_KEY
+    except Exception:
+        # 如果無法載入 settings，跳過預設定
+        pass
+
+# 預先設定認證
+_setup_google_credentials()
+
 # AI 服務相關導入
 try:
     import warnings
@@ -33,7 +49,11 @@ try:
 
     warnings.filterwarnings("ignore")
     AI_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    # 改善導入錯誤處理，忽略 ADC 相關錯誤
+    import sys
+    if "default credentials" not in str(e).lower():
+        print(f"AI 套件導入失敗: {e}", file=sys.stderr)
     AI_AVAILABLE = False
 
 
@@ -405,6 +425,7 @@ class AIService:
         if not api_key:
             error_msg = "GEMINI_API_KEY 未設定，Gemini AI 功能不可用"
             logger.warning(error_msg)
+            ai_logger.error(error_msg)
             return None
 
         try:
@@ -414,17 +435,27 @@ class AIService:
             # 記錄初始化資訊
             init_start_msg = f"開始初始化 Gemini AI - 模型: {gemini_model}"
             logger.info(init_start_msg)
+            
+            # 重要修復：設定環境變數確保 LangChain 能正確識別 API 金鑰
+            # 這可以避免 ChatGoogleGenerativeAI 嘗試尋找 Application Default Credentials
+            os.environ["GOOGLE_API_KEY"] = api_key
+            ai_logger.debug(f"設定 GOOGLE_API_KEY 環境變數: {api_key[:10]}...")
+
+            # 也可以嘗試設定這個替代的環境變數名稱
+            os.environ["GOOGLE_GENERATIVE_AI_API_KEY"] = api_key
+            ai_logger.debug("同時設定 GOOGLE_GENERATIVE_AI_API_KEY 環境變數作為備用")
 
             llm = ChatGoogleGenerativeAI(
                 model=gemini_model,
                 temperature=0,
-                google_api_key=api_key,
+                google_api_key=api_key,  # 明確傳遞 API 金鑰參數
                 callbacks=[self.usage_callback] if self.usage_callback else [],
             )
 
             # 記錄成功訊息
             success_msg = f"Gemini AI 初始化成功 - 模型: {gemini_model}"
             logger.info(success_msg)
+            ai_logger.info(f"[GEMINI] AI 系統初始化成功 - 模型: {gemini_model}")
             ai_logger.debug(
                 f"Gemini LLM 初始化完成，callback 已配置: {self.usage_callback is not None}"
             )
@@ -433,19 +464,36 @@ class AIService:
         except Exception as e:
             error_msg = f"Gemini AI 初始化失敗: {type(e).__name__}: {str(e)}"
             logger.error(error_msg)
+            ai_logger.error(error_msg)
 
             # 詳細的錯誤診斷
-            if "429" in str(e) or "quota" in str(e).lower():
+            if "default credentials" in str(e).lower() or "adc" in str(e).lower():
+                auth_detail_msg = (
+                    "偵測到 Application Default Credentials 錯誤 - "
+                    "已嘗試設定 GOOGLE_API_KEY 環境變數，但仍失敗"
+                )
+                logger.error(auth_detail_msg)
+                ai_logger.error(auth_detail_msg)
+            elif "429" in str(e) or "quota" in str(e).lower():
                 quota_msg = "可能是 API 配額已用完或請求頻率過高"
                 logger.error(quota_msg)
+                ai_logger.error(quota_msg)
             elif "401" in str(e) or "unauthorized" in str(e).lower():
                 auth_msg = "API Key 可能無效或權限不足"
                 logger.error(auth_msg)
+                ai_logger.error(auth_msg)
             elif "import" in str(e).lower() or "module" in str(e).lower():
                 import_msg = (
                     "可能缺少必要的套件，請檢查 langchain-google-genai 是否正確安裝"
                 )
                 logger.error(import_msg)
+                ai_logger.error(import_msg)
+
+            # 提供解決建議
+            ai_logger.info("建議嘗試以下解決方案：")
+            ai_logger.info("1. 確認 GEMINI_API_KEY 在 .env 檔案中正確設定")
+            ai_logger.info("2. 檢查 Google AI Studio 中 API 金鑰是否有效")
+            ai_logger.info("3. 考慮改用 Claude AI 作為替代方案")
 
             return None
 
