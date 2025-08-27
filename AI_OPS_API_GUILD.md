@@ -2,6 +2,8 @@
 
 本指南專為 n8n 工作流自動化平台使用者設計，提供完整的 AI Ops Assistant Gemini 後端 API 調用說明和實際範例。
 
+> 💡 **基礎架構說明**: 如需了解 Docker 容器管理、網路配置和系統除錯，請參考 `CLAUDE.md` 文檔
+
 ## 📋 目錄
 
 1. [系統概覽](#系統概覽)
@@ -35,17 +37,18 @@ AI Ops Assistant Gemini 是基於 FastAPI 框架的網路維運自動化系統�
 
 ### 存取端點
 
-| 服務 | 外部存取 URL | 說明 |
+| 服務 | 內網存取 URL | 說明 |
 |------|-------------|------|
-| **主應用** | `http://202.3.184.82/` | 前端使用者介面 |
-| **API 端點** | `http://202.3.184.82/api/` | RESTful API 基礎路径 |
-| **健康檢查** | `http://202.3.184.82/health` | 系統狀態檢查 |
-| **Traefik 管理** | `http://202.3.184.82:81/` | 代理伺服器管理面板 |
-| **n8n 入口** | `http://202.3.184.82:8001/` | n8n 工作流平台 |
+| **主應用** | `http://10.60.21.11/` | 前端使用者介面 |
+| **API 端點** | `http://10.60.21.11/api/` | RESTful API 基礎路径 |
+| **健康檢查** | `http://10.60.21.11/health` | 系統狀態檢查 |
+| **Traefik 管理** | `http://10.60.21.11:81/` | 代理伺服器管理面板 |
+| **n8n 入口** | `http://10.60.21.11:8001/` | n8n 工作流平台 |
 
 ### 網路架構
 ```
-外部用戶 → 202.3.184.82 (外部IP) → NAT → 10.60.21.11 (內部IP) → Docker 容器
+內網用戶 → 10.60.21.11 (內網IP) → Docker 容器
+註：系統運行在內網環境，通過 10.60.21.11 直接存取
 ```
 
 ### 開放端口
@@ -55,12 +58,32 @@ AI Ops Assistant Gemini 是基於 FastAPI 框架的網路維運自動化系統�
 - **22**: SSH 管理
 - **443**: HTTPS (未啟用)
 
+### ⚠️ 內網存取注意事項
+
+**重要提醒**：
+- **內網專用**: 本系統僅在內網環境運行，請使用內網 IP `10.60.21.11` 進行存取
+- **無外部存取**: 無法從外網直接存取，這是正常的安全設定
+- **NAT 配置**: 系統背後有 NAT 設定，但僅供內網使用
+- **防火牆**: 確保內網用戶端能夠存取上述開放端口
+
+**存取驗證**：
+```bash
+# 測試內網連通性
+ping 10.60.21.11
+
+# 測試 HTTP 服務
+curl -s http://10.60.21.11/health
+
+# 測試 n8n 服務
+curl -s http://10.60.21.11:8001
+```
+
 ---
 
 ## API 端點文檔
 
 ### 基礎資訊
-- **基礎 URL**: `http://202.3.184.82/api`
+- **基礎 URL**: `http://10.60.21.11/api`
 - **Content-Type**: `application/json`
 - **Accept**: `application/json`
 - **User-Agent**: `n8n-workflow/1.0`
@@ -195,14 +218,20 @@ Content-Type: application/json
   "operation_type": "device_command",
   "devices": ["192.168.1.1", "192.168.1.2", "192.168.1.10"],
   "command": "show version; show interfaces brief; show ip route summary",
-  "webhook_url": "http://202.3.184.82:8001/webhook/device-command-complete"
+  "webhook_url": "http://10.60.21.11:8001/webhook/device-command-complete"
 }
 ```
 
 支援的指令類型：
 - 單一指令：`"show version"`
 - 多重指令：`"show version; show interfaces; show environment"`
-- 複雜查詢：`"show interfaces | include up; show logging | tail 20"`
+
+**⚠️ 指令安全限制**：
+- 基於安全考量，系統會檢查並拒絕包含某些危險字符的指令
+- **禁用字符**: 管道符號 `|`、重定向 `>`、背景執行 `&` 等
+- **建議做法**: 使用基本指令，避免複雜的 shell 操作
+- **正確範例**: `"show version"`、`"show interfaces brief"`
+- **錯誤範例**: `"show version | include Cisco"`（會被拒絕）
 
 **2. ai_query - AI智能分析**
 使用Gemini/Claude AI進行網路維運分析
@@ -212,7 +241,7 @@ Content-Type: application/json
   "operation_type": "ai_query",
   "devices": ["192.168.1.1"],
   "query": "根據show version和show interfaces的輸出，分析這台設備的健康狀態，提供維運建議和潛在問題預警",
-  "webhook_url": "http://202.3.184.82:8001/webhook/ai-analysis-complete"
+  "webhook_url": "http://10.60.21.11:8001/webhook/ai-analysis-complete"
 }
 ```
 
@@ -231,7 +260,7 @@ AI查詢建議：
   "devices": ["192.168.1.1", "192.168.1.2"],
   "command": "show version",           // device_command 必填
   "query": "分析設備狀態",            // ai_query 必填
-  "webhook_url": "http://202.3.184.82:8001/webhook/ai-ops"  // 可選
+  "webhook_url": "http://10.60.21.11:8001/webhook/ai-ops"  // 可選
 }
 ```
 
@@ -261,10 +290,10 @@ GET /api/tasks/{task_id}  👈 使用從建立任務回應中獲得的 task_id
 ```
 
 **URL 建構範例**：
-- 完整 URL：`http://202.3.184.82/api/tasks/4706ef27-7d69-4073-ba9b-d997090a8fd9`
-- n8n 表達式：`http://202.3.184.82/api/tasks/{{ $json.data.task_id }}`
+- 完整 URL：`http://10.60.21.11/api/tasks/4706ef27-7d69-4073-ba9b-d997090a8fd9`
+- n8n 表達式：`http://10.60.21.11/api/tasks/{{ $json.data.task_id }}`
 
-**回應範例**:
+**設備指令任務回應範例**:
 ```json
 {
   "success": true,
@@ -301,7 +330,56 @@ GET /api/tasks/{task_id}  👈 使用從建立任務回應中獲得的 task_id
         }
       }
     },
-    "error": null
+    "error": null,
+    "token_cost": null
+  },
+  "message": "任務執行完成"
+}
+```
+
+**AI 查詢任務回應範例**:
+```json
+{
+  "success": true,
+  "data": {
+    "task_id": "task_20250824_140230_def456",
+    "status": "completed", 
+    "operation_type": "ai_query",
+    "created_at": "2025-08-24T14:02:30.123456",
+    "started_at": "2025-08-24T14:02:31.123456", 
+    "completed_at": "2025-08-24T14:03:15.123456",
+    "progress": {
+      "current_step": "任務執行完成",
+      "total_devices": 1,
+      "processed_devices": 1, 
+      "success_count": 1,
+      "error_count": 0
+    },
+    "results": {
+      "results": [
+        {
+          "deviceName": "核心交換器-01",
+          "deviceIp": "192.168.1.1", 
+          "success": true,
+          "output": "根據分析結果，設備運行狀況良好..."
+        }
+      ],
+      "ai_response": "根據分析結果，設備運行狀況良好...",
+      "summary": {
+        "total": 1,
+        "query": "分析設備健康狀態"
+      }
+    },
+    "error": null,
+    "token_cost": {
+      "input_tokens": 1250,
+      "output_tokens": 856,
+      "total_tokens": 2106,
+      "estimated_cost_usd": 0.001234,
+      "provider": "gemini",
+      "model": "gemini-1.5-pro-latest",
+      "is_estimated": true
+    }
   },
   "message": "任務執行完成"
 }
@@ -417,7 +495,115 @@ GET /api/ai-status
 }
 ```
 
-### 4. 系統監控 API
+### 4. AI Token 成本追蹤 API
+
+#### Token 使用量和成本資訊
+
+AI Ops Assistant Gemini 提供完整的 AI 查詢 token 使用量和成本追蹤功能，幫助您監控和控制 AI 服務的使用成本。
+
+**⭐ 重要特性**：
+- **自動記錄**：每次 AI 查詢任務完成後自動記錄 token 使用量
+- **詳細統計**：包含輸入、輸出和總 token 數量
+- **成本估算**：提供 USD 成本估算（基於當前 API 定價）
+- **即時追蹤**：通過任務狀態 API 即時獲取成本資訊
+
+#### Token 成本資料結構
+
+當執行 `ai_query` 操作類型的任務時，任務完成後會在回應中包含 `token_cost` 欄位：
+
+```json
+{
+  "token_cost": {
+    "input_tokens": 1250,        // 輸入 token 數量
+    "output_tokens": 856,        // 輸出 token 數量  
+    "total_tokens": 2106,        // 總 token 數量
+    "estimated_cost_usd": 0.001234,  // 估算成本（美元）
+    "provider": "gemini",        // AI 服務提供商
+    "model": "gemini-1.5-pro-latest",  // 使用的 AI 模型
+    "is_estimated": true         // 是否為估算值
+  }
+}
+```
+
+**欄位說明**：
+
+| 欄位名稱 | 類型 | 說明 | 範例 |
+|---------|------|------|------|
+| `input_tokens` | integer | AI 處理的輸入 token 數量 | `1250` |
+| `output_tokens` | integer | AI 生成的輸出 token 數量 | `856` |
+| `total_tokens` | integer | 總 token 數量（input + output） | `2106` |
+| `estimated_cost_usd` | float | 估算成本（美元），精確到小數點後6位 | `0.001234` |
+| `provider` | string | AI 服務提供商 | `"gemini"` |
+| `model` | string | 使用的 AI 模型名稱 | `"gemini-1.5-pro-latest"` |
+| `is_estimated` | boolean | 是否為估算值（true=估算，false=實際） | `true` |
+
+#### 獲取 Token 成本資訊
+
+**方法 1: 任務狀態查詢**
+```http
+GET /api/tasks/{task_id}
+```
+
+對於 `ai_query` 任務，完成後的回應會包含 `token_cost` 資訊：
+
+```json
+{
+  "success": true,
+  "data": {
+    "task_id": "ai_task_20250827_143022",
+    "status": "completed",
+    "operation_type": "ai_query",
+    "token_cost": {
+      "input_tokens": 1250,
+      "output_tokens": 856,
+      "total_tokens": 2106,
+      "estimated_cost_usd": 0.001234,
+      "provider": "gemini",
+      "model": "gemini-1.5-pro-latest",
+      "is_estimated": true
+    },
+    "results": { /* AI 分析結果 */ }
+  }
+}
+```
+
+**方法 2: Webhook 回調**
+如果設定了 `webhook_url`，任務完成時的回調也會包含 token 成本資訊：
+
+```json
+{
+  "task_id": "ai_task_20250827_143022",
+  "status": "completed",
+  "operation_type": "ai_query", 
+  "token_cost": {
+    "input_tokens": 1250,
+    "output_tokens": 856,
+    "total_tokens": 2106,
+    "estimated_cost_usd": 0.001234
+  },
+  "results": { /* AI 分析結果 */ },
+  "completed_at": "2025-08-27T14:30:45.123456"
+}
+```
+
+#### 成本計算說明
+
+**定價模式**：
+- 基於 Google Gemini API 或 Anthropic Claude API 的當前定價
+- 輸入和輸出 token 可能有不同的計費率
+- 成本以美元（USD）計算，精確到小數點後6位
+
+**成本估算公式**：
+```
+總成本 = (輸入 tokens × 輸入單價) + (輸出 tokens × 輸出單價)
+```
+
+**⚠️ 重要注意事項**：
+1. **估算性質**：成本為估算值，實際費用以 API 提供商帳單為準
+2. **定價更新**：API 定價可能變動，系統會盡力保持估算準確性
+3. **貨幣匯率**：如需其他貨幣，請自行換算（如 USD 到 TWD）
+
+### 5. 系統監控 API
 
 #### 健康檢查
 ```http
@@ -502,7 +688,7 @@ X-API-Key: Cisc0123
 節點類型: HTTP Request
 認證: None (或選擇相應的認證類型)
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 ```
 
 **標頭設定**:
@@ -553,7 +739,7 @@ graph LR
 節點類型: HTTP Request
 認證: None
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 標頭設定:
   傳送標頭: 開啟
@@ -579,7 +765,7 @@ URL: http://202.3.184.82/api/tasks
 節點類型: HTTP Request
 認證: None
 方法: GET
-URL: http://202.3.184.82/api/tasks/{{ $json.data.task_id }}  👈 重要：從前一節點提取 task_id
+URL: http://10.60.21.11/api/tasks/{{ $json.data.task_id }}  👈 重要：從前一節點提取 task_id
 
 標頭設定:
   傳送標頭: 開啟
@@ -624,19 +810,90 @@ False 分支: 任務進行中 → 等待後繼續輪詢
                           是 → 處理結果
 ```
 
-### 2. AI 分析工作流程
+### 2. AI 分析工作流程（包含 Token 成本追蹤）
 
 ```yaml
 建立 AI 分析任務:
   HTTP Request:
     Method: POST
-    URL: http://202.3.184.82/api/tasks
+    URL: http://10.60.21.11/api/tasks
     Body:
       {
         "operation_type": "ai_query",
         "devices": ["192.168.1.1"],
         "query": "分析這台設備的 show version 和 show interfaces 輸出，提供維運建議"
       }
+```
+
+**AI Token 成本處理節點配置**:
+```javascript
+// 節點名稱: 提取 AI 成本資訊
+// 節點類型: Code
+// 語言: JavaScript
+
+const items = $input.all();
+const taskData = items[0].json;
+
+// 檢查是否為 AI 查詢任務且包含成本資訊
+if (taskData.success && 
+    taskData.data.operation_type === "ai_query" && 
+    taskData.data.token_cost) {
+  
+  const tokenCost = taskData.data.token_cost;
+  const costUSD = tokenCost.estimated_cost_usd;
+  const costTWD = (costUSD * 32).toFixed(2); // 假設匯率 1 USD = 32 TWD
+  
+  return {
+    json: {
+      ...taskData,
+      cost_summary: {
+        input_tokens: tokenCost.input_tokens.toLocaleString(),
+        output_tokens: tokenCost.output_tokens.toLocaleString(),
+        total_tokens: tokenCost.total_tokens.toLocaleString(),
+        cost_usd: `$${costUSD.toFixed(6)}`,
+        cost_twd: `NT$ ${costTWD}`,
+        cost_formatted: `${tokenCost.total_tokens.toLocaleString()} tokens ($${costUSD.toFixed(6)} USD / NT$ ${costTWD})`
+      }
+    }
+  };
+}
+
+// 如果沒有成本資訊（非 AI 查詢任務或舊版本）
+return {
+  json: {
+    ...taskData,
+    cost_summary: {
+      input_tokens: "N/A",
+      output_tokens: "N/A", 
+      total_tokens: "N/A",
+      cost_usd: "N/A",
+      cost_twd: "N/A",
+      cost_formatted: "成本資訊不可用"
+    }
+  }
+};
+```
+
+**在電子郵件中包含成本資訊**:
+```javascript
+// Email 內容範例
+const emailBody = `
+=== AI 分析結果 ===
+設備名稱: ${deviceInfo.name}
+設備 IP: ${deviceInfo.ip}
+分析內容: ${aiResponse}
+
+=== 成本資訊 ===
+Token 使用量: ${costSummary.cost_formatted}
+• 輸入 Tokens: ${costSummary.input_tokens}
+• 輸出 Tokens: ${costSummary.output_tokens}
+• 總計 Tokens: ${costSummary.total_tokens}
+• 估算成本: ${costSummary.cost_usd} (${costSummary.cost_twd})
+
+執行時間: ${timestamp}
+`;
+
+return { json: { emailBody: emailBody } };
 ```
 
 ### 3. 批次設備健康檢查
@@ -647,7 +904,7 @@ False 分支: 任務進行中 → 等待後繼續輪詢
 節點類型: HTTP Request
 認證: None
 方法: GET
-URL: http://202.3.184.82/api/devices/status
+URL: http://10.60.21.11/api/devices/status
 
 標頭設定:
   傳送標頭: 開啟
@@ -712,7 +969,7 @@ return {
   "operation_type": "device_command",
   "devices": ["192.168.1.1"],
   "command": "show version",
-  "webhook_url": "http://202.3.184.82:8001/webhook/ai-ops-callback"
+  "webhook_url": "http://10.60.21.11:8001/webhook/ai-ops-callback"
 }
 ```
 
@@ -730,15 +987,15 @@ return {
 選項配置:
   認證: None (或選擇 Header Auth 等安全選項)
   忽略機器人: 開啟
-  IP 白名單: 202.3.184.82 (只允許 API 伺服器回調)
+  IP 白名單: 10.60.21.11 (只允許 API 伺服器回調)
   回應標頭: 
     - Name: Content-Type, Value: application/json
     - Name: X-Webhook-Source, Value: ai-ops-assistant
 ```
 
 **Webhook 路徑範例**:
-- Production: `http://202.3.184.82:8001/webhook/ai-ops-callback`
-- Test: `http://202.3.184.82:8001/webhook-test/ai-ops-callback`
+- Production: `http://10.60.21.11:8001/webhook/ai-ops-callback`
+- Test: `http://10.60.21.11:8001/webhook-test/ai-ops-callback`
 
 ---
 
@@ -763,7 +1020,7 @@ Cron 表達式: 0 9 * * * (每日上午 9:00)
 節點名稱: 獲取所有設備清單
 節點類型: HTTP Request
 方法: GET
-URL: http://202.3.184.82/api/devices
+URL: http://10.60.21.11/api/devices
 
 標頭設定:
   - Name: Accept, Value: application/json
@@ -775,7 +1032,7 @@ URL: http://202.3.184.82/api/devices
 節點名稱: 批次設備健康狀態檢查
 節點類型: HTTP Request  
 方法: GET
-URL: http://202.3.184.82/api/devices/status
+URL: http://10.60.21.11/api/devices/status
 
 選項:
   超時: 45000 (45秒)
@@ -832,7 +1089,7 @@ return {
 節點名稱: 執行設備診斷指令
 節點類型: HTTP Request
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 請求主體:
 {
@@ -847,7 +1104,7 @@ URL: http://202.3.184.82/api/tasks
 節點名稱: AI 日報分析
 節點類型: HTTP Request
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 請求主體:
 {
@@ -981,7 +1238,7 @@ return {
 節點名稱: 確認設備離線狀態
 節點類型: HTTP Request
 方法: GET
-URL: http://202.3.184.82/api/devices/status
+URL: http://10.60.21.11/api/devices/status
 
 選項:
   超時: 15000 (15秒)
@@ -1041,14 +1298,14 @@ return {
 節點名稱: 執行故障診斷指令
 節點類型: HTTP Request
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 請求主體:
 {
   "operation_type": "device_command",
   "devices": ["{{ $json.device_info.device_ip }}"],
   "command": "{{ $json.diagnosis_commands.join('; ') }}",
-  "webhook_url": "http://202.3.184.82:8001/webhook/diagnosis-complete"
+  "webhook_url": "http://10.60.21.11:8001/webhook/diagnosis-complete"
 }
 ```
 
@@ -1057,7 +1314,7 @@ URL: http://202.3.184.82/api/tasks
 節點名稱: AI 故障原因分析
 節點類型: HTTP Request
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 請求主體:
 {
@@ -1103,7 +1360,7 @@ Cron 表達式: */30 * * * * (30分鐘一次)
 節點名稱: 取得高負載設備清單
 節點類型: HTTP Request
 方法: GET
-URL: http://202.3.184.82/api/device-groups
+URL: http://10.60.21.11/api/device-groups
 
 查詢參數:
   - Name: group, Value: performance_critical
@@ -1114,14 +1371,14 @@ URL: http://202.3.184.82/api/device-groups
 節點名稱: 收集效能數據
 節點類型: HTTP Request
 方法: POST
-URL: http://202.3.184.82/api/tasks
+URL: http://10.60.21.11/api/tasks
 
 請求主體:
 {
   "operation_type": "device_command",
   "devices": {{ $json.data[0].devices }},
   "command": "show processes cpu sorted; show memory; show interfaces | include rate | exclude 0",
-  "webhook_url": "http://202.3.184.82:8001/webhook/performance-data"
+  "webhook_url": "http://10.60.21.11:8001/webhook/performance-data"
 }
 ```
 
@@ -1558,20 +1815,20 @@ Loop Protection:
 **快速狀態檢查 curl 指令**:
 ```bash
 # API 服務狀態
-curl -X GET "http://202.3.184.82/health" \
+curl -X GET "http://10.60.21.11/health" \
      -H "Accept: application/json" \
      -H "User-Agent: health-check/1.0"
 
 # AI 服務狀態
-curl -X GET "http://202.3.184.82/api/ai-status" \
+curl -X GET "http://10.60.21.11/api/ai-status" \
      -H "Accept: application/json"
 
 # 設備清單檢查
-curl -X GET "http://202.3.184.82/api/devices" \
+curl -X GET "http://10.60.21.11/api/devices" \
      -H "Accept: application/json"
 
 # 設備健康檢查
-curl -X GET "http://202.3.184.82/api/devices/status" \
+curl -X GET "http://10.60.21.11/api/devices/status" \
      -H "Accept: application/json" \
      -w "\nResponse Time: %{time_total}s\nHTTP Code: %{http_code}\n"
 ```
@@ -1580,7 +1837,7 @@ curl -X GET "http://202.3.184.82/api/devices/status" \
 ```
 節點 1: Cron Trigger (*/5 * * * *)
 節點 2: HTTP Request
-  URL: http://202.3.184.82/health
+  URL: http://10.60.21.11/health
   超時: 10000ms
   包含回應時間: 開啟
   
@@ -1607,21 +1864,21 @@ curl -X GET "http://202.3.184.82/api/devices/status" \
 **網路連通性測試**:
 ```bash
 # 測試 API 連通性
-ping -c 4 202.3.184.82
-telnet 202.3.184.82 80
+ping -c 4 10.60.21.11
+telnet 10.60.21.11 80
 
 # 測試 n8n 連通性
-telnet 202.3.184.82 8001
+telnet 10.60.21.11 8001
 ```
 
 **API 效能測試**:
 ```bash
 # 簡單效能測試
-time curl -X GET "http://202.3.184.82/health"
+time curl -X GET "http://10.60.21.11/health"
 
 # 併發測試 (Linux)
 for i in {1..10}; do
-  curl -X GET "http://202.3.184.82/health" &
+  curl -X GET "http://10.60.21.11/health" &
 done
 wait
 ```
@@ -1663,7 +1920,7 @@ console.log('Request Details:', {
 // 檢查 task_id 提取
 if ($json.data && $json.data.task_id) {
   console.log('✅ Task ID 提取成功:', $json.data.task_id);
-  console.log('輪詢 URL 應為:', `http://202.3.184.82/api/tasks/${$json.data.task_id}`);
+  console.log('輪詢 URL 應為:', `http://10.60.21.11/api/tasks/${$json.data.task_id}`);
 } else {
   console.log('❌ Task ID 提取失敗，回應結構:', JSON.stringify($json, null, 2));
 }
@@ -1763,13 +2020,13 @@ GET    /api/admin/tasks/stats     # 任務統計（需要認證）
 **快速測試指令**:
 ```bash
 # 測試 API 連線
-curl -s http://202.3.184.82/health | jq .
+curl -s http://10.60.21.11/health | jq .
 
 # 獲取設備清單
-curl -s http://202.3.184.82/api/devices | jq '.data | length'
+curl -s http://10.60.21.11/api/devices | jq '.data | length'
 
 # 建立設備指令任務
-curl -X POST http://202.3.184.82/api/tasks \
+curl -X POST http://10.60.21.11/api/tasks \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -1778,8 +2035,8 @@ curl -X POST http://202.3.184.82/api/tasks \
     "command": "show version; show interfaces brief"
   }' | jq .
 
-# 建立AI分析任務
-curl -X POST http://202.3.184.82/api/tasks \
+# 建立AI分析任務（包含 token 成本追蹤）
+curl -X POST http://10.60.21.11/api/tasks \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -1788,22 +2045,25 @@ curl -X POST http://202.3.184.82/api/tasks \
     "query": "分析設備效能狀態並提供優化建議"
   }' | jq .
 
+# 查詢任務狀態（包含成本資訊）
+curl -s "http://10.60.21.11/api/tasks/YOUR_TASK_ID_HERE" | jq '.data.token_cost'
+
 # 建立含Webhook的任務
-curl -X POST http://202.3.184.82/api/tasks \
+curl -X POST http://10.60.21.11/api/tasks \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
     "operation_type": "device_command",
     "devices": ["192.168.1.1"],
     "command": "show environment",
-    "webhook_url": "http://202.3.184.82:8001/webhook/task-complete"
+    "webhook_url": "http://10.60.21.11:8001/webhook/task-complete"
   }' | jq .
 
 # 查詢任務狀態 (需要先從上面的回應獲取task_id)
-curl -s "http://202.3.184.82/api/tasks/YOUR_TASK_ID_HERE" | jq .
+curl -s "http://10.60.21.11/api/tasks/YOUR_TASK_ID_HERE" | jq .
 
 # 管理員 API - 獲取任務統計 (需要認證)
-curl -X GET "http://202.3.184.82/api/admin/tasks/stats" \
+curl -X GET "http://10.60.21.11/api/admin/tasks/stats" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -H "X-API-Key: Cisc0123" | jq .
@@ -1817,7 +2077,7 @@ curl -X GET "http://202.3.184.82/api/admin/tasks/stats" \
   "name": "AI Ops API 請求",
   "type": "httpRequest", 
   "parameters": {
-    "url": "http://202.3.184.82/api",
+    "url": "http://10.60.21.11/api",
     "method": "GET",
     "sendHeaders": true,
     "headerParameters": {
@@ -1845,7 +2105,7 @@ curl -X GET "http://202.3.184.82/api/admin/tasks/stats" \
   "name": "管理員 API 請求",
   "type": "httpRequest", 
   "parameters": {
-    "url": "http://202.3.184.82/api/admin/tasks/stats",
+    "url": "http://10.60.21.11/api/admin/tasks/stats",
     "method": "GET",
     "sendHeaders": true,
     "headerParameters": {
@@ -1917,8 +2177,8 @@ const handleApiError = (error, context = '') => {
 ---
 
 **文檔資訊**:
-- *最後更新: 2025-08-24*
-- *版本: v3.1.0* 
+- *最後更新: 2025-08-27*
+- *版本: v3.2.1* 
 - *援助 FastAPI 版本: 0.115.x*
 - *援助 n8n 版本: 1.x*
 - *作者: Claude Code Assistant*
@@ -1962,6 +2222,8 @@ AI 查詢優化:
 - Webhook 回調重試次數: 3 次
 
 **更新日誌**:
+- v3.2.1: 全面更新為內網 IP (10.60.21.11)，新增指令安全限制說明，完善 token_cost 欄位格式，補充內網存取注意事項
+- v3.2.0: 新增 AI Token 成本追蹤功能文檔，包含詳細的成本資料結構說明和 n8n 整合範例
 - v3.1.2: 修正文檔錯誤，補充管理員 API 說明，更新超時設定和系統限制
 - v3.1.1: 補充 POST /api/tasks 端點詳細說明和錯誤處理
 - v3.1.0: 根據 FastAPI 和 n8n 官方文檔全面更新

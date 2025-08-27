@@ -4,7 +4,7 @@
 # =============================================================================
 # 階段一：依賴安裝階段
 # =============================================================================
-FROM python:3.11-slim AS dependencies
+FROM python:3.12-slim AS dependencies
 
 # 安裝系統依賴和編譯工具
 RUN apt-get update && apt-get install -y \
@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # =============================================================================
 # 階段二：生產運行階段
 # =============================================================================
-FROM python:3.11-slim AS production
+FROM python:3.12-slim AS production
 
 # 建立非 root 用戶以提升安全性
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -41,7 +41,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 從依賴階段複製已安裝的 Python 套件
-COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
 # 建立必要的目錄結構
