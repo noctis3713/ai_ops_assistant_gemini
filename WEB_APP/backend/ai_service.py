@@ -66,6 +66,43 @@ from settings import settings
 logger = logging.getLogger(__name__)
 
 
+# Gemini 模型特殊功能配置
+GEMINI_MODEL_CONFIGS = {
+    "gemini-1.5-pro-latest": {
+        "max_output_tokens": 8192,  # 更大輸出限制
+        "context_window": 2000000,  # 2M 上下文
+        "supports_long_context": True,
+        "recommended_for": "長文檔分析、複雜推理"
+    },
+    "gemini-1.5-pro": {
+        "max_output_tokens": 8192,
+        "context_window": 2000000,  # 2M 上下文
+        "supports_long_context": True,
+        "recommended_for": "長文檔分析、複雜推理"
+    },
+    "gemini-1.5-flash-latest": {
+        "max_output_tokens": 4096,
+        "context_window": 1000000,  # 1M 上下文
+        "supports_long_context": True,
+        "recommended_for": "快速響應、標準分析"
+    },
+    "gemini-1.5-flash": {
+        "max_output_tokens": 4096,
+        "context_window": 1000000,  # 1M 上下文
+        "supports_long_context": True,
+        "recommended_for": "快速響應、標準分析"
+    },
+    "gemini-pro": {
+        "max_output_tokens": 2048,
+        "context_window": 32000,  # 標準上下文
+        "supports_long_context": False,
+        "recommended_for": "向後相容、基礎分析"
+    }
+}
+
+# 移除輸出處理配置函數 - AI 直接處理完整輸出
+
+
 # AI 服務模組，使用 PromptManager 進行提示詞管理
 
 
@@ -131,151 +168,8 @@ def get_ai_logger():
 ai_logger = get_ai_logger()
 
 
-class OutputSummarizer:
-    """設備輸出內容的智能摘要服務
 
-    當網路設備輸出過長時，使用 AI 進行摘要和總結，
-    保留關鍵資訊同時減少冗餘內容。
-    """
 
-    def __init__(self, ai_provider: str = None, model_name: str = None):
-        self.ai_provider = ai_provider or settings.AI_PROVIDER
-        self.max_tokens = 2048
-        self.llm = None
-
-        if self.ai_provider == "claude":
-            self.model_name = model_name or settings.CLAUDE_MODEL
-        else:
-            self.model_name = model_name or settings.GEMINI_MODEL
-
-        self._initialize_ai_service()
-
-    def _initialize_ai_service(self):
-        """根據配置初始化對應的 AI 服務
-
-        根據 ai_provider 設定選擇 Gemini 或 Claude 進行初始化。
-        """
-        if self.ai_provider == "claude":
-            self._initialize_claude()
-        else:
-            self._initialize_gemini()
-
-    def _initialize_claude(self):
-        """配置 Anthropic Claude 摘要服務
-
-        使用 Claude API 金鑰和指定模型初始化摘要器。
-        """
-        if not AI_AVAILABLE:
-            logger.warning("未安裝 langchain_anthropic")
-            return
-
-        api_key = settings.CLAUDE_API_KEY
-        if not api_key:
-            logger.warning("未設定 CLAUDE_API_KEY")
-            return
-
-        try:
-            self.llm = ChatAnthropic(
-                model=self.model_name,
-                temperature=0,
-                max_tokens=self.max_tokens,
-                anthropic_api_key=api_key,
-            )
-            logger.info("Claude 摘要器初始化成功")
-            ai_logger.info(f"[CLAUDE] 摘要器初始化成功 - 模型: {self.model_name}")
-        except Exception as e:
-            logger.error(f"Claude 初始化失敗: {e}")
-            self.llm = None
-
-    def _initialize_gemini(self):
-        """配置 Google Gemini 摘要服務
-
-        使用 Gemini API 金鑰和指定模型初始化摘要器。
-        """
-        if not AI_AVAILABLE:
-            logger.warning("未安裝 langchain_google_genai")
-            return
-
-        api_key = settings.GEMINI_API_KEY
-        if not api_key:
-            logger.warning("未設定 GEMINI_API_KEY")
-            return
-
-        try:
-            self.llm = ChatGoogleGenerativeAI(
-                model=self.model_name, temperature=0, max_output_tokens=self.max_tokens
-            )
-            logger.info("Gemini 摘要器初始化成功")
-            ai_logger.info(f"[GEMINI] 摘要器初始化成功 - 模型: {self.model_name}")
-        except Exception as e:
-            logger.error(f"Gemini 初始化失敗: {e}")
-            self.llm = None
-
-    def get_summary_prompt(self, command: str) -> str:
-        """產生設備輸出摘要的提示詞
-
-        建立結構化的提示，指導 AI 保留關鍵訊息。
-        """
-        return f"""請摘要以下網路指令輸出，保留關鍵診斷資訊：
-
-指令：{command}
-
-要求：
-1. 保留錯誤、警告、異常狀態、重要數值
-2. 排除重複內容和無關細節
-3. 維持技術術語準確性
-4. 使用繁體中文
-5. 開頭標註：「[AI摘要] 原輸出過長，以下為智能摘要：」
-
-請直接輸出摘要結果。"""
-
-    def summarize_output(self, command: str, output: str) -> str:
-        """使用 AI 摘要設備輸出內容
-
-        將超長的設備輸出透過 AI 進行摘要，保留關鍵資訊。
-        """
-        if not self.llm:
-            logger.warning(f"AI 摘要器不可用: {command}")
-            return self._fallback_truncate(command, output)
-
-        try:
-            logger.info(f"開始 AI 摘要: {command}")
-            ai_logger.info(
-                f"[{self.ai_provider.upper()}] 摘要開始 - 指令: {command}, 長度: {len(output)}"
-            )
-
-            prompt = self.get_summary_prompt(command)
-            response = self.llm.invoke(f"{prompt}\n\n輸出內容：\n{output}")
-
-            if response and hasattr(response, "content"):
-                summary = response.content.strip()
-                compression = round((1 - len(summary) / len(output)) * 100, 1)
-                logger.info(f"摘要完成: {command}, 壓縮率: {compression}%")
-                ai_logger.info(
-                    f"[{self.ai_provider.upper()}] 摘要完成 - 壓縮率: {compression}%"
-                )
-                return summary
-
-            logger.warning(f"AI 摘要失敗: {command}")
-            return self._fallback_truncate(command, output)
-
-        except Exception as e:
-            logger.error(f"AI 摘要錯誤: {e}")
-            ai_logger.error(
-                f"[{self.ai_provider.upper()}] 摘要失敗 - {command}: {str(e)[:100]}"
-            )
-            return self._fallback_truncate(command, output)
-
-    def _fallback_truncate(
-        self, command: str, output: str, max_chars: int = 10000
-    ) -> str:
-        """當 AI 摘要失敗時的後備處理
-
-        簡單地截斷輸出內容並附上警告訊息。
-        """
-        return (
-            output[:max_chars] + f"\n\n--- [警告] 指令 '{command}' 輸出過長已截斷 ---"
-        )
 
 
 class AIService:
@@ -445,9 +339,17 @@ class AIService:
             os.environ["GOOGLE_GENERATIVE_AI_API_KEY"] = api_key
             ai_logger.debug("同時設定 GOOGLE_GENERATIVE_AI_API_KEY 環境變數作為備用")
 
+            # 根據模型配置動態設定參數
+            model_config = GEMINI_MODEL_CONFIGS.get(gemini_model, {})
+            max_output_tokens = model_config.get("max_output_tokens", 2048)
+            supports_long_context = model_config.get("supports_long_context", False)
+            
+            ai_logger.debug(f"模型 {gemini_model} 配置: max_output_tokens={max_output_tokens}, supports_long_context={supports_long_context}")
+
             llm = ChatGoogleGenerativeAI(
                 model=gemini_model,
                 temperature=0,
+                max_output_tokens=max_output_tokens,  # 使用動態配置
                 google_api_key=api_key,  # 明確傳遞 API 金鑰參數
                 callbacks=[self.usage_callback] if self.usage_callback else [],
             )
@@ -816,8 +718,10 @@ Question: {{input}}
         # Gemini 定價（每 1,000 tokens）
         gemini_pricing = {
             "gemini-1.5-flash": {"input": 0.00015, "output": 0.0006},
+            "gemini-1.5-flash-latest": {"input": 0.00015, "output": 0.0006},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
-            "gemini-pro": {"input": 0.00125, "output": 0.005},  # 向後相容
+            "gemini-1.5-pro-latest": {"input": 0.00125, "output": 0.005},
+            "gemini-pro": {"input": 0.000125, "output": 0.000375},  # 修正為正確價格
         }
 
         try:
@@ -829,8 +733,8 @@ Question: {{input}}
             elif provider == "gemini":
                 pricing = gemini_pricing.get(model)
                 if not pricing:
-                    # 使用 Flash 作為預設定價
-                    pricing = gemini_pricing["gemini-1.5-flash"]
+                    # 使用 Pro 作為預設定價（配合新的預設模型）
+                    pricing = gemini_pricing["gemini-1.5-pro"]
             else:
                 return 0.0
 
@@ -1446,5 +1350,4 @@ def get_ai_service() -> AIService:
     return _ai_service
 
 
-# AI 摘要服務實例（用於超長輸出處理）
-output_summarizer = OutputSummarizer()
+# AI 直接處理完整的設備輸出，不進行截斷

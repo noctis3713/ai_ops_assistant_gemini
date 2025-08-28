@@ -54,17 +54,26 @@ class Settings(BaseSettings):
         default=None, description="Anthropic Claude API 金鑰"
     )
     GEMINI_MODEL: str = Field(
-        default="gemini-1.5-flash-latest", description="Gemini 模型版本"
+        default="gemini-1.5-pro-latest", description="Gemini 模型版本"
     )
     CLAUDE_MODEL: str = Field(
         default="claude-3-haiku-20240307", description="Claude 模型版本"
     )
     PARSER_VERSION: str = Field(default="original", description="解析器版本")
-    ENABLE_AI_SUMMARIZATION: bool = Field(default=False, description="啟用 AI 摘要功能")
-    AI_SUMMARY_THRESHOLD: int = Field(default=10000, description="AI 摘要觸發門檻")
     PROMPT_LANGUAGE: str = Field(default="zh_TW", description="提示詞語言")
     PROMPT_TEMPLATE_DIR: Optional[str] = Field(
         default="/app/WEB_APP/backend/prompts", description="提示詞模板目錄路徑"
+    )
+    
+    # 長上下文相關配置
+    GEMINI_ENABLE_LONG_CONTEXT: bool = Field(
+        default=True, description="啟用 Gemini 長上下文功能"
+    )
+    GEMINI_CONTEXT_WINDOW: int = Field(
+        default=2000000, description="Gemini 上下文窗口大小 (tokens)"
+    )
+    GEMINI_LONG_CONTEXT_THRESHOLD: int = Field(
+        default=50000, description="觸發長上下文處理的文本長度門檻"
     )
 
     # =========================================================================
@@ -94,7 +103,7 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = Field(default="development", description="執行環境")
     DEBUG: bool = Field(default=True, description="除錯模式")
-    DEVICE_OUTPUT_MAX_LENGTH: int = Field(default=50000, description="設備輸出最大長度")
+    # 移除 DEVICE_OUTPUT_MAX_LENGTH - AI 直接處理完整輸出
     ADMIN_API_KEY: Optional[str] = Field(default="Cisc0123", description="管理員 API 金鑰")
 
     # =========================================================================
@@ -259,6 +268,8 @@ class Settings(BaseSettings):
         self._devices_config = None
         self._groups_config = None
         self._security_config = None
+        
+    # 移除 get_dynamic_output_max_length 函式 - 不再需要動態截斷
 
 
 # 全域實例
