@@ -1,5 +1,5 @@
 # Traefik v3.5.1 配置檔案 - 統一路由管理中心
-# 企業級反向代理設定，支援多系統統一路由管理 (AI Ops + Grafana + Akvorado)
+# 企業級反向代理設定，支援多系統統一路由管理 (AI Ops + Grafana + Akvorado + PostgreSQL)
 
 # =============================================================================
 # 全域配置
@@ -39,9 +39,13 @@ entryPoints:
   # akvorado 私有服務入口點
   akvorado-private:
     address: ":8081"
+  
+  # PostgreSQL TCP 入口點
+  postgres:
+    address: ":8004"
 
 # =============================================================================
-# 提供者配置 - Docker 自動發現 (統一管理三個系統)
+# 提供者配置 - Docker 自動發現 (統一管理四個系統)
 # =============================================================================
 providers:
   # Docker 容器自動發現
@@ -50,8 +54,8 @@ providers:
     exposedByDefault: false  # 只有標記的容器才會被代理
     watch: true  # 即時監控容器變化
     # 統一 Traefik 管理：允許跨網路發現和路由
-    # 支援 ai-ops, grafana, akvorado 三個系統的統一管理
-    constraints: "Label(`traefik.constraint-label`,`ai-ops`) || Label(`traefik.constraint-label`,`grafana`) || Label(`traefik.constraint-label`,`akvorado`)"
+    # 支援 ai-ops, grafana, akvorado, postgres 四個系統的統一管理
+    constraints: "Label(`traefik.constraint-label`,`ai-ops`) || Label(`traefik.constraint-label`,`grafana`) || Label(`traefik.constraint-label`,`akvorado`) || Label(`traefik.constraint-label`,`postgres`)"
     # 預設網路：優先使用 ai-ops-network，但支援跨網路服務發現
     defaultRule: "Host(`10.60.21.11`) || Host(`202.3.184.82`)"
 
