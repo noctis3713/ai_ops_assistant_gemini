@@ -7,7 +7,7 @@ services:
   # 服務一：Traefik 反向代理 (入口點)
   # =============================================================================
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.5.1
     container_name: ai_ops_traefik
     hostname: traefik
     restart: unless-stopped
