@@ -511,7 +511,7 @@ Action Input: the input to the action
 Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: 請按照上面 output_format 部分指定的 JSON 格式回應
+Final Answer: 請使用繁體中文，按照上面 output_format 部分指定的 JSON 格式回應
 
 Question: {{input}}
 {{agent_scratchpad}}"""
