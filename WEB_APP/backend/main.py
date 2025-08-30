@@ -72,6 +72,7 @@ from fastapi.responses import ORJSONResponse
 
 # 匯入路由模組
 from unified_routes import admin_router, health_router, router
+from clickhouse_routes import router as clickhouse_router
 
 # 設定日誌
 logging.basicConfig(
@@ -262,6 +263,7 @@ logger.info(f"中間件配置完成 - CORS 來源: {len(allowed_origins)} 個")
 app.include_router(health_router)  # 健康檢查路由 (無前綴)
 app.include_router(router)  # 主要 API 路由 (/api)
 app.include_router(admin_router)  # 管理路由 (/api/admin)
+app.include_router(clickhouse_router)  # ClickHouse 流量分析路由 (/api/flows)
 logger.info("路由註冊完成")
 
 # =============================================================================
