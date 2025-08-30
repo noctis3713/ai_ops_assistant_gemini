@@ -255,7 +255,7 @@ class ClickHouseService:
                 query = """
                 SELECT
                     SrcCountry as country,
-                    SrcCity as city,
+                    SrcGeoCity as city,
                     count() as flows,
                     sum(Bytes) as bytes,
                     sum(Packets) as packets,
@@ -268,7 +268,7 @@ class ClickHouseService:
                 FROM flows
                 WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
                   AND SrcCountry != ''
-                GROUP BY SrcCountry, SrcCity
+                GROUP BY SrcCountry, SrcGeoCity
                 ORDER BY bytes DESC
                 LIMIT {limit:UInt32}
                 """

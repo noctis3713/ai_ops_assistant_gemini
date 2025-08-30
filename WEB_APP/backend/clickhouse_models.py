@@ -89,8 +89,10 @@ class FlowRecord(BaseModel):
     # 地理位置資訊
     SrcCountry: Optional[str] = Field(None, description="來源國家/地區")
     DstCountry: Optional[str] = Field(None, description="目的國家/地區")
-    SrcCity: Optional[str] = Field(None, description="來源城市")
-    DstCity: Optional[str] = Field(None, description="目的城市")
+    SrcGeoCity: Optional[str] = Field(None, description="來源城市")
+    DstGeoCity: Optional[str] = Field(None, description="目的城市")
+    SrcGeoState: Optional[str] = Field(None, description="來源州/省")
+    DstGeoState: Optional[str] = Field(None, description="目的州/省")
     
     # 網路介面
     InIfName: Optional[str] = Field(None, description="輸入介面名稱")
