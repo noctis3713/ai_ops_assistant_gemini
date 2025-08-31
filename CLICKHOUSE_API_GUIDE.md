@@ -1,20 +1,20 @@
-# ClickHouse API 使用指南
+# n8n ClickHouse Flow API 整合手冊
 
 ## 🚀 系統概覽
 
-**ClickHouse API** 是基於 Akvorado 網路流量收集系統的高效能流量分析 API，提供豐富的網路流量統計和分析功能。
+本手冊為 **n8n 使用者**提供完整的 ClickHouse Flow API 整合指南，讓您能在 n8n 工作流中輕鬆使用網路流量分析功能。
 
 ### 技術規格
 - **架構**: FastAPI + ClickHouse + Akvorado
 - **資料庫**: ClickHouse 25.3.6.56
 - **回應格式**: JSON
-- **平均回應時間**: 30ms
+- **平均回應時間**: 20-35ms
 - **成功率**: 100%
-- **資料量**: 23,000+ 流量記錄
+- **資料量**: 110,000+ 流量記錄
 
 ### 系統狀態
 ✅ **生產就緒** - 所有核心功能完全可用  
-⚡ **高效能** - 平均回應時間 30ms  
+⚡ **高效能** - 平均回應時間 20-35ms  
 🔒 **穩定可靠** - 100% API 成功率  
 
 ---
@@ -35,22 +35,22 @@
 ## 🎯 快速開始
 
 ### 基本資訊
-- **基礎 URL**: `http://your-server/api/flows`
+- **基礎 URL**: `http://ai_ops_backend:8000/api/flows`
 - **協定**: HTTP/1.1
 - **內容類型**: `application/json`
 
 ### 健康檢查
 ```bash
-curl -X GET "http://localhost/api/flows/health"
+curl -X GET "http://ai_ops_backend:8000/api/flows/health"
 ```
 
 ### 快速測試
 ```bash
 # 獲取最近1小時的流量概覽
-curl -X GET "http://localhost/api/flows/summary?hours=1"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
 
 # 獲取 Top 5 流量來源
-curl -X GET "http://localhost/api/flows/top-talkers?limit=5&hours=1"
+curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=5&hours=1"
 ```
 
 ---
@@ -70,13 +70,37 @@ curl -X GET "http://localhost/api/flows/top-talkers?limit=5&hours=1"
   "status": "connected",
   "database": "default",
   "version": "25.3.6.56",
-  "uptime_seconds": 3491,
+  "uptime_seconds": 14507,
   "tables": [
     {
       "name": "flows",
       "engine": "MergeTree",
-      "total_rows": 23818,
-      "total_bytes": 388786
+      "total_rows": 111473,
+      "total_bytes": 1564244
+    },
+    {
+      "name": "flows_1m0s",
+      "engine": "SummingMergeTree",
+      "total_rows": 59143,
+      "total_bytes": 867619
+    },
+    {
+      "name": "flows_5m0s",
+      "engine": "SummingMergeTree",
+      "total_rows": 31522,
+      "total_bytes": 377017
+    },
+    {
+      "name": "flows_1h0m0s",
+      "engine": "SummingMergeTree",
+      "total_rows": 11512,
+      "total_bytes": 116488
+    },
+    {
+      "name": "exporters",
+      "engine": "ReplacingMergeTree",
+      "total_rows": 24,
+      "total_bytes": 5538
     }
   ]
 }
@@ -98,10 +122,10 @@ curl -X GET "http://localhost/api/flows/top-talkers?limit=5&hours=1"
 **使用範例**:
 ```bash
 # 獲取1小時統計（包含詳細資訊）
-curl -X GET "http://localhost/api/flows/summary?hours=1&include_details=true"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1&include_details=true"
 
 # 獲取24小時統計
-curl -X GET "http://localhost/api/flows/summary?hours=24"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=24"
 ```
 
 **回應範例**:
@@ -142,10 +166,10 @@ curl -X GET "http://localhost/api/flows/summary?hours=24"
 **使用範例**:
 ```bash
 # 獲取 Top 5 流量來源（按位元組）
-curl -X GET "http://localhost/api/flows/top-talkers?limit=5&hours=1&by_field=bytes&src_or_dst=src"
+curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=5&hours=1&by_field=bytes&src_or_dst=src"
 
 # 獲取 Top 10 流量目的地（按封包）
-curl -X GET "http://localhost/api/flows/top-talkers?limit=10&hours=1&by_field=packets&src_or_dst=dst"
+curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=10&hours=1&by_field=packets&src_or_dst=dst"
 ```
 
 **回應範例**:
@@ -176,27 +200,35 @@ curl -X GET "http://localhost/api/flows/top-talkers?limit=10&hours=1&by_field=pa
 
 **使用範例**:
 ```bash
-curl -X GET "http://localhost/api/flows/protocols?hours=1&limit=10"
+curl -X GET "http://ai_ops_backend:8000/api/flows/protocols?hours=1&limit=10"
 ```
 
 **回應範例**:
 ```json
 [
   {
-    "protocol_number": 6,
-    "protocol_name": "TCP",
-    "flows": 1500,
-    "bytes": 500000,
-    "packets": 2000,
-    "percentage": 75.5
-  },
-  {
     "protocol_number": 17,
     "protocol_name": "UDP",
-    "flows": 500,
-    "bytes": 150000,
-    "packets": 800,
-    "percentage": 22.7
+    "flows": 1636,
+    "bytes": 49217710,
+    "packets": 48457,
+    "percentage": 99.27
+  },
+  {
+    "protocol_number": 6,
+    "protocol_name": "TCP",
+    "flows": 1104,
+    "bytes": 271469,
+    "packets": 1393,
+    "percentage": 0.55
+  },
+  {
+    "protocol_number": 1,
+    "protocol_name": "ICMP",
+    "flows": 696,
+    "bytes": 88042,
+    "packets": 1020,
+    "percentage": 0.18
   }
 ]
 ```
@@ -218,10 +250,10 @@ curl -X GET "http://localhost/api/flows/protocols?hours=1&limit=10"
 **使用範例**:
 ```bash
 # 獲取國家層級統計
-curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=5&by_country_only=true"
+curl -X GET "http://ai_ops_backend:8000/api/flows/geolocation?hours=1&limit=5&by_country_only=true"
 
 # 獲取城市層級統計
-curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=10&by_country_only=false"
+curl -X GET "http://ai_ops_backend:8000/api/flows/geolocation?hours=1&limit=10&by_country_only=false"
 ```
 
 **回應範例**:
@@ -229,19 +261,27 @@ curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=10&by_country_
 [
   {
     "country": "TW",
-    "city": "Taoyuan District",
-    "flows": 54,
-    "bytes": 6304,
-    "packets": 55,
-    "percentage": 52.85
+    "city": "Taipei",
+    "flows": 207,
+    "bytes": 730211,
+    "packets": 730,
+    "percentage": 37.14
+  },
+  {
+    "country": "JO",
+    "city": "Amman",
+    "flows": 14851,
+    "bytes": 715968,
+    "packets": 14867,
+    "percentage": 36.42
   },
   {
     "country": "TW",
-    "city": "Kaohsiung",
-    "flows": 30,
-    "bytes": 1216,
-    "packets": 30,
-    "percentage": 10.20
+    "city": "Taoyuan",
+    "flows": 11,
+    "bytes": 134684,
+    "packets": 126,
+    "percentage": 6.85
   }
 ]
 ```
@@ -249,7 +289,7 @@ curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=10&by_country_
 **📍 地理資料說明**: 
 - 當 `by_country_only=true` 時：返回國家層級統計，城市欄位為空
 - 當 `by_country_only=false` 時：返回城市層級統計，僅顯示有城市資料的記錄
-- 城市資料覆蓋率約 0.1-0.2%，主要包含台灣、美國、日本等地的城市
+- 城市資料覆蓋率約 18-20%，主要包含台灣、美國、日本、約旦等地的城市
 
 ---
 
@@ -268,10 +308,10 @@ curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=10&by_country_
 **使用範例**:
 ```bash
 # 獲取來源 ASN 分析
-curl -X GET "http://localhost/api/flows/asn?hours=1&limit=5&src_or_dst=src"
+curl -X GET "http://ai_ops_backend:8000/api/flows/asn?hours=1&limit=5&src_or_dst=src"
 
 # 獲取目的 ASN 分析
-curl -X GET "http://localhost/api/flows/asn?hours=1&limit=5&src_or_dst=dst"
+curl -X GET "http://ai_ops_backend:8000/api/flows/asn?hours=1&limit=5&src_or_dst=dst"
 ```
 
 **回應範例**:
@@ -305,10 +345,10 @@ curl -X GET "http://localhost/api/flows/asn?hours=1&limit=5&src_or_dst=dst"
 **使用範例**:
 ```bash
 # 獲取2小時時間序列（15分鐘間隔）
-curl -X GET "http://localhost/api/flows/timeseries?hours=2&interval_minutes=15"
+curl -X GET "http://ai_ops_backend:8000/api/flows/timeseries?hours=2&interval_minutes=15"
 
 # 獲取6小時時間序列（30分鐘間隔）
-curl -X GET "http://localhost/api/flows/timeseries?hours=6&interval_minutes=30"
+curl -X GET "http://ai_ops_backend:8000/api/flows/timeseries?hours=6&interval_minutes=30"
 ```
 
 **回應範例**:
@@ -342,30 +382,38 @@ curl -X GET "http://localhost/api/flows/timeseries?hours=6&interval_minutes=30"
 **使用範例**:
 ```bash
 # 獲取目的埠號統計
-curl -X GET "http://localhost/api/flows/ports?hours=1&limit=10&src_or_dst=dst"
+curl -X GET "http://ai_ops_backend:8000/api/flows/ports?hours=1&limit=10&src_or_dst=dst"
 
 # 獲取來源埠號統計
-curl -X GET "http://localhost/api/flows/ports?hours=1&limit=10&src_or_dst=src"
+curl -X GET "http://ai_ops_backend:8000/api/flows/ports?hours=1&limit=10&src_or_dst=src"
 ```
 
 **回應範例**:
 ```json
 [
   {
-    "port": 80,
-    "port_name": "HTTP",
-    "flows": 500,
-    "bytes": 150000,
-    "packets": 750,
-    "percentage": 35.2
+    "port": 8853,
+    "port_name": "Port-8853",
+    "flows": 7,
+    "bytes": 9169221,
+    "packets": 7191,
+    "percentage": 18.67
   },
   {
-    "port": 443,
-    "port_name": "HTTPS",
-    "flows": 300,
-    "bytes": 120000,
-    "packets": 600,
-    "percentage": 28.1
+    "port": 8834,
+    "port_name": "Port-8834",
+    "flows": 22,
+    "bytes": 5520371,
+    "packets": 4422,
+    "percentage": 11.24
+  },
+  {
+    "port": 8850,
+    "port_name": "Port-8850",
+    "flows": 9,
+    "bytes": 3968351,
+    "packets": 3204,
+    "percentage": 8.08
   }
 ]
 ```
@@ -387,10 +435,10 @@ curl -X GET "http://localhost/api/flows/ports?hours=1&limit=10&src_or_dst=src"
 **使用範例**:
 ```bash
 # 獲取輸入介面統計
-curl -X GET "http://localhost/api/flows/interfaces?hours=1&limit=5&direction=input"
+curl -X GET "http://ai_ops_backend:8000/api/flows/interfaces?hours=1&limit=5&direction=input"
 
 # 獲取輸出介面統計
-curl -X GET "http://localhost/api/flows/interfaces?hours=1&limit=5&direction=output"
+curl -X GET "http://ai_ops_backend:8000/api/flows/interfaces?hours=1&limit=5&direction=output"
 ```
 
 **回應範例**:
@@ -430,13 +478,13 @@ curl -X GET "http://localhost/api/flows/interfaces?hours=1&limit=5&direction=out
 **使用範例**:
 ```bash
 # 基本搜尋
-curl -X GET "http://localhost/api/flows/search?hours=1&limit=5&page=1"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?hours=1&limit=5&page=1"
 
 # TCP 流量搜尋
-curl -X GET "http://localhost/api/flows/search?hours=1&limit=10&page=1&protocol=6"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?hours=1&limit=10&page=1&protocol=6"
 
 # 搜尋特定 IP
-curl -X GET "http://localhost/api/flows/search?src_addr=192.168.1.100&hours=1"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?src_addr=192.168.1.100&hours=1"
 ```
 
 **回應範例**:
@@ -517,16 +565,18 @@ curl -X GET "http://localhost/api/flows/search?src_addr=192.168.1.100&hours=1"
 
 ## 🔐 認證與連線
 
-### 連線方式
-目前 API 透過 Traefik 反向代理提供服務，支援以下連線方式：
+### API 連線方式
 
-```bash
-# 透過 Traefik（推薦）
-http://your-server/api/flows/
-
-# 容器直連（內部網路）
+**n8n 使用的標準路徑**：
+```
 http://ai_ops_backend:8000/api/flows/
 ```
+
+**說明**：
+- 這是 Docker 內部網路通訊路徑
+- n8n 和 ai_ops_backend 在同一 Docker 網路中
+- 無需額外認證或配置
+- 所有 n8n HTTP Request 節點都使用此基礎路徑
 
 ### 錯誤處理
 API 使用標準 HTTP 狀態碼：
@@ -545,115 +595,89 @@ API 使用標準 HTTP 狀態碼：
 
 ---
 
-## 🔧 使用範例
+## 🔧 n8n 工作流範例
 
-### Python 範例
+### 基本網路監控工作流
 
-```python
-import requests
-import json
+**節點 1: Schedule Trigger**
+- **Name**: 每 5 分鐘執行
+- **Interval**: Every `5` Minutes
 
-class ClickHouseAPIClient:
-    def __init__(self, base_url="http://localhost/api/flows"):
-        self.base_url = base_url
-    
-    def get_health(self):
-        """獲取健康狀態"""
-        response = requests.get(f"{self.base_url}/health")
-        return response.json()
-    
-    def get_summary(self, hours=1, include_details=False):
-        """獲取流量概覽"""
-        params = {
-            "hours": hours,
-            "include_details": str(include_details).lower()
-        }
-        response = requests.get(f"{self.base_url}/summary", params=params)
-        return response.json()
-    
-    def get_top_talkers(self, limit=10, hours=1, by_field="bytes", src_or_dst="src"):
-        """獲取 Top N 流量"""
-        params = {
-            "limit": limit,
-            "hours": hours,
-            "by_field": by_field,
-            "src_or_dst": src_or_dst
-        }
-        response = requests.get(f"{self.base_url}/top-talkers", params=params)
-        return response.json()
+**節點 2: HTTP Request - 流量概覽**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/summary`
+- **Query Parameters**: 
+  - Name: `hours`, Value: `1`
+  - Name: `include_details`, Value: `true`
 
-# 使用範例
-client = ClickHouseAPIClient()
+**節點 3: IF - 檢查流量閾值**
+- **Condition**: `{{ $json.summary.total_flows > 1000 }}`
+- **True Branch**: 發送告警
+- **False Branch**: 正常結束
 
-# 檢查健康狀態
-health = client.get_health()
-print(f"Status: {health['status']}")
+### Top Talkers 分析工作流
 
-# 獲取1小時流量概覽
-summary = client.get_summary(hours=1, include_details=True)
-print(f"Total flows: {summary['summary']['total_flows']}")
+**節點 1: Manual Trigger**
+- **Name**: 手動觸發
 
-# 獲取 Top 5 流量來源
-top_talkers = client.get_top_talkers(limit=5)
-for talker in top_talkers:
-    print(f"{talker['address']}: {talker['bytes']} bytes ({talker['percentage']}%)")
-```
+**節點 2: HTTP Request - Top Talkers**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/top-talkers`
+- **Query Parameters**:
+  - Name: `limit`, Value: `10`
+  - Name: `hours`, Value: `1`
+  - Name: `by_field`, Value: `bytes`
+  - Name: `src_or_dst`, Value: `src`
 
-### JavaScript/Node.js 範例
-
+**節點 3: Function - 資料處理**
 ```javascript
-const axios = require('axios');
+const topTalkers = $input.all();
+const result = [];
 
-class ClickHouseAPIClient {
-    constructor(baseURL = 'http://localhost/api/flows') {
-        this.baseURL = baseURL;
-        this.client = axios.create({ baseURL });
-    }
-
-    async getHealth() {
-        const response = await this.client.get('/health');
-        return response.data;
-    }
-
-    async getSummary(hours = 1, includeDetails = false) {
-        const response = await this.client.get('/summary', {
-            params: { hours, include_details: includeDetails }
-        });
-        return response.data;
-    }
-
-    async getTopTalkers(limit = 10, hours = 1, byField = 'bytes', srcOrDst = 'src') {
-        const response = await this.client.get('/top-talkers', {
-            params: { limit, hours, by_field: byField, src_or_dst: srcOrDst }
-        });
-        return response.data;
-    }
+for (let item of topTalkers) {
+  if (item.json.percentage > 10) {
+    result.push({
+      json: {
+        alert: '高流量 IP',
+        ip: item.json.address,
+        bytes: item.json.bytes,
+        percentage: item.json.percentage
+      }
+    });
+  }
 }
 
-// 使用範例
-(async () => {
-    const client = new ClickHouseAPIClient();
-    
-    try {
-        // 檢查健康狀態
-        const health = await client.getHealth();
-        console.log(`Status: ${health.status}`);
-        
-        // 獲取流量概覽
-        const summary = await client.getSummary(1, true);
-        console.log(`Total flows: ${summary.summary.total_flows}`);
-        
-        // 獲取 Top 5 流量來源
-        const topTalkers = await client.getTopTalkers(5);
-        topTalkers.forEach(talker => {
-            console.log(`${talker.address}: ${talker.bytes} bytes (${talker.percentage}%)`);
-        });
-        
-    } catch (error) {
-        console.error('API Error:', error.response?.data || error.message);
-    }
-})();
+return result;
 ```
+
+### 地理位置分析工作流
+
+**節點 1: Webhook Trigger**
+- **HTTP Method**: GET
+- **Path**: geolocation-analysis
+
+**節點 2: HTTP Request - 國家統計**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/geolocation`
+- **Query Parameters**:
+  - Name: `by_country_only`, Value: `true`
+  - Name: `limit`, Value: `20`
+  - Name: `hours`, Value: `24`
+
+**節點 3: HTTP Request - 城市統計**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/geolocation`
+- **Query Parameters**:
+  - Name: `by_country_only`, Value: `false`
+  - Name: `limit`, Value: `15`
+  - Name: `hours`, Value: `24`
+
+**節點 4: Merge - 合併結果**
+- **Mode**: Combine
+- **Output Data**: All Incoming Data
+
+**節點 5: Respond to Webhook**
+- **Respond With**: All Incoming Items
 
 ---
 
@@ -664,10 +688,10 @@ class ClickHouseAPIClient {
 
 ```bash
 # 第1頁，每頁100筆
-curl -X GET "http://localhost/api/flows/search?page=1&limit=100"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?page=1&limit=100"
 
 # 第2頁，每頁50筆
-curl -X GET "http://localhost/api/flows/search?page=2&limit=50"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?page=2&limit=50"
 ```
 
 ### 時間範圍控制
@@ -675,13 +699,13 @@ curl -X GET "http://localhost/api/flows/search?page=2&limit=50"
 
 ```bash
 # 最近1小時
-curl -X GET "http://localhost/api/flows/summary?hours=1"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
 
 # 最近24小時
-curl -X GET "http://localhost/api/flows/summary?hours=24"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=24"
 
 # 最近7天（168小時）
-curl -X GET "http://localhost/api/flows/summary?hours=168"
+curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=168"
 ```
 
 ### 多維度過濾
@@ -689,10 +713,10 @@ curl -X GET "http://localhost/api/flows/summary?hours=168"
 
 ```bash
 # TCP + 特定 IP + 特定埠號
-curl -X GET "http://localhost/api/flows/search?protocol=6&src_addr=192.168.1.100&dst_port=80"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=6&src_addr=192.168.1.100&dst_port=80"
 
 # UDP DNS 查詢
-curl -X GET "http://localhost/api/flows/search?protocol=17&dst_port=53"
+curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=17&dst_port=53"
 ```
 
 ---
@@ -704,19 +728,19 @@ curl -X GET "http://localhost/api/flows/search?protocol=17&dst_port=53"
 1. **合理設置時間範圍**
    ```bash
    # 推薦：使用較短的時間範圍進行頻繁查詢
-   curl -X GET "http://localhost/api/flows/summary?hours=1"
+   curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
    
    # 避免：過長的時間範圍
-   curl -X GET "http://localhost/api/flows/summary?hours=168"  # 謹慎使用
+   curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=168"  # 謹慎使用
    ```
 
 2. **適當的分頁大小**
    ```bash
    # 推薦：合理的分頁大小
-   curl -X GET "http://localhost/api/flows/search?limit=100"
+   curl -X GET "http://ai_ops_backend:8000/api/flows/search?limit=100"
    
    # 避免：過大的分頁
-   curl -X GET "http://localhost/api/flows/search?limit=1000"  # 回應時間較長
+   curl -X GET "http://ai_ops_backend:8000/api/flows/search?limit=1000"  # 回應時間較長
    ```
 
 3. **使用健康檢查**
@@ -771,7 +795,7 @@ def monitor_api_performance():
     start_time = time.time()
     
     try:
-        health = requests.get("http://localhost/api/flows/health", timeout=10)
+        health = requests.get("http://ai_ops_backend:8000/api/flows/health", timeout=10)
         response_time = (time.time() - start_time) * 1000
         
         if health.status_code == 200:
@@ -788,102 +812,258 @@ def monitor_api_performance():
 
 ---
 
-## 🔍 故障排除
+## 🔍 n8n 故障排除
 
-### 常見問題
+### 常見問題與解決
 
-#### 1. 連線失敗
-**問題**: `Connection refused` 或 `Cannot connect to host`
+#### 1. n8n HTTP Request 連線失敗
 
-**解決方案**:
+**問題現象**: 節點顯示 "Connection refused" 或 "Cannot connect to host"
+
+**檢查步驟**：
+1. **檢查 URL 設定**：確認使用 `http://ai_ops_backend:8000/api/flows`
+2. **檢查容器狀態**：確認 ai_ops_backend 容器運行中
+3. **網路連通**：確認 n8n 與後端在同一 Docker 網路
+
+**容器連通性測試**：
 ```bash
-# 檢查服務狀態
-docker ps | grep ai_ops_backend
+# 從 n8n 容器測試連線（n8n 容器使用 wget）
+docker exec n8n_main wget -qO- http://ai_ops_backend:8000/api/flows/health
 
-# 檢查網路連線
-curl -I http://localhost/health
+# 檢查 Docker 網路配置（ai-ops-network 172.21.0.0/16）
+docker network inspect ai-ops-network
 
-# 檢查容器日誌
-docker logs ai_ops_backend
+# 容器 IP 動態分配，使用容器名稱進行通訊
+docker exec n8n_main ping -c 3 ai_ops_backend
 ```
 
-#### 2. 回應緩慢
-**問題**: API 回應時間超過預期
+**n8n 解決方案**：
+- 設定 "Continue On Fail" = 是
+- 增加 "Retry on Fail" = 3 次
+- 設定 "Timeout" = 30000ms
 
-**解決方案**:
-- 減少時間範圍 (`hours` 參數)
-- 降低限制數量 (`limit` 參數)
-- 檢查 ClickHouse 資源使用狀況
+#### 2. HTTP Request 回應緩慢
 
-#### 3. 地理位置資料為空
-**問題**: 城市欄位返回空值
+**問題現象**: n8n 節點執行超時或過慢
 
-**說明**: 這是已知限制，目前只有國家層級資料可用
-```json
-{
-  "country": "TW",
-  "city": "",  // 目前為空
-  "flows": 1946
+**n8n 優化設定**：
+
+**Batching 設定**：
+- Items per Batch: `5`
+- Batch Interval (ms): `2000`
+
+**Query Parameters 優化**：
+- `hours`: 使用較小值 (1-6)
+- `limit`: 降低到 50-100
+- `interval_minutes`: 增加間隔 (5-15)
+
+#### 3. 城市資料空值問題
+
+**問題現象**: geolocation API 回傳部分記錄的 city 欄位為 null
+
+**說明**: 這是正常現象，不需修復
+
+**n8n 處理方式**：
+
+**Function 節點 - 過濾空值資料**
+```javascript
+const geoData = $input.all();
+const filteredData = [];
+
+for (let item of geoData) {
+  // 只保留有城市資料的記錄
+  if (item.json.city && item.json.city !== '') {
+    filteredData.push(item);
+  }
+}
+
+return filteredData;
+```
+
+**正確的 API 設定**：
+- 獲取城市資料：`by_country_only` = `false`
+- 獲取國家資料：`by_country_only` = `true`
+
+#### 4. 參數驗證錯誤 (422)
+
+**問題現象**: n8n 節點返回 HTTP 422 錯誤
+
+**常見原因與解決**：
+
+| 參數 | 錯誤範例 | 正確設定 |
+|--------|------------|-------------|
+| `hours` | 超過 168 | 1-168 範圍內 |
+| `limit` | 超過 1000 | 1-1000 範圍內 |
+| `protocol` | 超過 255 | 0-255 範圍內 |
+| `src_port` | 超過 65535 | 0-65535 範圍內 |
+
+**n8n 預防設定**：
+
+**Function 節點 - 參數驗證**
+```javascript
+function validateParams(params) {
+  const validated = {};
+  
+  // 驗證 hours 參數
+  validated.hours = Math.min(Math.max(params.hours || 1, 1), 168);
+  
+  // 驗證 limit 參數
+  validated.limit = Math.min(Math.max(params.limit || 10, 1), 1000);
+  
+  // 驗證 protocol 參數
+  if (params.protocol !== undefined) {
+    validated.protocol = Math.min(Math.max(params.protocol, 0), 255);
+  }
+  
+  return [{ json: validated }];
+}
+
+// 使用範例
+return validateParams({
+  hours: $node["Previous Node"].json.hours,
+  limit: $node["Previous Node"].json.limit,
+  protocol: $node["Previous Node"].json.protocol
+});
+```
+
+### n8n Debug 技巧
+
+**1. 啟用詳細日誌**
+- 在 HTTP Request 節點設定 "Always Output Data" = 是
+- 使用 "Include Response Headers and Status" = 是
+
+**2. 使用 Debug 節點**
+```javascript
+// Debug 節點：輸出詳細資訊
+console.log('Request URL:', $node["HTTP Request"].parameter.url);
+console.log('Status Code:', $node["HTTP Request"].statusCode);
+console.log('Response:', JSON.stringify($node["HTTP Request"].json, null, 2));
+
+return $input.all();
+```
+
+**3. 條件分支測試**
+
+**IF 節點 - 檢查回應**
+```javascript
+const response = $node["HTTP Request"];
+
+// 檢查是否成功
+if (response.statusCode === 200 && response.json && !response.json.error) {
+  return true; // 成功分支
+} else {
+  return false; // 錯誤處理分支
 }
 ```
 
-**建議**: 使用 `by_country_only=true` 參數獲取國家統計
+### n8n HTTP 狀態碼處理
 
-#### 4. 參數驗證錯誤
-**問題**: `HTTP 422 Unprocessable Entity`
+| HTTP 狀態碼 | n8n 處理方式 | 建議操作 |
+|------------|-----------------|----------------|
+| 200 | 成功，繼續工作流 | 處理正常資料 |
+| 400 | 設定Continue On Fail | 檢查 Query Parameters |
+| 404 | 設定Continue On Fail | 檢查 URL 路徑 |
+| 422 | 設定Continue On Fail | 驗證參數範圍 |
+| 500 | 啟用 Retry on Fail | 稍後重試或通知 |
 
-**常見原因**:
-- 參數範圍超出限制
-- 參數類型不正確
-- 必要參數遺失
+**n8n 狀態碼檢查 Expression**：
+```javascript
+// 檢查是否成功
+{{ $node["HTTP Request"].statusCode === 200 }}
 
-**解決方案**:
-```bash
-# 檢查參數範圍
-curl -X GET "http://localhost/api/flows/summary?hours=1000"  # ❌ 超出範圍
-curl -X GET "http://localhost/api/flows/summary?hours=24"    # ✅ 正確
+// 檢查是否為系統錯誤
+{{ $node["HTTP Request"].statusCode >= 500 }}
 
-# 檢查參數類型
-curl -X GET "http://localhost/api/flows/summary?hours=abc"   # ❌ 類型錯誤
-curl -X GET "http://localhost/api/flows/summary?hours=24"    # ✅ 正確
+// 檢查是否為客戶端錯誤
+{{ $node["HTTP Request"].statusCode >= 400 && $node["HTTP Request"].statusCode < 500 }}
 ```
 
-### 錯誤代碼對照
+### n8n Debug 工具
 
-| HTTP 狀態碼 | 說明 | 常見原因 |
-|------------|------|----------|
-| 200 | 成功 | 正常回應 |
-| 400 | 請求錯誤 | 參數格式錯誤 |
-| 404 | 找不到資源 | 端點路徑錯誤 |
-| 422 | 參數驗證失敗 | 參數範圍或類型錯誤 |
-| 500 | 內部服務器錯誤 | ClickHouse 查詢失敗 |
+#### 1. n8n 內建測試工作流
 
-### 偵錯工具
+**建立 API 測試工作流**：
 
-#### 1. API 測試腳本
-使用提供的測試腳本進行全面檢查：
+**節點 1**: Manual Trigger  
+**節點 2**: HTTP Request - 健康檢查  
+**節點 3**: HTTP Request - 流量概覽  
+**節點 4**: HTTP Request - Top Talkers  
+**節點 5**: Function - 測試結果統計
 
-```bash
-# 在容器內執行完整測試
-docker exec ai_ops_backend python3 /tmp/test_clickhouse_api_fixed.py
+```javascript
+// 節點 5: 統計所有 API 請求結果
+const results = {
+  health: $node["HTTP Request - 健康檢查"].statusCode,
+  summary: $node["HTTP Request - 流量概覽"].statusCode,
+  topTalkers: $node["HTTP Request - Top Talkers"].statusCode
+};
+
+const allSuccess = Object.values(results).every(code => code === 200);
+
+return [{
+  json: {
+    testResults: results,
+    allTestsPassed: allSuccess,
+    successRate: Object.values(results).filter(code => code === 200).length + '/' + Object.keys(results).length,
+    timestamp: new Date().toISOString()
+  }
+}];
 ```
 
-#### 2. 手動健康檢查
-```bash
-# 基本連線測試
-curl -v http://localhost/api/flows/health
+#### 2. 即時連線測試
 
-# 檢查回應時間
-time curl -s http://localhost/api/flows/health > /dev/null
+**建立快速測試節點**：
+
+**HTTP Request - 連線測試**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/health`
+- **Timeout**: 5000ms
+- **Include Response Headers and Status**: 是
+
+#### 3. 日誌輸出工作流
+
+**Function 節點 - API 請求日誌**
+```javascript
+const request = $node["HTTP Request"];
+const logData = {
+  timestamp: new Date().toISOString(),
+  method: 'GET',
+  url: request.parameter?.url || 'Unknown',
+  statusCode: request.statusCode,
+  responseTime: request.responseTime || 'N/A',
+  success: request.statusCode === 200,
+  error: request.statusCode !== 200 ? request.json?.detail : null
+};
+
+console.log('API Request Log:', JSON.stringify(logData, null, 2));
+
+return [{ json: logData }];
 ```
 
-#### 3. 日誌監控
-```bash
-# 監控後端日誌
-docker logs -f ai_ops_backend
+#### 4. 效能監控工作流
 
-# 監控 ClickHouse 日誌
-docker logs -f akvorado-clickhouse-1
+**節點 1**: Interval Trigger (5 分鐘)  
+**節點 2**: Set Performance Timer  
+**節點 3**: HTTP Request - Performance Test  
+**節點 4**: Function - Performance Analysis  
+
+```javascript
+// 效能分析
+const startTime = $node["Set Performance Timer"].json.startTime;
+const endTime = Date.now();
+const responseTime = endTime - startTime;
+const httpResponse = $node["HTTP Request - Performance Test"];
+
+const performanceData = {
+  endpoint: httpResponse.parameter?.url || 'Unknown',
+  responseTime: responseTime + 'ms',
+  statusCode: httpResponse.statusCode,
+  dataSize: JSON.stringify(httpResponse.json).length,
+  timestamp: new Date().toISOString(),
+  isHealthy: httpResponse.statusCode === 200 && responseTime < 5000
+};
+
+return [{ json: performanceData }];
 ```
 
 ---
@@ -892,26 +1072,26 @@ docker logs -f akvorado-clickhouse-1
 
 ### 基準測試結果
 
-基於實際測試（2025-08-30），以下是各端點的效能指標：
+基於實際測試（2025-08-31），以下是各端點的效能指標：
 
-| 端點 | 平均回應時間 | 最快 | 最慢 | 資料點數 |
-|------|--------------|------|------|----------|
-| `/health` | 37.73ms | - | - | 1 |
-| `/summary` | 15.92ms | 15.55ms | 16.28ms | 1 |
-| `/top-talkers` | 46.75ms | 25.51ms | 67.99ms | 5-10 |
-| `/protocols` | 24.4ms | - | - | 3 |
-| `/geolocation` | 41.08ms | 27.17ms | 54.99ms | 3-5 |
-| `/asn` | 28.45ms | 28.32ms | 28.59ms | 5 |
-| `/timeseries` | 18.81ms | 17.64ms | 19.99ms | 9-13 |
-| `/ports` | 27.95ms | 27.18ms | 28.72ms | 10 |
-| `/interfaces` | 28.88ms | 26.6ms | 31.16ms | 5 |
-| `/search` | 36.23ms | 24.06ms | 48.39ms | 1-5 |
+| 端點 | 平均回應時間 | 狀態 | 測試結果 |
+|------|--------------|------|----------|
+| `/health` | 19ms | ✅ | 正常 |
+| `/summary` | 18ms | ✅ | 正常 |
+| `/top-talkers` | 34ms | ✅ | 正常 |
+| `/protocols` | 27ms | ✅ | 正常 |
+| `/geolocation` | 30ms | ✅ | 正常 |
+| `/asn` | 33ms | ✅ | 正常 |
+| `/timeseries` | 17ms | ✅ | 正常 |
+| `/ports` | 28ms | ✅ | 正常 |
+| `/interfaces` | 29ms | ✅ | 正常 |
+| `/search` | 28ms | ✅ | 正常 |
 
 ### 系統容量
-- **總流量記錄**: 23,818+
+- **總流量記錄**: 110,000+
 - **併發支援**: 經測試支援多個同時請求
 - **資料更新**: 即時流量資料
-- **可用性**: 100% (18/18 測試通過)
+- **可用性**: 100% (10/10 測試通過)
 
 ---
 
@@ -920,12 +1100,15 @@ docker logs -f akvorado-clickhouse-1
 ### 當前版本
 - **API 版本**: 3.0.0
 - **ClickHouse 版本**: 25.3.6.56
-- **最後更新**: 2025-08-30
+- **最後更新**: 2025-08-31
 - **測試狀態**: ✅ 全部通過
 
 ### 更新記錄
 
 **2025-08-31**:
+- ✅ 優化 ClickHouse API 子查詢性能，移除重複查詢
+- ✅ 更新文檔範例和數據統計，反映系統實際狀況
+- ✅ 修正地理位置城市資料覆蓋率（18-20%）
 - ✅ 搜尋 API 新增城市和州/省欄位 (`SrcGeoCity`, `DstGeoCity`, `SrcGeoState`, `DstGeoState`)
 - ✅ 地理位置 API 支援城市級統計分析
 - ✅ 修復地理位置城市分組邏輯
@@ -933,7 +1116,7 @@ docker logs -f akvorado-clickhouse-1
 
 ### 已知限制
 
-1. **地理位置城市資料**: 城市和州/省資料覆蓋率約 0.1-0.2%，主要來源為台灣、美國、日本等地
+1. **地理位置城市資料**: 城市和州/省資料覆蓋率約 18-20%，主要來源為台灣、美國、日本、約旦等地
 2. **時間範圍限制**: 部分端點限制最大查詢範圍（如 Top Talkers 限制24小時）
 3. **分頁限制**: 搜尋端點每頁最多1000筆記錄
 

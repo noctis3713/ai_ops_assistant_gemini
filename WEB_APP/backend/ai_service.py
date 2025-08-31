@@ -39,11 +39,11 @@ try:
     import warnings
 
     from langchain import hub
-    from langchain.agents import AgentExecutor, create_react_agent
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
     from langchain_anthropic import ChatAnthropic
     from langchain_core.callbacks import UsageMetadataCallbackHandler
     from langchain_core.output_parsers import PydanticOutputParser
-    from langchain_core.prompts import PromptTemplate
+    from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
     from langchain_core.tools import Tool
     from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -105,23 +105,6 @@ GEMINI_MODEL_CONFIGS = {
 
 # AI 服務模組，使用 PromptManager 進行提示詞管理
 
-
-def _get_few_shot_examples():
-    """獲取 AI 思考鏈示範範例
-
-    透過提示詞管理器載入預定義的 ReAct 範例，
-    幫助 AI 理解如何逐步分析網路問題。
-    """
-    try:
-        # 獲取 PromptManager 實例
-        prompt_manager = get_prompt_manager()
-
-        # 使用 PromptManager 渲染思考鏈範例
-        return prompt_manager.render_react_examples()
-    except Exception as e:
-        logger.error(f"獲取思考鏈範例失敗: {e}")
-        # 返回空字串作為後備，避免完全失敗
-        return ""
 
 
 def get_ai_logger():
@@ -189,6 +172,7 @@ class AIService:
         """
         self.agent_executor = None
         self.ai_initialized = False
+        self.llm = None  # LLM 實例
 
         # 初始化 PydanticOutputParser
         self.parser = PydanticOutputParser(pydantic_object=NetworkAnalysisResponse)
@@ -254,12 +238,15 @@ class AIService:
                 logger.error(error_msg)
                 return False
 
+            # 儲存 llm 為實例屬性
+            self.llm = llm
+
             # 建立工具清單
             tools = self._create_tools()
 
-            # 創建包含結構化輸出格式指令的自定義提示詞
-            prompt_template = self._create_custom_prompt_template()
-            agent = create_react_agent(llm, tools, prompt_template)
+            # 創建包含結構化輸出格式指令的自定義提示詞（基礎版，不含動態變數）
+            base_prompt_template = self._create_custom_prompt_template()
+            agent = create_tool_calling_agent(self.llm, tools, base_prompt_template)
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=tools,
@@ -276,7 +263,7 @@ class AIService:
 
             # 記錄到 AI 專用日誌
             ai_logger.info(
-                f"[{ai_provider.upper()}] AI 系統初始化成功 - 模型: {llm.__class__.__name__}"
+                f"[{ai_provider.upper()}] AI 系統初始化成功 - 模型: {self.llm.__class__.__name__}"
             )
 
             self.ai_initialized = True
@@ -406,147 +393,102 @@ class AIService:
                 name="BatchCommandRunner",
                 func=batch_command_wrapper,
                 description="""
-                網路設備指令執行工具 - 自動執行安全的 show 類指令並返回結構化結果。
+            **思考協議 (Thought Protocol)**：
+            1. **識別 (Identify)**：從使用者查詢中，提取所有需要執行的 `show` 指令列表。
+            2. **拆分 (Decompose)**：將多指令查詢拆解為一系列單一指令的工具呼叫。
+            3. **執行 (Execute)**：依序、獨立地呼叫 `BatchCommandRunner` 執行每一個指令。
+            4. **觀察 (Observe)**：仔細檢查每一次工具回傳的 JSON，特別是 `successful_results` 和 `failed_results`。
+            5. **驗證與修正 (Verify & Correct)**：如果出現 `failed_results`，分析 `error_details`。如果 `suggestion` 提示可以修正指令，則再次呼叫工具進行重試。
+            6. **整合 (Synthesize)**：在 **所有** 指令都成功執行（或已嘗試修正）後，整合所有 `Observation` 的資訊，產生最終分析。
 
-                **關鍵限制**：
-                - 每次調用只能執行一個指令
-                - 多個指令必須分別調用此工具多次
-                - 絕對禁止在沒有執行的情況下虛構結果
+            **功能說明**：
+            - 網路設備指令執行工具 - 自動執行安全的 show 類指令並返回結構化結果
+            - 工具會自動驗證指令安全性，只執行允許的唯讀指令
+            - 支援所有標準的 show 指令（如 show version, show interface, show environment, show platform 等）
 
-                **重要說明**：
-                - 工具會自動驗證指令安全性，只執行允許的唯讀指令
-                - 支援所有標準的 show 指令（如 show version, show interface, show environment, show platform 等）
-                - 執行成功時會返回完整的設備輸出資料
-                - 執行失敗時會提供詳細的錯誤分析和建議
+            **重要限制**：
+            - 每次調用只能執行一個指令
+            - 多個指令必須分別調用此工具多次
+            - 絕對禁止在沒有執行的情況下虛構結果
 
-                **輸入格式**: 
-                - "device_ip: command" (單一設備執行單一指令)
-                - "device_ip1,device_ip2: command" (多設備執行同一指令)
-                - "command" (所有設備執行同一指令)
-
-                **多指令執行範例**:
-                錯誤方式：
-                - "202.153.183.18: show clock; show platform" ❌ (不支援分號分隔)
-                - "202.153.183.18: show clock and show platform" ❌ (不支援 and 連接)
-
-                正確方式：
-                1. 第一次調用："202.153.183.18: show clock"
-                2. 第二次調用："202.153.183.18: show platform"
-                3. 綜合兩次結果進行分析
-
-                **使用例子**: 
-                - "203.0.113.20: show environment" (查詢單一設備環境狀態)
-                - "203.0.113.20,203.0.113.21: show version" (查詢多設備版本)
-                - "show interface status" (查詢所有設備介面狀態)
-
-                **執行結果格式**：
-                工具會返回一個 JSON 格式的字串，包含以下結構：
+            **輸入格式**：
+            - `"device_ip: command"`（單一設備執行單一指令）
+            - `"device_ip1,device_ip2: command"`（多設備執行同一指令）
+            - `"command"`（所有設備執行同一指令）
+            
+            **回傳 JSON 結構**：
+            ```json
+            {
+              "summary": {
+                "command": "執行的指令",
+                "total_devices": 總設備數,
+                "successful_devices": 成功設備數,
+                ...
+              },
+              "successful_results": [
+                {"device_ip": "設備IP", "output": "設備輸出內容"}
+              ],
+              "failed_results": [
                 {
-                  "summary": {
-                    "command": "執行的指令",
-                    "total_devices": 總設備數,
-                    "successful_devices": 成功設備數,
-                    "failed_devices": 失敗設備數,
-                    "execution_time_seconds": 執行時間(秒),
-                    "cache_stats": {"hits": 快取命中次數, "misses": 快取未命中次數}
-                  },
-                  "successful_results": [
-                    {"device_ip": "設備IP", "output": "設備輸出內容"}
-                  ],
-                  "failed_results": [
-                    {
-                      "device_ip": "設備IP",
-                      "error_message": "錯誤訊息", 
-                      "error_details": {
-                        "type": "錯誤類型",
-                        "category": "錯誤分類",
-                        "suggestion": "解決建議"
-                      }
-                    }
-                  ]
+                  "device_ip": "設備IP",
+                  "error_message": "錯誤訊息",
+                  "error_details": {
+                    "type": "錯誤類型",
+                    "category": "錯誤分類", 
+                    "suggestion": "解決建議"
+                  }
                 }
-
-                **重要**：你必須解析這個 JSON 結果來獲取設備的輸出和錯誤資訊，然後提供專業的分析和建議。
+              ]
+            }
+            ```
                 """,
             )
         ]
 
         return tools
 
-    def _create_custom_prompt_template(self) -> PromptTemplate:
-        """建立自定義的 ReAct 提示詞模板，包含 PydanticOutputParser 格式指令
+    def _create_custom_prompt_template(self, **kwargs) -> ChatPromptTemplate:
+        """建立適用於 tool calling agent 的提示詞模板，包含動態變數注入
+
+        Args:
+            **kwargs: 動態變數，如 query_uuid, timestamp, device_scope_restriction 等
 
         Returns:
-            PromptTemplate: 包含結構化輸出格式的提示詞模板
+            ChatPromptTemplate: 包含結構化輸出格式和動態變數的提示詞模板
         """
-        # 獲取格式指令並處理特殊字符，避免 LangChain 變數衝突
-        format_instructions = self.parser.get_format_instructions()
-        # 將 format_instructions 中的花括號轉義，避免被當作 LangChain 變數
-        escaped_format_instructions = format_instructions.replace("{", "{{").replace(
-            "}", "}}"
-        )
-
-        # 使用提示詞管理器獲取系統提示詞
-        base_prompt = self.prompt_manager.render_system_prompt(
+        # 建立基礎模板，使用佔位符
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "{system_prompt}"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad")
+        ])
+        
+        # 渲染系統提示詞內容
+        system_prompt_content = self.prompt_manager.render_system_prompt(
             search_enabled=False,
-            format_instructions=escaped_format_instructions,
+            format_instructions=self.parser.get_format_instructions(),
+            **kwargs  # 將動態變數傳遞給系統提示詞
         )
-
-        # 對 base_prompt 中的花括號進行轉義，避免 LangChain PromptTemplate 將其視為變數
-        escaped_base_prompt = base_prompt.replace("{", "{{").replace("}", "}}")
-
-        # 建立 ReAct 工作流程模板
-        template = f"""{escaped_base_prompt}
-
-Execute the user's request by strictly following your directives. You have access to the following tools:
-
-{{tools}}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{{tool_names}}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: 請使用繁體中文，按照上面 output_format 部分指定的 JSON 格式回應
-
-Question: {{input}}
-{{agent_scratchpad}}"""
-
-        return PromptTemplate(
-            template=template,
-            input_variables=["input", "agent_scratchpad"],
-            partial_variables={
-                "tools": "\n".join(
-                    [
-                        f"{tool.name}: {tool.description}"
-                        for tool in self._create_tools()
-                    ]
-                ),
-                "tool_names": ", ".join([tool.name for tool in self._create_tools()]),
-            },
-        )
+        
+        # 使用 partial 方法填充系統提示詞，避免大括號變數衝突
+        prompt = prompt.partial(system_prompt=system_prompt_content)
+        return prompt
 
     async def query_ai(
         self,
         prompt: str,
         task_id: str,
         timeout: float = 120.0,
-        include_examples: bool = True,
         device_ips: List[str] = None,
     ) -> str:
         """執行 AI 智能分析查詢
 
-        使用 ReAct 代理模式進行網路設備分析，產生結構化的
+        使用 tool calling agent 進行網路設備分析，產生結構化的
         Markdown 格式分析報告。
 
         Args:
             prompt: 用戶的分析查詢請求
             timeout: 查詢超時時間（秒）
-            include_examples: 是否包含思考鏈示範範例
             device_ips: 限制分析的設備 IP 範圍
 
         Returns:
@@ -558,15 +500,22 @@ Question: {{input}}
         if not self.ai_initialized or not self.agent_executor:
             raise ai_error("Gemini", "AI 服務未啟用或初始化失敗", "AI_NOT_AVAILABLE")
 
-        # 使用 PromptManager 處理提示詞構建
-        enhanced_prompt = self.prompt_manager.render_query_prompt(
-            user_query=prompt,
-            include_examples=include_examples,
-            enable_guardrails=True,
-            query_uuid=task_id,
-            timestamp=time.time(),
-            device_scope_restriction=device_ips,
-        )
+        # 構建包含即時變數的系統上下文
+        system_context = f"""【查詢上下文】
+查詢 ID: {task_id}
+時間戳記: {time.time()}
+設備範圍: {device_ips or '所有設備'}
+
+【強制要求】
+1. 必須提供 5-8 項詳細的 key_findings，格式："[指標]: [值] (正常範圍: [範圍])"
+2. 必須提供 3-5 項具體建議，涵蓋立即行動、預防性維護、監控建議等層面
+3. 必須執行工具獲取真實數據，不可憑空編造
+4. 每個數據點都要包含實際測量值和狀態評估
+
+【用戶查詢】"""
+
+        # 構建增強提示詞
+        enhanced_prompt = f"{system_context}\n{prompt}"
 
         # 設置線程本地設備範圍限制（保留原有機制）
         if device_ips:
@@ -597,11 +546,33 @@ Question: {{input}}
             ai_logger.debug(f"AI 回應原始結果類型: {type(result)}")
             if isinstance(result, dict):
                 ai_logger.debug(f"AI 回應鍵值: {list(result.keys())}")
+                # 詳細調試 output 內容
+                ai_logger.debug(f"Output 內容: '{result.get('output', '')}'")
+                ai_logger.debug(f"Output 長度: {len(result.get('output', ''))}")
+                # 檢查 intermediate_steps
+                if 'intermediate_steps' in result:
+                    ai_logger.debug(f"中間步驟數量: {len(result.get('intermediate_steps', []))}")
 
             # 取得 Agent 的最終回答
             final_answer_str = (
                 result.get("output", "") if isinstance(result, dict) else str(result)
             )
+
+            # 如果 output 為空，嘗試從 intermediate_steps 提取
+            if not final_answer_str.strip() and isinstance(result, dict):
+                if 'intermediate_steps' in result and result['intermediate_steps']:
+                    ai_logger.warning("Output 為空，嘗試從 intermediate_steps 提取結果")
+                    # 檢查最後一個步驟
+                    last_step = result['intermediate_steps'][-1] if result['intermediate_steps'] else None
+                    if last_step:
+                        ai_logger.debug(f"最後步驟類型: {type(last_step)}")
+                        ai_logger.debug(f"最後步驟內容: {str(last_step)[:200]}...")
+                        # 嘗試提取工具輸出
+                        if isinstance(last_step, tuple) and len(last_step) > 1:
+                            potential_output = str(last_step[1])
+                            if potential_output.strip():
+                                final_answer_str = potential_output
+                                ai_logger.info(f"從 intermediate_steps 提取到結果：{final_answer_str[:100]}...")
 
             if not final_answer_str.strip():
                 raise ai_error("Gemini", "AI 回應為空", "AI_EMPTY_RESPONSE")

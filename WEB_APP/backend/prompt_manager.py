@@ -94,19 +94,15 @@ class PromptManager:
         """載入配置檔案"""
         try:
             self.variables = self._load_yaml("config/variables.yaml")
-            self.tools_config = self._load_yaml("config/tools.yaml")
-            self.examples = self._load_yaml("config/examples.yaml")
-
+            
             logger.info(
-                f"配置載入完成 - 變數: {len(self.variables)}, 工具: {len(self.tools_config.get('tools', []))}"
+                f"配置載入完成 - 變數: {len(self.variables)}"
             )
 
         except Exception as e:
             logger.error(f"配置載入失敗: {e}")
             # 設定預設值
             self.variables = {}
-            self.tools_config = {"tools": []}
-            self.examples = {"react_examples": []}
 
     def _load_yaml(self, file_path: str) -> Dict[str, Any]:
         """載入 YAML 檔案"""
@@ -155,7 +151,6 @@ class PromptManager:
         """渲染系統提示詞"""
         context = {
             "search_enabled": False,
-            "tools": self._get_enabled_tools(),
             "enable_guardrails": kwargs.get("enable_guardrails", True),
             "query_uuid": kwargs.get("query_uuid"),
             "timestamp": kwargs.get("timestamp"),
@@ -169,11 +164,7 @@ class PromptManager:
         enhanced_prompt = user_query
         include_examples = kwargs.get("include_examples", True)
 
-        # 加入範例
-        if include_examples and "<examples>" not in user_query:
-            few_shot_examples = self.render_react_examples()
-            if few_shot_examples:
-                enhanced_prompt = f"{user_query}\\n\\n{few_shot_examples}"
+        # ReAct 範例已移除，不再加入範例
 
         # 加入安全規則
         if kwargs.get("enable_guardrails", True):
@@ -182,14 +173,7 @@ class PromptManager:
 
         return enhanced_prompt
 
-    def render_react_examples(self, **kwargs) -> str:
-        """渲染 ReAct 範例"""
-        context = {"examples": self.examples.get("react_examples", []), **kwargs}
-        return self.render("react_examples.j2", **context)
 
-    def _get_enabled_tools(self) -> List[Dict[str, Any]]:
-        """取得啟用的工具列表"""
-        return self.tools_config.get("tools", [])
 
     def _get_available_templates(self) -> List[str]:
         """取得可用的模板列表"""
@@ -232,8 +216,6 @@ class PromptManager:
             "uptime_seconds": time.time() - self._init_time,
             "config_loaded": {
                 "variables_count": len(self.variables),
-                "tools_count": len(self.tools_config.get("tools", [])),
-                "examples_count": len(self.examples.get("react_examples", [])),
             },
         }
 
