@@ -119,6 +119,72 @@ class ClickHouseService:
             logger.error(f"獲取流量概覽失敗: {e}", exc_info=True)
             raise ClickHouseQueryError(f"獲取流量概覽失敗: {e}")
     
+    def _get_total_bytes_in_range(self, hours: int) -> int:
+        """
+        獲取指定時間範圍內的總位元組數（用於百分比計算）
+        
+        Args:
+            hours: 統計時間範圍（小時）
+            
+        Returns:
+            int: 總位元組數
+            
+        Raises:
+            ClickHouseQueryError: 查詢失敗時拋出
+        """
+        try:
+            query = """
+            SELECT sum(Bytes) as total_bytes
+            FROM flows
+            WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
+            """
+            
+            parameters = {'hours': hours}
+            result = self.client.execute_query(query, parameters)
+            
+            if not result or not result[0]['total_bytes']:
+                logger.warning(f"查詢時間範圍內無資料或總位元組數為空: {hours} 小時")
+                return 0
+                
+            return int(result[0]['total_bytes'])
+            
+        except Exception as e:
+            logger.error(f"獲取總位元組數失敗: {e}", exc_info=True)
+            raise ClickHouseQueryError(f"獲取總位元組數失敗: {e}")
+    
+    def _get_total_packets_in_range(self, hours: int) -> int:
+        """
+        獲取指定時間範圍內的總封包數（用於百分比計算）
+        
+        Args:
+            hours: 統計時間範圍（小時）
+            
+        Returns:
+            int: 總封包數
+            
+        Raises:
+            ClickHouseQueryError: 查詢失敗時拋出
+        """
+        try:
+            query = """
+            SELECT sum(Packets) as total_packets
+            FROM flows
+            WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
+            """
+            
+            parameters = {'hours': hours}
+            result = self.client.execute_query(query, parameters)
+            
+            if not result or not result[0]['total_packets']:
+                logger.warning(f"查詢時間範圍內無資料或總封包數為空: {hours} 小時")
+                return 0
+                
+            return int(result[0]['total_packets'])
+            
+        except Exception as e:
+            logger.error(f"獲取總封包數失敗: {e}", exc_info=True)
+            raise ClickHouseQueryError(f"獲取總封包數失敗: {e}")
+    
     def get_top_talkers(
         self, 
         limit: int = 10,
@@ -139,6 +205,9 @@ class ClickHouseService:
             List[TopTalker]: Top N 流量來源/目的地列表
         """
         try:
+            # 獲取總位元組數用於百分比計算
+            total_bytes = self._get_total_bytes_in_range(hours)
+            
             addr_field = 'SrcAddr' if src_or_dst == 'src' else 'DstAddr'
             
             query = f"""
@@ -146,12 +215,7 @@ class ClickHouseService:
                 toString({addr_field}) as address,
                 sum(Bytes) as bytes,
                 sum(Packets) as packets,
-                count() as flows,
-                (bytes / (
-                    SELECT sum(Bytes) 
-                    FROM flows 
-                    WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
-                )) * 100 as percentage
+                count() as flows
             FROM flows
             WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
             GROUP BY {addr_field}
@@ -162,7 +226,19 @@ class ClickHouseService:
             parameters = {'limit': limit, 'hours': hours}
             results = self.client.execute_query(query, parameters)
             
-            return [TopTalker(**result) for result in results]
+            # 在 Python 層計算百分比
+            top_talkers = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                top_talkers.append(TopTalker(
+                    address=result['address'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    flows=result['flows'],
+                    percentage=round(percentage, 2)
+                ))
+            
+            return top_talkers
             
         except Exception as e:
             logger.error(f"獲取 Top Talkers 失敗: {e}", exc_info=True)
@@ -184,18 +260,16 @@ class ClickHouseService:
             List[TopProtocol]: 協定統計列表
         """
         try:
+            # 獲取總位元組數用於百分比計算
+            total_bytes = self._get_total_bytes_in_range(hours)
+            
             query = """
             SELECT
                 Proto as protocol_number,
                 '' as protocol_name,
                 count() as flows,
                 sum(Bytes) as bytes,
-                sum(Packets) as packets,
-                (bytes / (
-                    SELECT sum(Bytes) 
-                    FROM flows 
-                    WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
-                )) * 100 as percentage
+                sum(Packets) as packets
             FROM flows
             WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
             GROUP BY Proto
@@ -206,7 +280,20 @@ class ClickHouseService:
             parameters = {'hours': hours, 'limit': limit}
             results = self.client.execute_query(query, parameters)
             
-            return [TopProtocol(**result) for result in results]
+            # 在 Python 層計算百分比
+            protocols = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                protocols.append(TopProtocol(
+                    protocol_number=result['protocol_number'],
+                    protocol_name=result['protocol_name'],
+                    flows=result['flows'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    percentage=round(percentage, 2)
+                ))
+            
+            return protocols
             
         except Exception as e:
             logger.error(f"獲取協定分佈失敗: {e}", exc_info=True)
@@ -231,19 +318,24 @@ class ClickHouseService:
         """
         try:
             if by_country_only:
+                # 獲取只有國家資料的總位元組數用於百分比計算
+                query_total = """
+                SELECT sum(Bytes) as total_bytes
+                FROM flows
+                WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
+                  AND SrcCountry != ''
+                """
+                parameters = {'hours': hours}
+                total_result = self.client.execute_query(query_total, parameters)
+                total_bytes = int(total_result[0]['total_bytes']) if total_result and total_result[0]['total_bytes'] else 0
+                
                 query = """
                 SELECT
                     SrcCountry as country,
                     '' as city,
                     count() as flows,
                     sum(Bytes) as bytes,
-                    sum(Packets) as packets,
-                    (bytes / (
-                        SELECT sum(Bytes) 
-                        FROM flows 
-                        WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
-                          AND SrcCountry != ''
-                    )) * 100 as percentage
+                    sum(Packets) as packets
                 FROM flows
                 WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
                   AND SrcCountry != ''
@@ -252,20 +344,25 @@ class ClickHouseService:
                 LIMIT {limit:UInt32}
                 """
             else:
+                # 獲取有城市資料的總位元組數用於百分比計算
+                query_total = """
+                SELECT sum(Bytes) as total_bytes
+                FROM flows
+                WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
+                  AND SrcCountry != ''
+                  AND SrcGeoCity != ''
+                """
+                parameters = {'hours': hours}
+                total_result = self.client.execute_query(query_total, parameters)
+                total_bytes = int(total_result[0]['total_bytes']) if total_result and total_result[0]['total_bytes'] else 0
+                
                 query = """
                 SELECT
                     SrcCountry as country,
                     SrcGeoCity as city,
                     count() as flows,
                     sum(Bytes) as bytes,
-                    sum(Packets) as packets,
-                    (bytes / (
-                        SELECT sum(Bytes) 
-                        FROM flows 
-                        WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
-                          AND SrcCountry != ''
-                          AND SrcGeoCity != ''
-                    )) * 100 as percentage
+                    sum(Packets) as packets
                 FROM flows
                 WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
                   AND SrcCountry != ''
@@ -278,7 +375,20 @@ class ClickHouseService:
             parameters = {'hours': hours, 'limit': limit}
             results = self.client.execute_query(query, parameters)
             
-            return [GeolocationStats(**result) for result in results]
+            # 在 Python 層計算百分比
+            geo_stats = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                geo_stats.append(GeolocationStats(
+                    country=result['country'],
+                    city=result['city'] if result['city'] else None,
+                    flows=result['flows'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    percentage=round(percentage, 2)
+                ))
+            
+            return geo_stats
             
         except Exception as e:
             logger.error(f"獲取地理位置統計失敗: {e}", exc_info=True)
@@ -305,6 +415,17 @@ class ClickHouseService:
             asn_field = 'SrcAS' if src_or_dst == 'src' else 'DstAS'
             addr_field = 'SrcAddr' if src_or_dst == 'src' else 'DstAddr'
             
+            # 獲取有 ASN 資料的總位元組數用於百分比計算
+            query_total = f"""
+            SELECT sum(Bytes) as total_bytes
+            FROM flows
+            WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
+              AND {asn_field} != 0
+            """
+            parameters = {'hours': hours}
+            total_result = self.client.execute_query(query_total, parameters)
+            total_bytes = int(total_result[0]['total_bytes']) if total_result and total_result[0]['total_bytes'] else 0
+            
             query = f"""
             SELECT
                 {asn_field} as asn,
@@ -312,12 +433,6 @@ class ClickHouseService:
                 count() as flows,
                 sum(Bytes) as bytes,
                 sum(Packets) as packets,
-                (bytes / (
-                    SELECT sum(Bytes) 
-                    FROM flows 
-                    WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
-                      AND {asn_field} != 0
-                )) * 100 as percentage,
                 uniq({addr_field}) as unique_ips
             FROM flows
             WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
@@ -330,7 +445,21 @@ class ClickHouseService:
             parameters = {'hours': hours, 'limit': limit}
             results = self.client.execute_query(query, parameters)
             
-            return [ASNStats(**result) for result in results]
+            # 在 Python 層計算百分比
+            asn_stats = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                asn_stats.append(ASNStats(
+                    asn=result['asn'],
+                    asn_name=result['asn_name'],
+                    flows=result['flows'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    percentage=round(percentage, 2),
+                    unique_ips=result['unique_ips']
+                ))
+            
+            return asn_stats
             
         except Exception as e:
             logger.error(f"獲取 ASN 分析失敗: {e}", exc_info=True)
@@ -393,6 +522,9 @@ class ClickHouseService:
             List[PortStats]: 埠號統計列表
         """
         try:
+            # 獲取總位元組數用於百分比計算
+            total_bytes = self._get_total_bytes_in_range(hours)
+            
             port_field = 'SrcPort' if src_or_dst == 'src' else 'DstPort'
             
             query = f"""
@@ -401,12 +533,7 @@ class ClickHouseService:
                 '' as port_name,
                 count() as flows,
                 sum(Bytes) as bytes,
-                sum(Packets) as packets,
-                (bytes / (
-                    SELECT sum(Bytes) 
-                    FROM flows 
-                    WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
-                )) * 100 as percentage
+                sum(Packets) as packets
             FROM flows
             WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
             GROUP BY {port_field}
@@ -417,7 +544,20 @@ class ClickHouseService:
             parameters = {'hours': hours, 'limit': limit}
             results = self.client.execute_query(query, parameters)
             
-            return [PortStats(**result) for result in results]
+            # 在 Python 層計算百分比
+            port_stats = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                port_stats.append(PortStats(
+                    port=result['port'],
+                    port_name=result['port_name'],
+                    flows=result['flows'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    percentage=round(percentage, 2)
+                ))
+            
+            return port_stats
             
         except Exception as e:
             logger.error(f"獲取埠號統計失敗: {e}", exc_info=True)
@@ -448,6 +588,17 @@ class ClickHouseService:
                 if_name_field = 'OutIfName'
                 if_desc_field = 'OutIfDescription'
             
+            # 獲取有介面名稱資料的總位元組數用於百分比計算
+            query_total = f"""
+            SELECT sum(Bytes) as total_bytes
+            FROM flows
+            WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
+              AND {if_name_field} != ''
+            """
+            parameters = {'hours': hours}
+            total_result = self.client.execute_query(query_total, parameters)
+            total_bytes = int(total_result[0]['total_bytes']) if total_result and total_result[0]['total_bytes'] else 0
+            
             query = f"""
             SELECT
                 {if_name_field} as interface_name,
@@ -455,13 +606,7 @@ class ClickHouseService:
                 '{direction}' as direction,
                 count() as flows,
                 sum(Bytes) as bytes,
-                sum(Packets) as packets,
-                (bytes / (
-                    SELECT sum(Bytes) 
-                    FROM flows 
-                    WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
-                      AND {if_name_field} != ''
-                )) * 100 as percentage
+                sum(Packets) as packets
             FROM flows
             WHERE TimeReceived >= now() - INTERVAL {{hours:UInt32}} HOUR
               AND {if_name_field} != ''
@@ -473,7 +618,21 @@ class ClickHouseService:
             parameters = {'hours': hours, 'limit': limit}
             results = self.client.execute_query(query, parameters)
             
-            return [InterfaceStats(**result) for result in results]
+            # 在 Python 層計算百分比
+            interface_stats = []
+            for result in results:
+                percentage = (result['bytes'] / total_bytes * 100) if total_bytes > 0 else 0.0
+                interface_stats.append(InterfaceStats(
+                    interface_name=result['interface_name'],
+                    interface_description=result['interface_description'],
+                    direction=result['direction'],
+                    flows=result['flows'],
+                    bytes=result['bytes'],
+                    packets=result['packets'],
+                    percentage=round(percentage, 2)
+                ))
+            
+            return interface_stats
             
         except Exception as e:
             logger.error(f"獲取介面統計失敗: {e}", exc_info=True)
