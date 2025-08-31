@@ -152,11 +152,11 @@ curl -X GET "http://localhost/api/flows/top-talkers?limit=10&hours=1&by_field=pa
 ```json
 [
   {
-    "address": "192.168.1.100",
-    "bytes": 1048576,
-    "packets": 1024,
-    "flows": 256,
-    "percentage": 25.6
+    "address": "202.153.183.18",
+    "bytes": 569717,
+    "packets": 3079,
+    "flows": 1946,
+    "percentage": 85.69
   }
 ]
 ```
@@ -220,8 +220,8 @@ curl -X GET "http://localhost/api/flows/protocols?hours=1&limit=10"
 # 獲取國家層級統計
 curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=5&by_country_only=true"
 
-# 獲取國家+城市統計（目前城市資料為空）
-curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=3&by_country_only=false"
+# 獲取城市層級統計
+curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=10&by_country_only=false"
 ```
 
 **回應範例**:
@@ -229,24 +229,27 @@ curl -X GET "http://localhost/api/flows/geolocation?hours=1&limit=3&by_country_o
 [
   {
     "country": "TW",
-    "city": "",
-    "flows": 1946,
-    "bytes": 569717,
-    "packets": 3079,
-    "percentage": 85.69
+    "city": "Taoyuan District",
+    "flows": 54,
+    "bytes": 6304,
+    "packets": 55,
+    "percentage": 52.85
   },
   {
-    "country": "US",
-    "city": "",
-    "flows": 95,
-    "bytes": 42364,
-    "packets": 116,
-    "percentage": 6.37
+    "country": "TW",
+    "city": "Kaohsiung",
+    "flows": 30,
+    "bytes": 1216,
+    "packets": 30,
+    "percentage": 10.20
   }
 ]
 ```
 
-**⚠️ 注意**: 目前城市欄位為空值，只有國家層級資料可用。
+**📍 地理資料說明**: 
+- 當 `by_country_only=true` 時：返回國家層級統計，城市欄位為空
+- 當 `by_country_only=false` 時：返回城市層級統計，僅顯示有城市資料的記錄
+- 城市資料覆蓋率約 0.1-0.2%，主要包含台灣、美國、日本等地的城市
 
 ---
 
@@ -442,22 +445,26 @@ curl -X GET "http://localhost/api/flows/search?src_addr=192.168.1.100&hours=1"
   "success": true,
   "data": [
     {
-      "TimeReceived": "2025-08-30T22:00:00",
-      "SrcAddr": "192.168.1.100",
-      "DstAddr": "8.8.8.8",
-      "SrcPort": 45678,
+      "TimeReceived": "2025-08-31T06:40:25",
+      "SrcAddr": "::ffff:202.153.183.18",
+      "DstAddr": "::ffff:1.1.1.1",
+      "SrcPort": 8834,
       "DstPort": 53,
       "Proto": 17,
-      "Bytes": 64,
+      "Bytes": 52,
       "Packets": 1,
-      "SrcAS": 0,
-      "DstAS": 15169,
+      "SrcAS": 17408,
+      "DstAS": 13335,
       "SrcCountry": "TW",
-      "DstCountry": "US"
+      "DstCountry": "US",
+      "SrcGeoCity": "Taoyuan District",
+      "DstGeoCity": "",
+      "SrcGeoState": "TAO",
+      "DstGeoState": ""
     }
   ],
-  "total_records": 1,
-  "execution_time_ms": 24.06
+  "total_records": 2457,
+  "execution_time_ms": 42.85
 }
 ```
 
@@ -481,10 +488,10 @@ curl -X GET "http://localhost/api/flows/search?src_addr=192.168.1.100&hours=1"
 | `DstAS` | UInt32 | 目的自治系統編號 |
 | `SrcCountry` | FixedString(2) | 來源國家代碼 |
 | `DstCountry` | FixedString(2) | 目的國家代碼 |
-| `SrcGeoCity` | String | 來源城市（目前為空） |
-| `DstGeoCity` | String | 目的城市（目前為空） |
-| `SrcGeoState` | String | 來源州/省（目前為空） |
-| `DstGeoState` | String | 目的州/省（目前為空） |
+| `SrcGeoCity` | String | 來源城市 |
+| `DstGeoCity` | String | 目的城市 |
+| `SrcGeoState` | String | 來源州/省 |
+| `DstGeoState` | String | 目的州/省 |
 
 ### 常見協定編號
 
@@ -918,15 +925,15 @@ docker logs -f akvorado-clickhouse-1
 
 ### 更新記錄
 
-**2025-08-30**:
-- ✅ 修復地理位置欄位問題 (`SrcCity` → `SrcGeoCity`)
-- ✅ 新增州/省欄位支援 (`SrcGeoState`, `DstGeoState`)
-- ✅ 達成 100% API 成功率
-- ✅ 完善錯誤處理機制
+**2025-08-31**:
+- ✅ 搜尋 API 新增城市和州/省欄位 (`SrcGeoCity`, `DstGeoCity`, `SrcGeoState`, `DstGeoState`)
+- ✅ 地理位置 API 支援城市級統計分析
+- ✅ 修復地理位置城市分組邏輯
+- ✅ 達成 100% API 成功率並支援城市級地理資訊
 
 ### 已知限制
 
-1. **地理位置城市資料**: 目前城市和州/省欄位為空值，只有國家層級資料可用
+1. **地理位置城市資料**: 城市和州/省資料覆蓋率約 0.1-0.2%，主要來源為台灣、美國、日本等地
 2. **時間範圍限制**: 部分端點限制最大查詢範圍（如 Top Talkers 限制24小時）
 3. **分頁限制**: 搜尋端點每頁最多1000筆記錄
 

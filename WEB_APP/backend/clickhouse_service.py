@@ -264,10 +264,12 @@ class ClickHouseService:
                         FROM flows 
                         WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
                           AND SrcCountry != ''
+                          AND SrcGeoCity != ''
                     )) * 100 as percentage
                 FROM flows
                 WHERE TimeReceived >= now() - INTERVAL {hours:UInt32} HOUR
                   AND SrcCountry != ''
+                  AND SrcGeoCity != ''
                 GROUP BY SrcCountry, SrcGeoCity
                 ORDER BY bytes DESC
                 LIMIT {limit:UInt32}
@@ -574,7 +576,11 @@ class ClickHouseService:
                 SrcAS,
                 DstAS,
                 SrcCountry,
-                DstCountry
+                DstCountry,
+                SrcGeoCity,
+                DstGeoCity,
+                SrcGeoState,
+                DstGeoState
             FROM flows
             WHERE {where_clause}
             ORDER BY TimeReceived DESC
