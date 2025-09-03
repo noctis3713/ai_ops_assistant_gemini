@@ -193,7 +193,7 @@ def classify_network_error(error_message: str) -> Dict[str, Any]:
 
 
 @dataclass
-class ExecutionResult:
+class SingleResult:
     """單一設備指令執行的結果資料
 
     包含設備資訊、成功狀態、輸出內容和執行時間。
@@ -215,7 +215,7 @@ class BatchResult:
     匯總所有設備的執行結果和統計資訊。
     """
 
-    results: List[ExecutionResult] = field(default_factory=list)
+    results: List[SingleResult] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
     execution_time: float = 0.0
 
@@ -340,16 +340,16 @@ class AsyncNetworkClient:
         self.command_validator = get_command_validator()
         logger.info("AsyncNetworkClient 已初始化")
 
-    async def execute_command(
+    async def single_execute(
         self, device_ip: str, command: str, device_config=None, timeout: int = None
-    ) -> ExecutionResult:
+    ) -> SingleResult:
         """執行單一設備指令"""
         start_time = time.time()
         device_name = (
             device_config.get("name", device_ip) if device_config else device_ip
         )
 
-        result = ExecutionResult(
+        result = SingleResult(
             device_ip=device_ip,
             device_name=device_name,
             timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -412,7 +412,7 @@ class AsyncNetworkClient:
                     if device_configs
                     else get_device_config_by_ip(device_ip)
                 )
-                return await self.execute_command(device_ip, command, device_config)
+                return await self.single_execute(device_ip, command, device_config)
 
         # 並行執行
         tasks = [execute_with_semaphore(device_ip) for device_ip in devices]
@@ -426,7 +426,7 @@ class AsyncNetworkClient:
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 # 處理異常
-                error_result = ExecutionResult(
+                error_result = SingleResult(
                     device_ip=devices[i],
                     error=f"批次執行異常: {str(result)}",
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -618,11 +618,11 @@ async_network_client = AsyncNetworkClient()
 
 
 # 異步便利函數
-async def async_execute_command(
+async def async_single_execute(
     device_ip: str, command: str, device_config=None
-) -> ExecutionResult:
+) -> SingleResult:
     """執行單一設備指令（異步便利函數）"""
-    return await async_network_client.execute_command(device_ip, command, device_config)
+    return await async_network_client.single_execute(device_ip, command, device_config)
 
 
 async def async_batch_execute(
