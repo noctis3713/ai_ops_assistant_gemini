@@ -72,7 +72,7 @@ from fastapi.responses import ORJSONResponse
 
 # 匯入路由模組
 from unified_routes import admin_router, health_router, router
-from clickhouse_routes import router as clickhouse_router
+from clickhouse.routes import router as clickhouse_router
 
 # 設定日誌
 logging.basicConfig(

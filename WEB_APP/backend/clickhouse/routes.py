@@ -22,8 +22,8 @@ from datetime import datetime
 from fastapi import APIRouter, Query, HTTPException, Path, Depends
 from fastapi.responses import JSONResponse
 
-from clickhouse_service import get_clickhouse_service, ClickHouseQueryError
-from clickhouse_models import (
+from .service import get_clickhouse_service, ClickHouseQueryError
+from .models import (
     FlowSummary, TopTalker, TopProtocol, GeolocationStats,
     ASNStats, TimeSeriesData, PortStats, InterfaceStats,
     QueryResponse, ErrorResponse, HealthCheckResponse,

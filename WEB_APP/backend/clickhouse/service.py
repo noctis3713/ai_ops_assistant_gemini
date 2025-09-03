@@ -20,8 +20,8 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timedelta
 import time
 
-from clickhouse_client import get_clickhouse_client, ClickHouseQueryError
-from clickhouse_models import (
+from .client import get_clickhouse_client, ClickHouseQueryError
+from .models import (
     FlowSummary, TopTalker, TopProtocol, GeolocationStats,
     ASNStats, TimeSeriesData, PortStats, InterfaceStats,
     QueryResponse, ErrorResponse, HealthCheckResponse,

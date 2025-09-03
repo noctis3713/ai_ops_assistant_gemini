@@ -155,6 +155,8 @@ class PromptManager:
             "query_uuid": kwargs.get("query_uuid"),
             "timestamp": kwargs.get("timestamp"),
             "device_scope_restriction": kwargs.get("device_scope_restriction"),
+            "response_language": "繁體中文",
+            "language_code": self.language,
             **kwargs,
         }
         return self.render("system_prompt.j2", **context)

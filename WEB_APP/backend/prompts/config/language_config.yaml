@@ -1,0 +1,95 @@
+# 語言配置檔案
+# 定義不同語言的回應規則和格式要求
+
+languages:
+  zh_TW:
+    name: "繁體中文"
+    display_name: "Traditional Chinese"
+    locale: "zh_TW"
+    instructions:
+      - "使用繁體中文回應"
+      - "專業術語可保留英文原文，但需加上中文說明"
+      - "數值、指令代碼、錯誤代碼保持原樣"
+      - "輸出的 JSON 結構和欄位名稱保持英文，但內容描述使用繁體中文"
+    technical_terms:
+      retain_english: true
+      add_chinese_explanation: true
+      format: "{english_term} ({chinese_explanation})"
+    examples:
+      - english: "CPU utilization"
+        chinese: "CPU utilization (CPU 使用率)"
+      - english: "Interface status"
+        chinese: "Interface status (介面狀態)"
+      - english: "Memory usage"
+        chinese: "Memory usage (記憶體使用量)"
+    
+  zh_CN:
+    name: "简体中文"
+    display_name: "Simplified Chinese"
+    locale: "zh_CN"
+    instructions:
+      - "使用简体中文回应"
+      - "专业术语可保留英文原文，但需加上中文说明"
+      - "数值、指令代码、错误代码保持原样"
+      - "输出的 JSON 结构和字段名称保持英文，但内容描述使用简体中文"
+    technical_terms:
+      retain_english: true
+      add_chinese_explanation: true
+      format: "{english_term} ({chinese_explanation})"
+    
+  en_US:
+    name: "English"
+    display_name: "English (US)"
+    locale: "en_US"
+    instructions:
+      - "Respond in English"
+      - "Use professional networking terminology"
+      - "Maintain consistent technical language"
+    technical_terms:
+      retain_english: true
+      add_chinese_explanation: false
+
+# 預設語言設定
+default_language: "zh_TW"
+
+# 語言切換規則
+switching_rules:
+  auto_detect: false
+  fallback_language: "zh_TW"
+  preserve_technical_terms: true
+
+# 回應格式要求
+response_formatting:
+  json_structure: "english"
+  content_language: "follow_config"
+  error_messages: "follow_config"
+  
+# 專業術語字典
+technical_dictionary:
+  networking:
+    "CPU utilization": "CPU 使用率"
+    "Memory usage": "記憶體使用量"
+    "Interface status": "介面狀態"
+    "Bandwidth utilization": "頻寬使用率"
+    "Packet loss": "封包遺失"
+    "Latency": "延遲"
+    "Throughput": "吞吐量"
+    "Error rate": "錯誤率"
+    "Temperature": "溫度"
+    "Power consumption": "功耗"
+    "Uptime": "運行時間"
+    "Configuration": "配置"
+  
+  cisco_specific:
+    "show version": "顯示版本資訊"
+    "show interface": "顯示介面資訊"
+    "show environment": "顯示環境資訊"
+    "show processes cpu": "顯示 CPU 處理程序"
+    "show memory": "顯示記憶體資訊"
+    "show logging": "顯示日誌"
+    "show inventory": "顯示硬體清單"
+
+# 版本資訊
+version: "1.0.0"
+last_updated: "2025-09-01"
+description: "AI Agent 語言配置檔案，用於確保一致的多語言回應"

@@ -18,8 +18,8 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from clickhouse_service import get_clickhouse_service, ClickHouseService
-from clickhouse_models import PaginationParams
+from .service import get_clickhouse_service, ClickHouseService
+from .models import PaginationParams
 
 logger = logging.getLogger(__name__)
 
