@@ -52,7 +52,7 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 known_first_party = ["ai_service", "async_task_manager", "config_manager", "utils"]
-known_third_party = ["fastapi", "pydantic", "uvicorn", "langchain", "anthropic", "google", "asyncssh", "netmiko"]
+known_third_party = ["fastapi", "pydantic", "uvicorn", "langchain", "anthropic", "google", "asyncssh"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.mypy]
@@ -76,7 +76,6 @@ pretty = true
 # 針對特定模組的配置
 [[tool.mypy.overrides]]
 module = [
-    "netmiko.*",
     "asyncssh.*",
     "langchain.*",
     "langchain_google_genai.*",

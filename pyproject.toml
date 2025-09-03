@@ -22,6 +22,6 @@ use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 88
 known_first_party = ["ai_service", "config_manager", "async_task_manager", "utils", "core", "models"]
-known_third_party = ["fastapi", "pydantic", "langchain", "netmiko", "nornir", "anthropic", "google"]
+known_third_party = ["fastapi", "pydantic", "langchain", "nornir", "anthropic", "google"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 skip_glob = ["logs/**", ".venv/**", "build/**", "dist/**"]

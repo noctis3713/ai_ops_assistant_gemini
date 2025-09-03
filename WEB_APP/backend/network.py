@@ -4,8 +4,8 @@
 網路連線和設備通信模組
 
 提供網路設備的 SSH 連線和指令執行功能：
-- 異步 SSH 連線池管理和指令批次執行
-- 同步網路工具接口（AI 代理使用）
+- 異步 SSH 連線池管理和連線復用
+- 批次設備指令執行和結果處理
 - 設備認證管理和安全驗證
 - 健康檢查和連線監控功能
 
@@ -25,10 +25,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # 異步網路相關導入
 import asyncssh
 from asyncssh import SSHClientConnection
-
-# 同步網路相關導入
-from netmiko import ConnectHandler
-from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 
 from settings import get_command_validator
 import settings as settings_module
