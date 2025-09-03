@@ -47,12 +47,12 @@ class PromptManager:
             current_working_dir = Path.cwd()
             # 如果當前目錄是 backend，直接使用
             if current_working_dir.name == "backend":
-                self.base_dir = current_working_dir / "prompts"
+                self.base_dir = current_working_dir / "ai" / "prompts"
             else:
                 # 否則從檔案位置計算
                 current_file = Path(__file__)
                 backend_dir = current_file.parent.parent
-                self.base_dir = backend_dir / "prompts"
+                self.base_dir = backend_dir / "ai" / "prompts"
 
             # 確保路徑是絕對路徑
             self.base_dir = self.base_dir.resolve()

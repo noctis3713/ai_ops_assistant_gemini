@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
 
-from ai_service import get_ai_service
+from ai.service import get_ai_service
 
 # 導入基礎回應模型
 from common import BaseResponse

@@ -62,18 +62,7 @@ class Settings(BaseSettings):
     PARSER_VERSION: str = Field(default="original", description="解析器版本")
     PROMPT_LANGUAGE: str = Field(default="zh_TW", description="提示詞語言")
     PROMPT_TEMPLATE_DIR: Optional[str] = Field(
-        default="/app/WEB_APP/backend/prompts", description="提示詞模板目錄路徑"
-    )
-    
-    # 長上下文相關配置
-    GEMINI_ENABLE_LONG_CONTEXT: bool = Field(
-        default=True, description="啟用 Gemini 長上下文功能"
-    )
-    GEMINI_CONTEXT_WINDOW: int = Field(
-        default=2000000, description="Gemini 上下文窗口大小 (tokens)"
-    )
-    GEMINI_LONG_CONTEXT_THRESHOLD: int = Field(
-        default=50000, description="觸發長上下文處理的文本長度門檻"
+        default="/home/sysadmin/ai_ops_assistant_gemini/WEB_APP/backend/ai/prompts", description="提示詞模板目錄路徑"
     )
 
     # =========================================================================

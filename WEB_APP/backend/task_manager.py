@@ -272,7 +272,7 @@ class AsyncTaskManager:
         await self._update_progress(task.task_id, 25, "準備 AI 查詢...")
 
         # 導入 AI 服務
-        from ai_service import get_ai_service
+        from ai.service import get_ai_service
 
         ai_service = get_ai_service()
 

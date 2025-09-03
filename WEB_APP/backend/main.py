@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
         logger.info("開始啟動 AI 網路維運助理 API")
 
         # 初始化基本服務
-        from ai_service import get_ai_service
+        from ai.service import get_ai_service
         from settings import get_settings
         from task_manager import get_task_manager
 

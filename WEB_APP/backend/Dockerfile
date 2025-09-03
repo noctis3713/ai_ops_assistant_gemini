@@ -45,7 +45,7 @@ COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
 # 建立必要的目錄結構
-RUN mkdir -p /app/config /app/prompts && \
+RUN mkdir -p /app/config /app/ai/prompts && \
     chown -R appuser:appuser /app
 
 # 複製應用程式代碼
