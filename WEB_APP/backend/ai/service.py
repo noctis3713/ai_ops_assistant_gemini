@@ -245,18 +245,52 @@ class AIService:
             set_device_scope_restriction(None)
 
         try:
-            # 重置 callback
-            if self.usage_callback and hasattr(self.usage_callback, "usage_metadata"):
-                self.usage_callback.usage_metadata = {}
+            # 保存原始 prompt
+            original_enhanced_prompt = enhanced_prompt
+            current_prompt = original_enhanced_prompt
+            max_retries = 3
 
-            # 執行 AI 查詢
-            config = {"callbacks": [self.usage_callback]} if self.usage_callback else {}
-            result = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.agent_executor.invoke, {"input": enhanced_prompt}, config
-                ),
-                timeout=timeout,
-            )
+            for attempt in range(max_retries):
+                try:
+                    # 重置 callback
+                    if self.usage_callback and hasattr(self.usage_callback, "usage_metadata"):
+                        self.usage_callback.usage_metadata = {}
+
+                    # 執行 AI 查詢
+                    config = {"callbacks": [self.usage_callback]} if self.usage_callback else {}
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.agent_executor.invoke, {"input": current_prompt}, config
+                        ),
+                        timeout=timeout,
+                    )
+
+                    # 檢查是否有工具執行
+                    intermediate_steps = result.get("intermediate_steps", [])
+
+                    if not intermediate_steps:
+                        logger.warning(f"嘗試 {attempt + 1}/{max_retries}: AI 未執行任何工具，可能發生幻覺")
+
+                        if attempt < max_retries - 1:
+                            # 基於原始 prompt 構建新的強制提示
+                            retry_warning = (
+                                f"【⚠️ 第 {attempt + 2} 次嘗試 - 強制執行】\n"
+                                f"你違反了核心指令：必須使用工具獲取真實數據，不可憑空編造。\n"
+                                f"請重新執行，並確實使用提供給你的工具來完成任務。\n\n"
+                            )
+                            current_prompt = retry_warning + original_enhanced_prompt
+                            logger.info(f"重試 {attempt + 2}，加入強制執行提示")
+                            continue
+                        else:
+                            raise Exception("AI 連續 3 次未使用工具執行，無法獲取真實數據。請檢查系統配置或聯繫技術支援。")
+
+                    # 有工具執行，跳出重試循環
+                    logger.info(f"成功：在第 {attempt + 1} 次嘗試時執行了工具")
+                    break
+
+                except asyncio.TimeoutError:
+                    logger.error(f"AI 查詢超時: {timeout}秒")
+                    raise Exception(f"AI 分析處理超時（{timeout}秒）")
 
             # 取得最終回答
             final_answer_str = result.get("output", "") if isinstance(result, dict) else str(result)
@@ -276,7 +310,7 @@ class AIService:
                 raise ai_error("AI", "AI 回應為空", "AI_EMPTY_RESPONSE")
 
             # 處理 Token 使用量
-            usage_data = self._process_token_usage(result, task_id, enhanced_prompt, final_answer_str)
+            usage_data = self._process_token_usage(result, task_id, current_prompt, final_answer_str)
 
             try:
                 # 嘗試結構化解析

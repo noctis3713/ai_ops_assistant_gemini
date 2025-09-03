@@ -105,7 +105,7 @@ class LLMFactory:
             
             llm = ChatAnthropic(
                 model=model,
-                temperature=0,
+                temperature=0.1,
                 anthropic_api_key=api_key,
                 callbacks=callbacks
             )
@@ -149,7 +149,7 @@ class LLMFactory:
             
             llm = ChatGoogleGenerativeAI(
                 model=model,
-                temperature=0,
+                temperature=0.1,
                 max_output_tokens=max_output_tokens,
                 google_api_key=api_key,
                 callbacks=callbacks
