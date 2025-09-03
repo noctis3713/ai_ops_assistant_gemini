@@ -17,7 +17,6 @@ from ipaddress import AddressValueError, IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -92,14 +91,8 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = Field(default="development", description="執行環境")
     DEBUG: bool = Field(default=True, description="除錯模式")
-    # 移除 DEVICE_OUTPUT_MAX_LENGTH - AI 直接處理完整輸出
     ADMIN_API_KEY: Optional[str] = Field(default="Cisc0123", description="管理員 API 金鑰")
 
-    # =========================================================================
-    # Nornir 配置（向下相容）
-    # =========================================================================
-
-    NORNIR_WORKERS: int = Field(default=5, description="Nornir 工作執行緒數")
 
     # =========================================================================
     # 配置驗證和工具方法
@@ -257,8 +250,6 @@ class Settings(BaseSettings):
         self._devices_config = None
         self._groups_config = None
         self._security_config = None
-        
-    # 移除 get_dynamic_output_max_length 函式 - 不再需要動態截斷
 
 
 # 全域實例
