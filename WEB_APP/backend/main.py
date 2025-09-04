@@ -39,27 +39,26 @@ def _load_env():
 
     if is_docker:
         print("🐳 Docker 環境 - 使用容器環境變數")
-        return True, "Docker"
+        return True
     else:
         print("💻 本地環境 - 搜尋 .env 檔案")
         env_paths = [
             project_root / ".env",
             Path(__file__).parent.parent / ".env",
-            Path(__file__).parent / ".env",
         ]
 
         for env_path in env_paths:
             if env_path.exists():
                 load_dotenv(env_path)
                 print(f"✅ 載入環境變數: {env_path}")
-                return True, str(env_path)
+                return True
 
         print("❌ 未找到 .env 檔案")
-        return False, "未找到"
+        return False
 
 
 # 載入環境變數
-env_loaded, env_path = _load_env()
+env_loaded = _load_env()
 
 import uvicorn
 
@@ -111,7 +110,7 @@ async def lifespan(app: FastAPI):
         app.state.task_manager = get_task_manager()
         app.state.ai_service = get_ai_service()
 
-        logger.info(f"環境變數載入: {env_loaded} ({env_path})")
+        logger.info(f"環境變數載入: {'成功' if env_loaded else '失敗'}")
         logger.info(f"AI 提供者: {app.state.settings.AI_PROVIDER}")
         logger.info(f"Gemini 配置: {app.state.settings.get_gemini_configured()}")
         logger.info(f"Claude 配置: {app.state.settings.get_claude_configured()}")
@@ -292,7 +291,9 @@ def print_routes():
     print("=" * 80)
 
 
-print_routes()
+# 只在開發環境或除錯模式下顯示路由
+if os.getenv("DEBUG", "false").lower() == "true" or env_loaded:
+    print_routes()
 
 # =============================================================================
 # 主程式進入點

@@ -82,13 +82,11 @@ class Settings(BaseSettings):
     # =========================================================================
 
     LOG_LEVEL: str = Field(default="INFO", description="日誌等級")
-    LOG_FORMAT: str = Field(default="detailed", description="日誌格式")
 
     # =========================================================================
     # 系統配置
     # =========================================================================
 
-    ENVIRONMENT: str = Field(default="development", description="執行環境")
     DEBUG: bool = Field(default=True, description="除錯模式")
     ADMIN_API_KEY: Optional[str] = Field(default="Cisc0123", description="管理員 API 金鑰")
 

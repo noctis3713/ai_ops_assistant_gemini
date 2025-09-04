@@ -267,26 +267,6 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         )
 
 
-def register_exception_handlers(app):
-    """在 FastAPI 應用中註冊異常處理器"""
-    # 註冊核心異常處理器
-    app.add_exception_handler(ServiceError, service_error_handler)
-    app.add_exception_handler(AuthenticationError, service_error_handler)
-    app.add_exception_handler(ValidationError, service_error_handler)
-    app.add_exception_handler(ExternalServiceError, service_error_handler)
-
-    # 註冊驗證異常處理器
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(PydanticValidationError, validation_exception_handler)
-
-    # 註冊 HTTP 異常處理器
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-
-    # 註冊通用異常處理器（必須最後註冊）
-    app.add_exception_handler(Exception, general_exception_handler)
-
-    logger.info("已註冊異常處理器")
 
 
 # =============================================================================
