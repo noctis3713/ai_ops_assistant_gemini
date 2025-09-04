@@ -13,7 +13,6 @@ Created: 2025-08-22
 Author: Claude Code Assistant
 """
 
-import asyncio
 import logging
 import os
 import sys

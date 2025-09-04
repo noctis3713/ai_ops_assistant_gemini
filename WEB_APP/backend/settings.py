@@ -12,12 +12,11 @@
 import json
 import logging
 import os
-import re
 from ipaddress import AddressValueError, IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
