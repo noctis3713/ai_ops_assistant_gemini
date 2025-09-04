@@ -98,7 +98,6 @@ class TaskRequest(BaseModel):
         default=None, description="指令內容（device_command必填）"
     )
     query: Optional[str] = Field(default=None, description="AI查詢內容（ai_query必填）")
-    webhook_url: Optional[str] = Field(default=None, description="完成時的回調URL")
 
 
 class TaskCreateResponse(BaseModel):
@@ -219,7 +218,6 @@ async def create_task(request: TaskRequest):
         task_id = await task_manager.create_task(
             operation_type=request.operation_type,
             payload=payload,
-            webhook_url=request.webhook_url,
         )
 
         data = TaskCreateResponse(

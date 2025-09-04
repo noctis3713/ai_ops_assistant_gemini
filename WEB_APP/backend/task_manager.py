@@ -80,7 +80,6 @@ class Task:
     completed_at: Optional[datetime] = None
     results: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    webhook_url: Optional[str] = None
     token_cost: Optional[Dict[str, Any]] = None
 
 
@@ -103,14 +102,12 @@ class AsyncTaskManager:
         self,
         operation_type: str,
         payload: Dict[str, Any],
-        webhook_url: Optional[str] = None,
     ) -> str:
         """建立並啟動新的異步任務
 
         Args:
             operation_type: 操作類型，device_command 或 ai_query
             payload: 任務執行所需的參數資料
-            webhook_url: 任務完成後的回調 URL
 
         Returns:
             任務的唯一識別符
@@ -121,7 +118,6 @@ class AsyncTaskManager:
             task_id=task_id,
             operation_type=operation_type,
             payload=payload,
-            webhook_url=webhook_url,
         )
 
         async with self._lock:
@@ -174,9 +170,6 @@ class AsyncTaskManager:
 
             logger.info(f"任務執行完成: {task_id}")
 
-            # 發送 webhook 通知
-            if task.webhook_url:
-                await self._send_webhook(task)
 
         except Exception as e:
             logger.error(f"任務執行失敗: {task_id}, 錯誤: {e}")
@@ -344,43 +337,6 @@ class AsyncTaskManager:
             task = self.tasks.get(task_id)
             if task:
                 task.progress.update(percentage, stage)
-
-    async def _send_webhook(self, task: Task):
-        """發送任務完成的 Webhook 通知
-
-        向指定的 URL 發送 HTTP POST 請求，包含任務結果。
-        """
-        if not task.webhook_url:
-            return
-
-        try:
-            import aiohttp
-
-            payload = {
-                "task_id": task.task_id,
-                "status": task.status.value,
-                "operation_type": task.operation_type,
-                "results": task.results,
-                "completed_at": (
-                    task.completed_at.isoformat() if task.completed_at else None
-                ),
-            }
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    task.webhook_url,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as response:
-                    if response.status == 200:
-                        logger.info(f"Webhook 通知成功: {task.task_id}")
-                    else:
-                        logger.warning(
-                            f"Webhook 通知失敗: {task.task_id}, 狀態碼: {response.status}"
-                        )
-
-        except Exception as e:
-            logger.error(f"發送 webhook 失敗: {task.task_id}, 錯誤: {e}")
 
 
 # 全域任務管理器實例

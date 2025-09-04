@@ -81,7 +81,6 @@ class Settings(BaseSettings):
     # 日誌配置
     # =========================================================================
 
-    LOG_LEVEL: str = Field(default="INFO", description="日誌等級")
 
     # =========================================================================
     # 系統配置
@@ -127,7 +126,6 @@ class Settings(BaseSettings):
 
     _devices_config: Optional[List[Dict[str, Any]]] = None
     _groups_config: Optional[Dict[str, Any]] = None
-    _security_config: Optional[Dict[str, Any]] = None
 
     @property
     def config_dir(self) -> Path:
@@ -195,30 +193,6 @@ class Settings(BaseSettings):
             self._groups_config = {}
             return self._groups_config
 
-    def get_security_config(self) -> Dict[str, Any]:
-        """載入安全政策和驗證配置
-
-        從 security.json 讀取安全設定，用於指令驗證。
-        """
-        if self._security_config is not None:
-            return self._security_config
-
-        config_file = self.config_dir / "security.json"
-
-        try:
-            if not config_file.exists():
-                self._security_config = {}
-                return self._security_config
-
-            with open(config_file, "r", encoding="utf-8") as f:
-                self._security_config = json.load(f)
-
-            return self._security_config
-
-        except Exception as e:
-            logger.error(f"載入安全配置失敗: {e}")
-            self._security_config = {}
-            return self._security_config
 
     def get_device_by_ip(self, ip: str) -> Optional[Dict[str, Any]]:
         """根據 IP 位址查找設備配置
@@ -231,22 +205,7 @@ class Settings(BaseSettings):
                 return device
         return None
 
-    def get_all_device_ips(self) -> List[str]:
-        """獲取系統中所有設備的 IP 位址清單
 
-        返回所有已配置設備的 IP 位址列表。
-        """
-        devices = self.get_devices_config()
-        return [d.get("ip") for d in devices if d.get("ip")]
-
-    def refresh_config(self):
-        """刷新所有配置檔案的快取
-
-        清除所有內存快取，強制重新讀取配置檔案。
-        """
-        self._devices_config = None
-        self._groups_config = None
-        self._security_config = None
 
 
 # 全域實例
@@ -383,28 +342,6 @@ class SimpleCommandValidator:
 
         return True, "指令安全驗證通過"
 
-    def reload_config(self):
-        """重新讀取安全政策配置
-
-        從 security.json 更新允許的指令和危險關鍵字，
-        如果失敗則使用預設安全設定。
-        """
-        try:
-            # 直接使用全域 settings 實例
-            security_config = settings.get_security_config()
-            command_config = security_config.get("command_validation", {})
-
-            self.allowed_prefixes = command_config.get(
-                "allowed_command_prefixes", self.DEFAULT_ALLOWED_PREFIXES
-            )
-            self.dangerous_keywords = command_config.get(
-                "dangerous_keywords", self.DEFAULT_DANGEROUS_KEYWORDS
-            )
-            logger.info("指令驗證配置已重載")
-        except Exception as e:
-            logger.warning(f"重載指令驗證配置失敗，使用預設配置: {e}")
-            self.allowed_prefixes = self.DEFAULT_ALLOWED_PREFIXES.copy()
-            self.dangerous_keywords = self.DEFAULT_DANGEROUS_KEYWORDS.copy()
 
 
 # 全域驗證器實例
@@ -423,15 +360,6 @@ def get_command_validator() -> SimpleCommandValidator:
 
 
 # 便利函數
-def validate_device_ip(device_ip: str) -> bool:
-    """快速驗證設備 IP 位址格式
-
-    回傳 IP 位址驗證的布爾值結果。
-    """
-    is_valid, _ = validate_ip_address(device_ip)
-    return is_valid
-
-
 def validate_command_safety(command: str) -> Tuple[bool, str]:
     """驗證指令安全性的便捷函數
 
@@ -441,13 +369,6 @@ def validate_command_safety(command: str) -> Tuple[bool, str]:
     return validator.validate_command(command)
 
 
-def is_safe_command(command: str) -> bool:
-    """檢查指令是否通過安全檢查
-
-    回傳指令安全檢查的布爾值結果。
-    """
-    is_safe, _ = validate_command_safety(command)
-    return is_safe
 
 
 __all__ = [
@@ -459,7 +380,5 @@ __all__ = [
     "validate_device_list",
     "SimpleCommandValidator",
     "get_command_validator",
-    "validate_device_ip",
     "validate_command_safety",
-    "is_safe_command",
 ]
