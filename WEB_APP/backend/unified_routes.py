@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from ai.service import get_ai_service
@@ -52,33 +52,26 @@ health_router = APIRouter(tags=["健康檢查"])  # 無前綴的健康檢查路�
 # API Key 驗證依賴
 # =============================================================================
 
+
 async def verify_api_key(x_api_key: str = Header(None)):
     """驗證 X-API-Key 標頭
-    
+
     檢查請求標頭中的 X-API-Key 是否與設定中的 ADMIN_API_KEY 相符。
     如果驗證失敗，拋出 401 Unauthorized 異常。
     """
     settings = get_settings()
-    
+
     if not x_api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="缺少 X-API-Key 標頭"
-        )
-    
+        raise HTTPException(status_code=401, detail="缺少 X-API-Key 標頭")
+
     if not settings.ADMIN_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="伺服器未設定管理員 API Key"
-        )
-        
+        raise HTTPException(status_code=500, detail="伺服器未設定管理員 API Key")
+
     if x_api_key != settings.ADMIN_API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="無效的 API Key"
-        )
-    
+        raise HTTPException(status_code=401, detail="無效的 API Key")
+
     return True
+
 
 # =============================================================================
 # Pydantic 模型定義
@@ -127,7 +120,9 @@ class TaskStatusResponse(BaseModel):
     progress: Dict[str, Any]
     results: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    token_cost: Optional[Dict[str, Any]] = Field(default=None, description="Token 使用量和成本資訊（僅 AI 查詢任務有此欄位）")
+    token_cost: Optional[Dict[str, Any]] = Field(
+        default=None, description="Token 使用量和成本資訊（僅 AI 查詢任務有此欄位）"
+    )
 
 
 # 設備相關模型
@@ -260,7 +255,7 @@ async def get_task_status(task_id: str):
         progress=task.progress.to_dict(),
         results=task.results,
         error=task.error,
-        token_cost=getattr(task, 'token_cost', None),
+        token_cost=getattr(task, "token_cost", None),
     )
 
     message = "任務查詢成功"
@@ -536,5 +531,3 @@ async def get_task_statistics(authorized: bool = Depends(verify_api_key)):
         return BaseResponse.error_response(
             f"任務統計查詢失敗: {str(e)}", "TASK_STATS_ERROR"
         )
-
-

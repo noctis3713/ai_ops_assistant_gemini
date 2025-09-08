@@ -17,7 +17,6 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
 
 # 設定專案路徑
@@ -68,9 +67,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 
+from clickhouse.routes import router as clickhouse_router
+
 # 匯入路由模組
 from unified_routes import admin_router, health_router, router
-from clickhouse.routes import router as clickhouse_router
 
 # 設定日誌
 logging.basicConfig(

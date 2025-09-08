@@ -22,24 +22,28 @@ from typing import Any, Dict, List, Optional, Tuple
 # AI 服務相關導入
 try:
     import warnings
+
     from langchain.agents import AgentExecutor, create_tool_calling_agent
     from langchain_core.output_parsers import PydanticOutputParser
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langchain_core.tools import Tool
+
     warnings.filterwarnings("ignore")
     AI_AVAILABLE = True
 except ImportError as e:
     import sys
+
     if "default credentials" not in str(e).lower():
         print(f"AI 套件導入失敗: {e}", file=sys.stderr)
     AI_AVAILABLE = False
 
 from common import NetworkAnalysisResponse
 from exceptions import ExternalServiceError, ai_error
-from .llm_factory import LLMFactory
 from network import batch_command_wrapper, set_device_scope_restriction
-from .prompt_manager import get_prompt_manager
 from settings import settings
+
+from .llm_factory import LLMFactory
+from .prompt_manager import get_prompt_manager
 from .token_calculator import TokenCalculator, TokenLogger
 
 logger = logging.getLogger(__name__)
@@ -60,13 +64,13 @@ class AIService:
         self.agent_executor = None
         self.ai_initialized = False
         self.llm = None
-        
+
         # 初始化工具實例
         self.token_calculator = TokenCalculator()
         self.token_logger = TokenLogger()
         self.parser = PydanticOutputParser(pydantic_object=NetworkAnalysisResponse)
         self.prompt_manager = get_prompt_manager()
-        
+
         # 使用工廠模式初始化
         self._initialize_ai()
 
@@ -75,43 +79,43 @@ class AIService:
         if not AI_AVAILABLE:
             logger.warning("AI 功能不可用，跳過初始化")
             return False
-        
+
         try:
             # 驗證配置
             is_valid, error_msg = LLMFactory.validate_provider_config(settings)
             if not is_valid:
                 logger.error(f"AI 配置無效: {error_msg}")
                 return False
-            
+
             # 建立 Token 使用量回調
             usage_callback = LLMFactory.create_usage_callback()
-            
+
             # 使用工廠模式建立 LLM
             self.llm = LLMFactory.create_llm(settings, usage_callback)
             if not self.llm:
                 logger.error("LLM 初始化失敗")
                 return False
-            
+
             # 儲存 callback 以便後續使用
             self.usage_callback = usage_callback
-            
+
             # 建立 Agent
             tools = self._create_tools()
             base_prompt_template = self._create_custom_prompt_template()
             agent = create_tool_calling_agent(self.llm, tools, base_prompt_template)
-            
+
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=tools,
                 verbose=False,
                 handle_parsing_errors=True,
-                return_intermediate_steps=True
+                return_intermediate_steps=True,
             )
-            
+
             logger.info(f"AI 系統初始化成功 - 提供者: {settings.AI_PROVIDER.upper()}")
             self.ai_initialized = True
             return True
-            
+
         except Exception as e:
             logger.error(f"AI 系統初始化失敗: {e}")
             return False
@@ -179,19 +183,21 @@ class AIService:
     def _create_custom_prompt_template(self, **kwargs) -> ChatPromptTemplate:
         """建立適用於 tool calling agent 的提示詞模板"""
         # 建立基礎模板
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "{system_prompt}"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", "{system_prompt}"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
+
         # 渲染系統提示詞內容
         system_prompt_content = self.prompt_manager.render_system_prompt(
             search_enabled=False,
             format_instructions=self.parser.get_format_instructions(),
-            **kwargs
+            **kwargs,
         )
-        
+
         # 使用 partial 方法填充系統提示詞
         prompt = prompt.partial(system_prompt=system_prompt_content)
         return prompt
@@ -253,14 +259,22 @@ class AIService:
             for attempt in range(max_retries):
                 try:
                     # 重置 callback
-                    if self.usage_callback and hasattr(self.usage_callback, "usage_metadata"):
+                    if self.usage_callback and hasattr(
+                        self.usage_callback, "usage_metadata"
+                    ):
                         self.usage_callback.usage_metadata = {}
 
                     # 執行 AI 查詢
-                    config = {"callbacks": [self.usage_callback]} if self.usage_callback else {}
+                    config = (
+                        {"callbacks": [self.usage_callback]}
+                        if self.usage_callback
+                        else {}
+                    )
                     result = await asyncio.wait_for(
                         asyncio.to_thread(
-                            self.agent_executor.invoke, {"input": current_prompt}, config
+                            self.agent_executor.invoke,
+                            {"input": current_prompt},
+                            config,
                         ),
                         timeout=timeout,
                     )
@@ -269,7 +283,9 @@ class AIService:
                     intermediate_steps = result.get("intermediate_steps", [])
 
                     if not intermediate_steps:
-                        logger.warning(f"嘗試 {attempt + 1}/{max_retries}: AI 未執行任何工具，可能發生幻覺")
+                        logger.warning(
+                            f"嘗試 {attempt + 1}/{max_retries}: AI 未執行任何工具，可能發生幻覺"
+                        )
 
                         if attempt < max_retries - 1:
                             # 基於原始 prompt 構建新的強制提示
@@ -282,7 +298,9 @@ class AIService:
                             logger.info(f"重試 {attempt + 2}，加入強制執行提示")
                             continue
                         else:
-                            raise Exception("AI 連續 3 次未使用工具執行，無法獲取真實數據。請檢查系統配置或聯繫技術支援。")
+                            raise Exception(
+                                "AI 連續 3 次未使用工具執行，無法獲取真實數據。請檢查系統配置或聯繫技術支援。"
+                            )
 
                     # 有工具執行，跳出重試循環
                     logger.info(f"成功：在第 {attempt + 1} 次嘗試時執行了工具")
@@ -293,14 +311,24 @@ class AIService:
                     raise Exception(f"AI 分析處理超時（{timeout}秒）")
 
             # 取得最終回答
-            final_answer_str = result.get("output", "") if isinstance(result, dict) else str(result)
+            final_answer_str = (
+                result.get("output", "") if isinstance(result, dict) else str(result)
+            )
 
             # 如果回答為空，嘗試從 intermediate_steps 提取
             if not final_answer_str.strip() and isinstance(result, dict):
-                if 'intermediate_steps' in result and result['intermediate_steps']:
+                if "intermediate_steps" in result and result["intermediate_steps"]:
                     logger.warning("Output 為空，嘗試從 intermediate_steps 提取結果")
-                    last_step = result['intermediate_steps'][-1] if result['intermediate_steps'] else None
-                    if last_step and isinstance(last_step, tuple) and len(last_step) > 1:
+                    last_step = (
+                        result["intermediate_steps"][-1]
+                        if result["intermediate_steps"]
+                        else None
+                    )
+                    if (
+                        last_step
+                        and isinstance(last_step, tuple)
+                        and len(last_step) > 1
+                    ):
                         potential_output = str(last_step[1])
                         if potential_output.strip():
                             final_answer_str = potential_output
@@ -310,22 +338,30 @@ class AIService:
                 raise ai_error("AI", "AI 回應為空", "AI_EMPTY_RESPONSE")
 
             # 處理 Token 使用量
-            usage_data = self._process_token_usage(result, task_id, current_prompt, final_answer_str)
+            usage_data = self._process_token_usage(
+                result, task_id, current_prompt, final_answer_str
+            )
 
             try:
                 # 嘗試結構化解析
-                structured_response: NetworkAnalysisResponse = self.parser.parse(final_answer_str)
+                structured_response: NetworkAnalysisResponse = self.parser.parse(
+                    final_answer_str
+                )
                 logger.info(f"成功解析結構化回應: {structured_response.analysis_type}")
-                return self._create_query_result(structured_response.to_markdown(), task_id, usage_data)
+                return self._create_query_result(
+                    structured_response.to_markdown(), task_id, usage_data
+                )
 
             except Exception as parse_error:
                 # 後備解析策略
                 logger.warning(f"結構化解析失敗: {parse_error}")
                 cleaned_response = self._clean_response(final_answer_str)
-                
+
                 if cleaned_response:
                     logger.info("使用後備解析策略")
-                    return self._create_query_result(cleaned_response, task_id, usage_data)
+                    return self._create_query_result(
+                        cleaned_response, task_id, usage_data
+                    )
                 else:
                     raise Exception(f"結構化解析和後備解析都失敗: {parse_error}")
 
@@ -341,35 +377,46 @@ class AIService:
             # 清除設備範圍限制
             set_device_scope_restriction(None)
 
-    def _process_token_usage(self, result: Any, task_id: str, input_text: str, output_text: str) -> Dict[str, Any]:
+    def _process_token_usage(
+        self, result: Any, task_id: str, input_text: str, output_text: str
+    ) -> Dict[str, Any]:
         """處理 Token 使用量計算和記錄"""
         usage_data = self.token_calculator.extract_token_usage(result)
-        
+
         # 如果無法提取精確數據，使用估算
         if not usage_data:
-            usage_data = self.token_calculator.estimate_token_usage(input_text, output_text)
-        
-        if usage_data:
-            model = settings.CLAUDE_MODEL if settings.AI_PROVIDER == "claude" else settings.GEMINI_MODEL
-            cost = self.token_calculator.calculate_cost(
-                settings.AI_PROVIDER, model,
-                usage_data.get("input_tokens", 0),
-                usage_data.get("output_tokens", 0)
+            usage_data = self.token_calculator.estimate_token_usage(
+                input_text, output_text
             )
-            self.token_logger.log_usage(task_id, settings.AI_PROVIDER, model, usage_data, cost)
-        
+
+        if usage_data:
+            model = (
+                settings.CLAUDE_MODEL
+                if settings.AI_PROVIDER == "claude"
+                else settings.GEMINI_MODEL
+            )
+            cost = self.token_calculator.calculate_cost(
+                settings.AI_PROVIDER,
+                model,
+                usage_data.get("input_tokens", 0),
+                usage_data.get("output_tokens", 0),
+            )
+            self.token_logger.log_usage(
+                task_id, settings.AI_PROVIDER, model, usage_data, cost
+            )
+
         return usage_data or {}
 
     def _clean_response(self, response: str) -> str:
         """清理 AI 回應文本"""
         cleaned = response.strip()
-        
+
         # 清理常見的標記
         markers = ["Final Answer:", "The final answer is"]
         for marker in markers:
             if marker in cleaned:
                 cleaned = cleaned.split(marker)[-1].strip()
-        
+
         # 清理 markdown 代碼塊
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
@@ -378,65 +425,89 @@ class AIService:
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             cleaned = "\n".join(lines).strip()
-        
+
         # 移除殘留標記
         cleaned = cleaned.replace("```json", "").replace("```", "").strip()
-        
+
         return cleaned
 
-    def _create_query_result(self, response_text: str, task_id: str, usage_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_query_result(
+        self, response_text: str, task_id: str, usage_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """建立查詢結果"""
         token_cost = None
-        
+
         if usage_data:
             provider = settings.AI_PROVIDER
-            model = settings.CLAUDE_MODEL if provider == "claude" else settings.GEMINI_MODEL
-            
+            model = (
+                settings.CLAUDE_MODEL if provider == "claude" else settings.GEMINI_MODEL
+            )
+
             token_cost = {
                 "input_tokens": usage_data.get("input_tokens", 0),
                 "output_tokens": usage_data.get("output_tokens", 0),
                 "total_tokens": usage_data.get("total_tokens", 0),
                 "estimated_cost_usd": self.token_calculator.calculate_cost(
-                    provider, model,
+                    provider,
+                    model,
                     usage_data.get("input_tokens", 0),
-                    usage_data.get("output_tokens", 0)
+                    usage_data.get("output_tokens", 0),
                 ),
                 "provider": provider,
                 "model": model,
                 "is_estimated": usage_data.get("estimated", False),
             }
-        
+
         return {"response": response_text, "token_cost": token_cost}
 
     def classify_ai_error(self, error_str: str) -> Tuple[str, int]:
         """分類 AI API 錯誤並返回錯誤訊息和狀態碼"""
         ai_provider = settings.AI_PROVIDER
         error_lower = error_str.lower()
-        
+
         # 配額和頻率限制錯誤
-        if any(keyword in error_lower for keyword in ["429", "quota", "rate limit", "exceeded", "limit", "已用完", "resource_exhausted"]):
+        if any(
+            keyword in error_lower
+            for keyword in [
+                "429",
+                "quota",
+                "rate limit",
+                "exceeded",
+                "limit",
+                "已用完",
+                "resource_exhausted",
+            ]
+        ):
             if ai_provider == "claude":
                 return "Claude API 請求頻率限制，請稍後再試（建議等待 1-2 分鐘）", 429
             else:
-                return "Google Gemini API 免費額度已用完（50次/日），請等待明天重置或升級付費方案。或者嘗試使用 Claude AI。", 429
-        
+                return (
+                    "Google Gemini API 免費額度已用完（50次/日），請等待明天重置或升級付費方案。或者嘗試使用 Claude AI。",
+                    429,
+                )
+
         # 認證錯誤
-        elif any(keyword in error_lower for keyword in ["401", "unauthorized", "invalid api key"]):
+        elif any(
+            keyword in error_lower
+            for keyword in ["401", "unauthorized", "invalid api key"]
+        ):
             return f"{ai_provider.upper()} API 認證失敗，請檢查 API Key 設定", 401
-        
+
         # 權限錯誤
         elif "403" in error_str or "forbidden" in error_lower:
             return f"{ai_provider.upper()} API 權限不足，請檢查 API Key 權限設定", 403
-        
+
         # 服務器錯誤
         elif "500" in error_str or "internal server error" in error_lower:
             service_name = "Claude AI" if ai_provider == "claude" else "Google AI"
             return f"{service_name} 服務暫時不可用，請稍後再試", 502
-        
+
         # 網路錯誤
-        elif any(keyword in error_lower for keyword in ["network", "connection", "timeout"]):
+        elif any(
+            keyword in error_lower for keyword in ["network", "connection", "timeout"]
+        ):
             return "網路連接問題，請檢查網路連接後重試", 503
-        
+
         else:
             return f"{ai_provider.upper()} AI 查詢執行失敗: {error_str}", 500
 

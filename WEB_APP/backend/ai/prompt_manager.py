@@ -94,10 +94,8 @@ class PromptManager:
         """載入配置檔案"""
         try:
             self.variables = self._load_yaml("config/variables.yaml")
-            
-            logger.info(
-                f"配置載入完成 - 變數: {len(self.variables)}"
-            )
+
+            logger.info(f"配置載入完成 - 變數: {len(self.variables)}")
 
         except Exception as e:
             logger.error(f"配置載入失敗: {e}")
@@ -174,8 +172,6 @@ class PromptManager:
             enhanced_prompt += guardrails_context
 
         return enhanced_prompt
-
-
 
     def _get_available_templates(self) -> List[str]:
         """取得可用的模板列表"""

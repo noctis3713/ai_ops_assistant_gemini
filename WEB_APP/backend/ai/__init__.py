@@ -13,14 +13,14 @@ Created: 2025-09-03
 Author: Claude Code Assistant
 """
 
-# 匯出核心 AI 服務
-from .service import AIService, get_ai_service
-
 # 匯出 LLM 工廠
 from .llm_factory import LLMFactory
 
 # 匯出提示詞管理器
 from .prompt_manager import PromptManager, get_prompt_manager
+
+# 匯出核心 AI 服務
+from .service import AIService, get_ai_service
 
 # 匯出 Token 計算器
 from .token_calculator import TokenCalculator, TokenLogger
@@ -28,9 +28,9 @@ from .token_calculator import TokenCalculator, TokenLogger
 __all__ = [
     "AIService",
     "get_ai_service",
-    "LLMFactory", 
+    "LLMFactory",
     "PromptManager",
     "get_prompt_manager",
     "TokenCalculator",
-    "TokenLogger"
+    "TokenLogger",
 ]

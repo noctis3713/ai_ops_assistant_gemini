@@ -20,14 +20,14 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # 異步網路相關導入
 import asyncssh
 from asyncssh import SSHClientConnection
 
-from settings import get_command_validator
 import settings as settings_module
+from settings import get_command_validator
 
 logger = logging.getLogger(__name__)
 
@@ -279,17 +279,19 @@ class AsyncConnectionPool:
                     login_timeout=10,
                     known_hosts=None,
                 )
-                
+
                 # 設定 keepalive 參數以維持連線池中的連線活性
                 # 每隔 60 秒發送探測封包，最多容許 5 次失敗後斷線
                 conn.set_keepalive(
                     settings_module.settings.SSH_KEEPALIVE_INTERVAL,  # interval: 60 秒
-                    settings_module.settings.SSH_KEEPALIVE_COUNT      # count: 5 次失敗後斷線
+                    settings_module.settings.SSH_KEEPALIVE_COUNT,  # count: 5 次失敗後斷線
                 )
 
                 self.connections[device_ip] = conn
                 self.connection_times[device_ip] = current_time
-                logger.info(f"建立新的異步連線: {device_ip} (keepalive: {settings_module.settings.SSH_KEEPALIVE_INTERVAL}s)")
+                logger.info(
+                    f"建立新的異步連線: {device_ip} (keepalive: {settings_module.settings.SSH_KEEPALIVE_INTERVAL}s)"
+                )
                 return conn
 
             except Exception as e:

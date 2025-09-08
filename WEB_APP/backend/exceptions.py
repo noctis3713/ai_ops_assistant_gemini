@@ -267,8 +267,6 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         )
 
 
-
-
 # =============================================================================
 # 相容性支援和工具函數
 # =============================================================================
@@ -295,17 +293,3 @@ def convert_to_service_error(
         return ValidationError(str(exc))
     else:
         return ServiceError(f"{operation}失敗: {str(exc)}", "UNKNOWN_ERROR", 500)
-
-
-# 兼容性別名
-map_exception_to_service_error = convert_to_service_error
-
-# 兼容性異常類別別名
-DeviceNotFoundError = lambda device_ip: device_error(
-    device_ip, "設備未找到", "DEVICE_NOT_FOUND"
-)
-AINotAvailableError = lambda reason="AI 服務不可用": ai_error(
-    "Unknown", reason, "AI_NOT_AVAILABLE"
-)
-TaskNotFoundError = lambda task_id: task_error(task_id, "任務不存在", "TASK_NOT_FOUND")
-ConfigNotFoundError = lambda path: config_error(f"配置檔案不存在: {path}", path)

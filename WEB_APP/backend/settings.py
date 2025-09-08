@@ -60,7 +60,8 @@ class Settings(BaseSettings):
     PARSER_VERSION: str = Field(default="original", description="解析器版本")
     PROMPT_LANGUAGE: str = Field(default="zh_TW", description="提示詞語言")
     PROMPT_TEMPLATE_DIR: Optional[str] = Field(
-        default="/home/sysadmin/ai_ops_assistant_gemini/WEB_APP/backend/ai/prompts", description="提示詞模板目錄路徑"
+        default="/home/sysadmin/ai_ops_assistant_gemini/WEB_APP/backend/ai/prompts",
+        description="提示詞模板目錄路徑",
     )
 
     # =========================================================================
@@ -70,8 +71,12 @@ class Settings(BaseSettings):
     MAX_CONNECTIONS: int = Field(default=5, description="最大 SSH 連線數")
     CONNECTION_TIMEOUT: int = Field(default=300, description="連線逾時時間 (秒)")
     COMMAND_TIMEOUT: int = Field(default=20, description="指令執行逾時時間 (秒)")
-    SSH_KEEPALIVE_INTERVAL: int = Field(default=60, description="SSH keepalive 間隔 (秒)")
-    SSH_KEEPALIVE_COUNT: int = Field(default=5, description="SSH keepalive 最大失敗次數")
+    SSH_KEEPALIVE_INTERVAL: int = Field(
+        default=60, description="SSH keepalive 間隔 (秒)"
+    )
+    SSH_KEEPALIVE_COUNT: int = Field(
+        default=5, description="SSH keepalive 最大失敗次數"
+    )
     DEVICE_USERNAME: Optional[str] = Field(default=None, description="設備預設用戶名")
     DEVICE_PASSWORD: Optional[str] = Field(default=None, description="設備預設密碼")
     DEVICE_TYPE: str = Field(default="cisco_ios", description="預設設備類型")
@@ -81,14 +86,14 @@ class Settings(BaseSettings):
     # 日誌配置
     # =========================================================================
 
-
     # =========================================================================
     # 系統配置
     # =========================================================================
 
     DEBUG: bool = Field(default=True, description="除錯模式")
-    ADMIN_API_KEY: Optional[str] = Field(default="Cisc0123", description="管理員 API 金鑰")
-
+    ADMIN_API_KEY: Optional[str] = Field(
+        default="Cisc0123", description="管理員 API 金鑰"
+    )
 
     # =========================================================================
     # 配置驗證和工具方法
@@ -193,7 +198,6 @@ class Settings(BaseSettings):
             self._groups_config = {}
             return self._groups_config
 
-
     def get_device_by_ip(self, ip: str) -> Optional[Dict[str, Any]]:
         """根據 IP 位址查找設備配置
 
@@ -204,8 +208,6 @@ class Settings(BaseSettings):
             if device.get("ip") == ip:
                 return device
         return None
-
-
 
 
 # 全域實例
@@ -343,7 +345,6 @@ class SimpleCommandValidator:
         return True, "指令安全驗證通過"
 
 
-
 # 全域驗證器實例
 _command_validator = None
 
@@ -367,8 +368,6 @@ def validate_command_safety(command: str) -> Tuple[bool, str]:
     """
     validator = get_command_validator()
     return validator.validate_command(command)
-
-
 
 
 __all__ = [
