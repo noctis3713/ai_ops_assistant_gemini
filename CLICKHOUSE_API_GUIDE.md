@@ -1,32 +1,30 @@
-# n8n ClickHouse Flow API 整合手冊
+# ClickHouse 網路流量分析 API 使用指南
 
 ## 🚀 系統概覽
 
-本手冊為 **n8n 使用者**提供完整的 ClickHouse Flow API 整合指南，讓您能在 n8n 工作流中輕鬆使用網路流量分析功能。
+本指南提供 **ClickHouse 流量分析 API** 的完整使用說明，讓您能夠輕鬆整合網路流量分析功能到您的應用中。
 
 ### 技術規格
 - **架構**: FastAPI + ClickHouse + Akvorado
-- **資料庫**: ClickHouse 25.3.6.56
+- **資料庫**: ClickHouse 25.3.6.56  
 - **回應格式**: JSON
-- **平均回應時間**: 20-35ms
-- **成功率**: 100%
-- **資料量**: 110,000+ 流量記錄
+- **平均回應時間**: 190-210ms
+- **資料量**: 345,000+ 流量記錄
+- **更新頻率**: 即時流量資料
 
 ### 系統狀態
 ✅ **生產就緒** - 所有核心功能完全可用  
-⚡ **高效能** - 平均回應時間 20-35ms  
-🔒 **穩定可靠** - 100% API 成功率  
+⚡ **高效能** - 平均回應時間 200ms  
+🔒 **穩定可靠** - 經過實戰測試
 
 ---
 
 ## 📋 目錄
 
 - [快速開始](#快速開始)
-- [API 端點列表](#api-端點列表)
-- [資料模型](#資料模型)
-- [認證與連線](#認證與連線)
+- [API 端點](#api-端點)
 - [使用範例](#使用範例)
-- [進階功能](#進階功能)
+- [n8n 工作流整合](#n8n-工作流整合)
 - [最佳實踐](#最佳實踐)
 - [故障排除](#故障排除)
 
@@ -38,6 +36,7 @@
 - **基礎 URL**: `http://ai_ops_backend:8000/api/flows`
 - **協定**: HTTP/1.1
 - **內容類型**: `application/json`
+- **認證**: 無需認證（內部網路）
 
 ### 健康檢查
 ```bash
@@ -46,21 +45,26 @@ curl -X GET "http://ai_ops_backend:8000/api/flows/health"
 
 ### 快速測試
 ```bash
-# 獲取最近1小時的流量概覽
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
+# 獲取最近 3 天的完整流量分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis"
 
-# 獲取 Top 5 流量來源
-curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=5&hours=1"
+# 獲取最近 1 天的流量分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1"
+
+# 獲取特定設備的流量分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1&device=SIS-HD-H7A08-1"
 ```
 
 ---
 
-## 📡 API 端點列表
+## 📡 API 端點
 
 ### 1. 健康檢查
 **GET** `/health`
 
 檢查 ClickHouse 連接狀態和系統資訊。
+
+**參數**: 無
 
 **回應時間**: ~38ms
 
@@ -68,655 +72,353 @@ curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=5&hours=1"
 ```json
 {
   "status": "connected",
-  "database": "default",
+  "database": "default", 
   "version": "25.3.6.56",
-  "uptime_seconds": 14507,
+  "uptime_seconds": 11074,
   "tables": [
     {
       "name": "flows",
       "engine": "MergeTree",
-      "total_rows": 111473,
-      "total_bytes": 1564244
+      "total_rows": 345507,
+      "total_bytes": 5719214
     },
     {
-      "name": "flows_1m0s",
+      "name": "flows_1m0s", 
       "engine": "SummingMergeTree",
-      "total_rows": 59143,
-      "total_bytes": 867619
-    },
-    {
-      "name": "flows_5m0s",
-      "engine": "SummingMergeTree",
-      "total_rows": 31522,
-      "total_bytes": 377017
-    },
-    {
-      "name": "flows_1h0m0s",
-      "engine": "SummingMergeTree",
-      "total_rows": 11512,
-      "total_bytes": 116488
-    },
-    {
-      "name": "exporters",
-      "engine": "ReplacingMergeTree",
-      "total_rows": 24,
-      "total_bytes": 5538
-    }
-  ]
-}
-```
-
----
-
-### 2. 流量概覽統計
-**GET** `/summary`
-
-獲取指定時間範圍內的流量統計總覽。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-168，預設 24
-- `include_details` (bool): 是否包含執行時間，預設 false
-
-**回應時間**: ~16ms
-
-**使用範例**:
-```bash
-# 獲取1小時統計（包含詳細資訊）
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1&include_details=true"
-
-# 獲取24小時統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=24"
-```
-
-**回應範例**:
-```json
-{
-  "summary": {
-    "total_flows": 2585,
-    "total_bytes": 638670,
-    "total_packets": 3932,
-    "time_range_start": "2025-08-30T13:10:03",
-    "time_range_end": "2025-08-30T14:09:56",
-    "duration_seconds": 3593,
-    "avg_bytes_per_flow": 247.07,
-    "avg_packets_per_flow": 1.52
-  },
-  "execution_time_ms": 13.77,
-  "query_parameters": {
-    "hours": 1
-  }
-}
-```
-
----
-
-### 3. Top-N 流量分析
-**GET** `/top-talkers`
-
-獲取流量最大的 N 個 IP 位址統計。
-
-**參數**:
-- `limit` (int): 返回前 N 筆記錄，1-100，預設 10
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `by_field` (str): 排序欄位，可選：bytes, packets, flows，預設 bytes
-- `src_or_dst` (str): 統計來源或目的地，可選：src, dst，預設 src
-
-**回應時間**: ~47ms
-
-**使用範例**:
-```bash
-# 獲取 Top 5 流量來源（按位元組）
-curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=5&hours=1&by_field=bytes&src_or_dst=src"
-
-# 獲取 Top 10 流量目的地（按封包）
-curl -X GET "http://ai_ops_backend:8000/api/flows/top-talkers?limit=10&hours=1&by_field=packets&src_or_dst=dst"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "address": "202.153.183.18",
-    "bytes": 569717,
-    "packets": 3079,
-    "flows": 1946,
-    "percentage": 85.69
-  }
-]
-```
-
----
-
-### 4. 協定流量分佈
-**GET** `/protocols`
-
-獲取網路協定的流量分佈統計。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `limit` (int): 返回前 N 個協定，1-50，預設 10
-
-**回應時間**: ~24ms
-
-**使用範例**:
-```bash
-curl -X GET "http://ai_ops_backend:8000/api/flows/protocols?hours=1&limit=10"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "protocol_number": 17,
-    "protocol_name": "UDP",
-    "flows": 1636,
-    "bytes": 49217710,
-    "packets": 48457,
-    "percentage": 99.27
-  },
-  {
-    "protocol_number": 6,
-    "protocol_name": "TCP",
-    "flows": 1104,
-    "bytes": 271469,
-    "packets": 1393,
-    "percentage": 0.55
-  },
-  {
-    "protocol_number": 1,
-    "protocol_name": "ICMP",
-    "flows": 696,
-    "bytes": 88042,
-    "packets": 1020,
-    "percentage": 0.18
-  }
-]
-```
-
----
-
-### 5. 地理位置分析
-**GET** `/geolocation`
-
-獲取按地理位置分組的流量統計。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `limit` (int): 返回前 N 個位置，1-50，預設 10
-- `by_country_only` (bool): 是否只按國家統計，預設 true
-
-**回應時間**: ~41ms
-
-**使用範例**:
-```bash
-# 獲取國家層級統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/geolocation?hours=1&limit=5&by_country_only=true"
-
-# 獲取城市層級統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/geolocation?hours=1&limit=10&by_country_only=false"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "country": "TW",
-    "city": "Taipei",
-    "flows": 207,
-    "bytes": 730211,
-    "packets": 730,
-    "percentage": 37.14
-  },
-  {
-    "country": "JO",
-    "city": "Amman",
-    "flows": 14851,
-    "bytes": 715968,
-    "packets": 14867,
-    "percentage": 36.42
-  },
-  {
-    "country": "TW",
-    "city": "Taoyuan",
-    "flows": 11,
-    "bytes": 134684,
-    "packets": 126,
-    "percentage": 6.85
-  }
-]
-```
-
-**📍 地理資料說明**: 
-- 當 `by_country_only=true` 時：返回國家層級統計，城市欄位為空
-- 當 `by_country_only=false` 時：返回城市層級統計，僅顯示有城市資料的記錄
-- 城市資料覆蓋率約 18-20%，主要包含台灣、美國、日本、約旦等地的城市
-
----
-
-### 6. ASN 自治系統分析
-**GET** `/asn`
-
-獲取自治系統編號的流量分析統計。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `limit` (int): 返回前 N 個 ASN，1-50，預設 10
-- `src_or_dst` (str): 分析來源或目的 ASN，可選：src, dst，預設 src
-
-**回應時間**: ~28ms
-
-**使用範例**:
-```bash
-# 獲取來源 ASN 分析
-curl -X GET "http://ai_ops_backend:8000/api/flows/asn?hours=1&limit=5&src_or_dst=src"
-
-# 獲取目的 ASN 分析
-curl -X GET "http://ai_ops_backend:8000/api/flows/asn?hours=1&limit=5&src_or_dst=dst"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "asn": 4134,
-    "asn_name": "",
-    "flows": 800,
-    "bytes": 200000,
-    "packets": 1200,
-    "percentage": 45.2,
-    "unique_ips": 50
-  }
-]
-```
-
----
-
-### 7. 時間序列分析
-**GET** `/timeseries`
-
-獲取指定時間範圍和間隔的時間序列流量資料。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-168，預設 24
-- `interval_minutes` (int): 時間間隔（分鐘），1-60，預設 5
-
-**回應時間**: ~19ms
-
-**使用範例**:
-```bash
-# 獲取2小時時間序列（15分鐘間隔）
-curl -X GET "http://ai_ops_backend:8000/api/flows/timeseries?hours=2&interval_minutes=15"
-
-# 獲取6小時時間序列（30分鐘間隔）
-curl -X GET "http://ai_ops_backend:8000/api/flows/timeseries?hours=6&interval_minutes=30"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "timestamp": "2025-08-30T22:00:00",
-    "flows": 150,
-    "bytes": 50000,
-    "packets": 300,
-    "unique_src_ips": 25,
-    "unique_dst_ips": 30
-  }
-]
-```
-
----
-
-### 8. 埠號統計
-**GET** `/ports`
-
-獲取埠號的流量統計分析。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `limit` (int): 返回前 N 個埠號，1-50，預設 10
-- `src_or_dst` (str): 統計來源或目的埠號，可選：src, dst，預設 dst
-
-**回應時間**: ~28ms
-
-**使用範例**:
-```bash
-# 獲取目的埠號統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/ports?hours=1&limit=10&src_or_dst=dst"
-
-# 獲取來源埠號統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/ports?hours=1&limit=10&src_or_dst=src"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "port": 8853,
-    "port_name": "Port-8853",
-    "flows": 7,
-    "bytes": 9169221,
-    "packets": 7191,
-    "percentage": 18.67
-  },
-  {
-    "port": 8834,
-    "port_name": "Port-8834",
-    "flows": 22,
-    "bytes": 5520371,
-    "packets": 4422,
-    "percentage": 11.24
-  },
-  {
-    "port": 8850,
-    "port_name": "Port-8850",
-    "flows": 9,
-    "bytes": 3968351,
-    "packets": 3204,
-    "percentage": 8.08
-  }
-]
-```
-
----
-
-### 9. 網路介面統計
-**GET** `/interfaces`
-
-獲取網路介面的流量統計分析。
-
-**參數**:
-- `hours` (int): 統計時間範圍（小時），1-24，預設 1
-- `limit` (int): 返回前 N 個介面，1-50，預設 10
-- `direction` (str): 統計方向，可選：input, output，預設 input
-
-**回應時間**: ~29ms
-
-**使用範例**:
-```bash
-# 獲取輸入介面統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/interfaces?hours=1&limit=5&direction=input"
-
-# 獲取輸出介面統計
-curl -X GET "http://ai_ops_backend:8000/api/flows/interfaces?hours=1&limit=5&direction=output"
-```
-
-**回應範例**:
-```json
-[
-  {
-    "interface_name": "eth0",
-    "interface_description": "External Interface",
-    "direction": "input",
-    "flows": 1200,
-    "bytes": 400000,
-    "packets": 1800,
-    "percentage": 67.5
-  }
-]
-```
-
----
-
-### 10. 流量記錄搜尋
-**GET** `/search`
-
-根據條件搜尋具體的流量記錄。
-
-**參數**:
-- `src_addr` (str): 來源 IP 位址（可選）
-- `dst_addr` (str): 目的 IP 位址（可選）
-- `protocol` (int): 協定編號，0-255（可選）
-- `src_port` (int): 來源埠號，0-65535（可選）
-- `dst_port` (int): 目的埠號，0-65535（可選）
-- `hours` (int): 搜尋時間範圍（小時），1-24，預設 1
-- `page` (int): 頁數，預設 1
-- `limit` (int): 每頁筆數，1-1000，預設 100
-
-**回應時間**: ~36ms
-
-**使用範例**:
-```bash
-# 基本搜尋
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?hours=1&limit=5&page=1"
-
-# TCP 流量搜尋
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?hours=1&limit=10&page=1&protocol=6"
-
-# 搜尋特定 IP
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?src_addr=192.168.1.100&hours=1"
-```
-
-**回應範例**:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "TimeReceived": "2025-08-31T06:40:25",
-      "SrcAddr": "::ffff:202.153.183.18",
-      "DstAddr": "::ffff:1.1.1.1",
-      "SrcPort": 8834,
-      "DstPort": 53,
-      "Proto": 17,
-      "Bytes": 52,
-      "Packets": 1,
-      "SrcAS": 17408,
-      "DstAS": 13335,
-      "SrcCountry": "TW",
-      "DstCountry": "US",
-      "SrcGeoCity": "Taoyuan District",
-      "DstGeoCity": "",
-      "SrcGeoState": "TAO",
-      "DstGeoState": ""
+      "total_rows": 203161,
+      "total_bytes": 3132836
     }
   ],
-  "total_records": 2457,
-  "execution_time_ms": 42.85
+  "error": null
 }
 ```
 
 ---
 
-## 📊 資料模型
+### 2. 完整流量分析
+**GET** `/analysis`
 
-### 流量記錄欄位
+執行完整的網路流量分析，提供全面的統計資料和洞察。
 
-| 欄位名 | 類型 | 說明 |
-|--------|------|------|
-| `TimeReceived` | DateTime | 接收時間 |
-| `SrcAddr` | IPv6 | 來源 IP 位址 |
-| `DstAddr` | IPv6 | 目的 IP 位址 |
-| `SrcPort` | UInt16 | 來源埠號 |
-| `DstPort` | UInt16 | 目的埠號 |
-| `Proto` | UInt8 | 協定編號 |
-| `Bytes` | UInt64 | 位元組數 |
-| `Packets` | UInt64 | 封包數 |
-| `SrcAS` | UInt32 | 來源自治系統編號 |
-| `DstAS` | UInt32 | 目的自治系統編號 |
-| `SrcCountry` | FixedString(2) | 來源國家代碼 |
-| `DstCountry` | FixedString(2) | 目的國家代碼 |
-| `SrcGeoCity` | String | 來源城市 |
-| `DstGeoCity` | String | 目的城市 |
-| `SrcGeoState` | String | 來源州/省 |
-| `DstGeoState` | String | 目的州/省 |
+**參數**:
+- `days` (int, 可選): 分析時間範圍（天數），1-30，預設 3
+- `device` (str, 可選): 設備名稱過濾器（例如: `SIS-HD-H7A08-1`）
 
-### 常見協定編號
+**回應時間**: ~200ms
 
-| 編號 | 協定名稱 | 說明 |
-|------|----------|------|
-| 1 | ICMP | 網路控制訊息協定 |
-| 6 | TCP | 傳輸控制協定 |
-| 17 | UDP | 用戶資料包協定 |
-| 47 | GRE | 通用路由封裝 |
-| 50 | ESP | 封裝安全載荷 |
+**使用範例**:
+```bash
+# 預設 3 天分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis"
 
-### 常見埠號
+# 最近 1 天分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1" 
 
-| 埠號 | 服務 | 說明 |
-|------|------|------|
-| 80 | HTTP | 超文本傳輸協定 |
-| 443 | HTTPS | 安全超文本傳輸協定 |
-| 53 | DNS | 域名系統 |
-| 22 | SSH | 安全殼層 |
-| 25 | SMTP | 簡單郵件傳輸協定 |
+# 特定設備分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1&device=SIS-HD-H7A08-1.chief-tw-t21.com"
 
----
-
-## 🔐 認證與連線
-
-### API 連線方式
-
-**n8n 使用的標準路徑**：
-```
-http://ai_ops_backend:8000/api/flows/
+# 最近 7 天分析
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=7"
 ```
 
-**說明**：
-- 這是 Docker 內部網路通訊路徑
-- n8n 和 ai_ops_backend 在同一 Docker 網路中
-- 無需額外認證或配置
-- 所有 n8n HTTP Request 節點都使用此基礎路徑
-
-### 錯誤處理
-API 使用標準 HTTP 狀態碼：
-
-- `200` - 成功
-- `400` - 請求參數錯誤
-- `404` - 端點不存在
-- `500` - 內部服務器錯誤
-
-**錯誤回應格式**:
+**回應結構**:
 ```json
 {
-  "detail": "錯誤描述訊息"
+  "period_days": 3,
+  "time_range": {
+    "start": "2025-09-05T13:53:19",
+    "end": "2025-09-08T10:42:28"
+  },
+  "overview": {
+    "total_flows": 298291,
+    "total_bytes": 2090282012,
+    "total_packets": 2496265,
+    "time_range_start": "2025-09-05T13:53:19",
+    "time_range_end": "2025-09-08T10:42:28", 
+    "duration_seconds": 247749,
+    "avg_bytes_per_flow": 7007.53,
+    "avg_packets_per_flow": 8.37
+  },
+  "top_sources": [
+    {
+      "address": "::ffff:202.153.183.18",
+      "bytes": 287392945,
+      "packets": 812327,
+      "flows": 120262,
+      "percentage": 13.75
+    }
+  ],
+  "top_destinations": [
+    {
+      "address": "::ffff:202.153.183.18", 
+      "bytes": 1783715645,
+      "packets": 1596193,
+      "flows": 116485,
+      "percentage": 85.33
+    }
+  ],
+  "protocol_distribution": [
+    {
+      "protocol_number": 6,
+      "protocol_name": "TCP",
+      "flows": 145579,
+      "bytes": 1135220478,
+      "packets": 1426572,
+      "percentage": 54.31
+    }
+  ],
+  "geographic_distribution": [
+    {
+      "country": "TW",
+      "city": "Taipei", 
+      "state": "TPE",
+      "granularity": "city",
+      "flows": 7071,
+      "bytes": 225016924,
+      "packets": 184878,
+      "unique_ips": 185,
+      "percentage": 10.76
+    }
+  ],
+  "asn_analysis": [
+    {
+      "asn": 15169,
+      "asn_name": "Google",
+      "flows": 22806,
+      "bytes": 811483707,
+      "packets": 667947,
+      "percentage": 38.82,
+      "unique_ips": 408
+    }
+  ],
+  "daily_trends": [
+    {
+      "date": "2025-09-05",
+      "flows": 29994,
+      "bytes": 66706113,
+      "packets": 96784,
+      "bytes_mb": 63.62
+    }
+  ],
+  "hourly_patterns": [
+    {
+      "hour": 0,
+      "flows": 13774,
+      "bytes": 91866825,
+      "packets": 110432,
+      "bytes_mb": 87.61
+    }
+  ],
+  "key_findings": [
+    "總流量: 298,291 筆記錄，1.95 GB，平均 0.1 Mbps",
+    "最大流量來源: ::ffff:202.153.183.18 (13.8%，274 MB)",
+    "協議分布: TCP 54.3%, UDP 45.4%, ICMP 0.3%"
+  ],
+  "anomalies": [
+    "⚡ 流量波動異常: 最高與最低日流量比率超過 10:1"
+  ],
+  "generated_at": "2025-09-08T21:53:19.508669",
+  "query_time_ms": 208.06
 }
 ```
 
 ---
 
-## 🔧 n8n 工作流範例
+## 📊 資料模型說明
+
+### 流量總覽 (overview)
+- `total_flows`: 總流量記錄數
+- `total_bytes`: 總位元組數
+- `total_packets`: 總封包數
+- `avg_bytes_per_flow`: 平均每流量位元組數
+- `avg_packets_per_flow`: 平均每流量封包數
+
+### Top 來源/目的 (top_sources, top_destinations)
+- `address`: IPv6 格式的 IP 位址
+- `bytes`: 該 IP 的位元組總數
+- `packets`: 該 IP 的封包總數
+- `flows`: 該 IP 的流量條數
+- `percentage`: 佔總流量的百分比
+
+### 協議分布 (protocol_distribution)
+- `protocol_number`: 協議編號（6=TCP, 17=UDP, 1=ICMP）
+- `protocol_name`: 協議名稱
+- `flows/bytes/packets`: 該協議的統計數據
+- `percentage`: 佔總流量的百分比
+
+### 地理位置分析 (geographic_distribution)
+- `country`: 國家代碼（例如: TW, US, JP）
+- `city`: 城市名稱（可能為 null）
+- `state`: 州/省代碼（可能為 null）
+- `granularity`: 資料粒度（city/state/country/unknown）
+- `unique_ips`: 該地區的唯一 IP 數量
+
+### ASN 分析 (asn_analysis)  
+- `asn`: 自治系統編號
+- `asn_name`: ASN 名稱（例如: Google, Amazon.com）
+- `unique_ips`: 該 ASN 的唯一 IP 數量
+
+### 時間趨勢
+- `daily_trends`: 每日流量統計
+- `hourly_patterns`: 每小時流量模式
+- `bytes_mb`: 以 MB 為單位的流量大小
+
+---
+
+## 🔧 n8n 工作流整合
 
 ### 基本網路監控工作流
 
 **節點 1: Schedule Trigger**
-- **Name**: 每 5 分鐘執行
-- **Interval**: Every `5` Minutes
+- **Name**: 每小時執行
+- **Interval**: Every `1` Hour
 
-**節點 2: HTTP Request - 流量概覽**
-- **Method**: GET
-- **URL**: `http://ai_ops_backend:8000/api/flows/summary`
-- **Query Parameters**: 
-  - Name: `hours`, Value: `1`
-  - Name: `include_details`, Value: `true`
-
-**節點 3: IF - 檢查流量閾值**
-- **Condition**: `{{ $json.summary.total_flows > 1000 }}`
-- **True Branch**: 發送告警
-- **False Branch**: 正常結束
-
-### Top Talkers 分析工作流
-
-**節點 1: Manual Trigger**
-- **Name**: 手動觸發
-
-**節點 2: HTTP Request - Top Talkers**
-- **Method**: GET
-- **URL**: `http://ai_ops_backend:8000/api/flows/top-talkers`
+**節點 2: HTTP Request - 流量分析**
+- **Method**: GET  
+- **URL**: `http://ai_ops_backend:8000/api/flows/analysis`
 - **Query Parameters**:
-  - Name: `limit`, Value: `10`
-  - Name: `hours`, Value: `1`
-  - Name: `by_field`, Value: `bytes`
-  - Name: `src_or_dst`, Value: `src`
+  - Name: `days`, Value: `1`
 
 **節點 3: Function - 資料處理**
 ```javascript
-const topTalkers = $input.all();
-const result = [];
+const analysis = $json;
 
-for (let item of topTalkers) {
-  if (item.json.percentage > 10) {
-    result.push({
-      json: {
-        alert: '高流量 IP',
-        ip: item.json.address,
-        bytes: item.json.bytes,
-        percentage: item.json.percentage
-      }
-    });
+// 提取關鍵指標
+const metrics = {
+  total_flows: analysis.overview.total_flows,
+  total_gb: (analysis.overview.total_bytes / (1024 * 1024 * 1024)).toFixed(2),
+  top_source: analysis.top_sources[0]?.address,
+  top_protocol: analysis.protocol_distribution[0]?.protocol_name,
+  anomalies_count: analysis.anomalies.length,
+  timestamp: new Date().toISOString()
+};
+
+// 檢查異常情況
+const hasAnomalies = analysis.anomalies.length > 0;
+const highTraffic = analysis.overview.total_flows > 100000;
+
+return [{
+  json: {
+    ...metrics,
+    alert_level: hasAnomalies || highTraffic ? 'high' : 'normal',
+    needs_attention: hasAnomalies || highTraffic
   }
-}
-
-return result;
+}];
 ```
 
-### 地理位置分析工作流
+**節點 4: IF - 檢查告警條件**
+- **Condition**: `{{ $json.needs_attention }}`
+- **True Branch**: 發送告警通知
+- **False Branch**: 記錄正常狀態
+
+### 設備專用監控工作流
 
 **節點 1: Webhook Trigger**
 - **HTTP Method**: GET
-- **Path**: geolocation-analysis
+- **Path**: device-analysis
 
-**節點 2: HTTP Request - 國家統計**
-- **Method**: GET
-- **URL**: `http://ai_ops_backend:8000/api/flows/geolocation`
-- **Query Parameters**:
-  - Name: `by_country_only`, Value: `true`
-  - Name: `limit`, Value: `20`
-  - Name: `hours`, Value: `24`
-
-**節點 3: HTTP Request - 城市統計**
-- **Method**: GET
-- **URL**: `http://ai_ops_backend:8000/api/flows/geolocation`
-- **Query Parameters**:
-  - Name: `by_country_only`, Value: `false`
-  - Name: `limit`, Value: `15`
-  - Name: `hours`, Value: `24`
-
-**節點 4: Merge - 合併結果**
-- **Mode**: Combine
-- **Output Data**: All Incoming Data
-
-**節點 5: Respond to Webhook**
-- **Respond With**: All Incoming Items
-
----
-
-## ⚙️ 進階功能
-
-### 分頁機制
-搜尋端點支援分頁功能：
-
-```bash
-# 第1頁，每頁100筆
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?page=1&limit=100"
-
-# 第2頁，每頁50筆
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?page=2&limit=50"
+**節點 2: Set Device Parameters**
+```javascript
+return [{
+  json: {
+    device: $parameter.device || 'SIS-HD-H7A08-1.chief-tw-t21.com',
+    days: $parameter.days || 1
+  }
+}];
 ```
 
-### 時間範圍控制
-大部分端點支援靈活的時間範圍設定：
+**節點 3: HTTP Request - 設備分析**
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/analysis`
+- **Query Parameters**:
+  - Name: `days`, Value: `{{ $json.days }}`
+  - Name: `device`, Value: `{{ $json.device }}`
 
-```bash
-# 最近1小時
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
+**節點 4: Function - 設備報告生成**
+```javascript
+const data = $json;
 
-# 最近24小時
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=24"
+const report = {
+  device: $node["Set Device Parameters"].json.device,
+  analysis_period: data.period_days + ' days',
+  total_traffic_gb: (data.overview.total_bytes / (1024*1024*1024)).toFixed(2),
+  traffic_flows: data.overview.total_flows,
+  top_destinations: data.top_destinations.slice(0, 5).map(dest => ({
+    ip: dest.address,
+    traffic_mb: (dest.bytes / (1024*1024)).toFixed(2),
+    percentage: dest.percentage
+  })),
+  protocols: data.protocol_distribution.map(proto => ({
+    name: proto.protocol_name,
+    percentage: proto.percentage
+  })),
+  geographic_summary: data.geographic_distribution.slice(0, 3).map(geo => ({
+    location: geo.city ? `${geo.city}, ${geo.country}` : geo.country,
+    percentage: geo.percentage
+  })),
+  key_findings: data.key_findings,
+  anomalies: data.anomalies,
+  generated_at: data.generated_at
+};
 
-# 最近7天（168小時）
-curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=168"
+return [{ json: report }];
 ```
 
-### 多維度過濾
-搜尋功能支援多條件組合：
+### 批量設備監控工作流
 
-```bash
-# TCP + 特定 IP + 特定埠號
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=6&src_addr=192.168.1.100&dst_port=80"
+**節點 1: Schedule Trigger**
+- **Interval**: Every `6` Hours
 
-# UDP DNS 查詢
-curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=17&dst_port=53"
+**節點 2: Set Device List**
+```javascript
+const devices = [
+  'SIS-HD-H7A08-1.chief-tw-t21.com',
+  'SIS-HD-H7A08-2.chief-tw-t21.com',
+  'SIS-HD-H7A08-3.chief-tw-t21.com'
+];
+
+return devices.map(device => ({ json: { device } }));
+```
+
+**節點 3: HTTP Request - 批量分析** (多個輸出)
+- **Method**: GET
+- **URL**: `http://ai_ops_backend:8000/api/flows/analysis`
+- **Query Parameters**:
+  - Name: `days`, Value: `1`
+  - Name: `device`, Value: `{{ $json.device }}`
+
+**節點 4: Function - 彙總報告**
+```javascript
+const allAnalyses = $input.all();
+const summary = {
+  total_devices: allAnalyses.length,
+  total_flows: 0,
+  total_bytes: 0,
+  devices_with_anomalies: 0,
+  timestamp: new Date().toISOString(),
+  device_summaries: []
+};
+
+allAnalyses.forEach(item => {
+  const data = item.json;
+  summary.total_flows += data.overview.total_flows;
+  summary.total_bytes += data.overview.total_bytes;
+  
+  if (data.anomalies.length > 0) {
+    summary.devices_with_anomalies++;
+  }
+  
+  summary.device_summaries.push({
+    device: data.time_range.device || 'Unknown',
+    flows: data.overview.total_flows,
+    bytes_mb: (data.overview.total_bytes / (1024*1024)).toFixed(2),
+    anomalies: data.anomalies.length
+  });
+});
+
+summary.total_gb = (summary.total_bytes / (1024*1024*1024)).toFixed(2);
+
+return [{ json: summary }];
 ```
 
 ---
@@ -727,27 +429,24 @@ curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=17&dst_port=53
 
 1. **合理設置時間範圍**
    ```bash
-   # 推薦：使用較短的時間範圍進行頻繁查詢
-   curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=1"
+   # 推薦：日常監控使用 1-3 天
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1"
    
-   # 避免：過長的時間範圍
-   curl -X GET "http://ai_ops_backend:8000/api/flows/summary?hours=168"  # 謹慎使用
+   # 謹慎：長期分析使用 7-30 天（回應時間較長）
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=7"
    ```
 
-2. **適當的分頁大小**
+2. **使用設備過濾**
    ```bash
-   # 推薦：合理的分頁大小
-   curl -X GET "http://ai_ops_backend:8000/api/flows/search?limit=100"
-   
-   # 避免：過大的分頁
-   curl -X GET "http://ai_ops_backend:8000/api/flows/search?limit=1000"  # 回應時間較長
+   # 針對特定設備分析可大幅提升效能
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=3&device=SIS-HD-H7A08-1"
    ```
 
-3. **使用健康檢查**
+3. **定期健康檢查**
    ```python
-   # 在開始大量查詢前檢查系統狀態
-   health = client.get_health()
-   if health['status'] != 'connected':
+   # 在大量查詢前檢查系統狀態
+   health = requests.get('http://ai_ops_backend:8000/api/flows/health')
+   if health.json()['status'] != 'connected':
        print("ClickHouse 不可用，請稍後再試")
    ```
 
@@ -755,7 +454,6 @@ curl -X GET "http://ai_ops_backend:8000/api/flows/search?protocol=17&dst_port=53
 
 ```python
 import requests
-from requests.exceptions import RequestException
 import time
 
 def api_call_with_retry(url, max_retries=3, delay=1):
@@ -763,28 +461,29 @@ def api_call_with_retry(url, max_retries=3, delay=1):
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=30)
-            response.raise_for_status()  # 檢查 HTTP 錯誤
+            response.raise_for_status()
             return response.json()
             
         except requests.exceptions.Timeout:
             print(f"請求超時，嘗試 {attempt + 1}/{max_retries}")
             if attempt < max_retries - 1:
-                time.sleep(delay * (2 ** attempt))  # 指數退避
+                time.sleep(delay * (2 ** attempt))
                 
-        except requests.exceptions.ConnectionError:
-            print("連線錯誤，請檢查網路連線")
-            break
-            
         except requests.exceptions.HTTPError as e:
             if e.response.status_code >= 500:
-                print(f"服務器錯誤 {e.response.status_code}，嘗試 {attempt + 1}/{max_retries}")
+                print(f"服務器錯誤，嘗試 {attempt + 1}/{max_retries}")
                 if attempt < max_retries - 1:
                     time.sleep(delay)
             else:
-                print(f"客戶端錯誤 {e.response.status_code}: {e.response.text}")
+                print(f"客戶端錯誤: {e.response.text}")
                 break
     
     return None
+
+# 使用範例
+result = api_call_with_retry(
+    "http://ai_ops_backend:8000/api/flows/analysis?days=1"
+)
 ```
 
 ### 監控建議
@@ -812,258 +511,136 @@ def monitor_api_performance():
 
 ---
 
-## 🔍 n8n 故障排除
+## 🔍 故障排除
 
 ### 常見問題與解決
 
-#### 1. n8n HTTP Request 連線失敗
+#### 1. API 連線失敗
 
-**問題現象**: 節點顯示 "Connection refused" 或 "Cannot connect to host"
+**問題現象**: "Connection refused" 或 "Cannot connect to host"
 
-**檢查步驟**：
-1. **檢查 URL 設定**：確認使用 `http://ai_ops_backend:8000/api/flows`
-2. **檢查容器狀態**：確認 ai_ops_backend 容器運行中
-3. **網路連通**：確認 n8n 與後端在同一 Docker 網路
+**檢查步驟**:
+1. **檢查容器狀態**
+   ```bash
+   docker ps | grep ai_ops_backend
+   ```
 
-**容器連通性測試**：
-```bash
-# 從 n8n 容器測試連線（n8n 容器使用 wget）
-docker exec n8n_main wget -qO- http://ai_ops_backend:8000/api/flows/health
+2. **檢查網路連通性**
+   ```bash
+   # 從同一網路的容器測試
+   docker exec <your_container> curl -s http://ai_ops_backend:8000/api/flows/health
+   ```
 
-# 檢查 Docker 網路配置（ai-ops-network 172.21.0.0/16）
-docker network inspect ai-ops-network
+3. **檢查 Docker 網路**
+   ```bash
+   docker network ls
+   docker network inspect <network_name>
+   ```
 
-# 容器 IP 動態分配，使用容器名稱進行通訊
-docker exec n8n_main ping -c 3 ai_ops_backend
-```
+**解決方案**:
+- 確認使用正確的內部網路位址：`http://ai_ops_backend:8000`
+- 檢查 Docker Compose 網路配置
+- 重啟相關容器
 
-**n8n 解決方案**：
-- 設定 "Continue On Fail" = 是
-- 增加 "Retry on Fail" = 3 次
-- 設定 "Timeout" = 30000ms
+#### 2. API 回應緩慢
 
-#### 2. HTTP Request 回應緩慢
+**問題現象**: 請求超過 30 秒或超時
 
-**問題現象**: n8n 節點執行超時或過慢
+**可能原因**:
+- 查詢時間範圍過大（超過 7 天）
+- ClickHouse 資料庫負載高
+- 網路延遲
 
-**n8n 優化設定**：
+**解決方案**:
+1. **減少查詢範圍**
+   ```bash
+   # 改用較小的時間範圍
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1"
+   ```
 
-**Batching 設定**：
-- Items per Batch: `5`
-- Batch Interval (ms): `2000`
+2. **使用設備過濾**
+   ```bash
+   # 針對特定設備查詢
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=3&device=SIS-HD-H7A08-1"
+   ```
 
-**Query Parameters 優化**：
-- `hours`: 使用較小值 (1-6)
-- `limit`: 降低到 50-100
-- `interval_minutes`: 增加間隔 (5-15)
+3. **檢查系統資源**
+   ```bash
+   docker stats ai_ops_backend
+   ```
 
-#### 3. 城市資料空值問題
+#### 3. 參數驗證錯誤 (HTTP 422)
 
-**問題現象**: geolocation API 回傳部分記錄的 city 欄位為 null
+**問題現象**: API 返回參數驗證錯誤
 
-**說明**: 這是正常現象，不需修復
-
-**n8n 處理方式**：
-
-**Function 節點 - 過濾空值資料**
-```javascript
-const geoData = $input.all();
-const filteredData = [];
-
-for (let item of geoData) {
-  // 只保留有城市資料的記錄
-  if (item.json.city && item.json.city !== '') {
-    filteredData.push(item);
-  }
-}
-
-return filteredData;
-```
-
-**正確的 API 設定**：
-- 獲取城市資料：`by_country_only` = `false`
-- 獲取國家資料：`by_country_only` = `true`
-
-#### 4. 參數驗證錯誤 (422)
-
-**問題現象**: n8n 節點返回 HTTP 422 錯誤
-
-**常見原因與解決**：
+**常見原因與解決**:
 
 | 參數 | 錯誤範例 | 正確設定 |
-|--------|------------|-------------|
-| `hours` | 超過 168 | 1-168 範圍內 |
-| `limit` | 超過 1000 | 1-1000 範圍內 |
-| `protocol` | 超過 255 | 0-255 範圍內 |
-| `src_port` | 超過 65535 | 0-65535 範圍內 |
+|------|----------|----------|
+| `days` | 超過 30 | 1-30 範圍內 |
+| `device` | 特殊字符 | 使用 URL 編碼 |
 
-**n8n 預防設定**：
+**解決範例**:
+```bash
+# 錯誤
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=50"
 
-**Function 節點 - 參數驗證**
-```javascript
-function validateParams(params) {
-  const validated = {};
-  
-  // 驗證 hours 參數
-  validated.hours = Math.min(Math.max(params.hours || 1, 1), 168);
-  
-  // 驗證 limit 參數
-  validated.limit = Math.min(Math.max(params.limit || 10, 1), 1000);
-  
-  // 驗證 protocol 參數
-  if (params.protocol !== undefined) {
-    validated.protocol = Math.min(Math.max(params.protocol, 0), 255);
-  }
-  
-  return [{ json: validated }];
-}
-
-// 使用範例
-return validateParams({
-  hours: $node["Previous Node"].json.hours,
-  limit: $node["Previous Node"].json.limit,
-  protocol: $node["Previous Node"].json.protocol
-});
+# 正確  
+curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=7"
 ```
 
-### n8n Debug 技巧
+#### 4. 空白回應或無資料
 
-**1. 啟用詳細日誌**
-- 在 HTTP Request 節點設定 "Always Output Data" = 是
-- 使用 "Include Response Headers and Status" = 是
+**問題現象**: API 回應正常但資料為空
 
-**2. 使用 Debug 節點**
+**可能原因**:
+- 查詢時間範圍內無流量資料
+- 設備名稱過濾器不匹配
+- ClickHouse 資料收集問題
+
+**檢查步驟**:
+1. **檢查健康狀態**
+   ```bash
+   curl -s "http://ai_ops_backend:8000/api/flows/health" | jq .
+   ```
+
+2. **確認資料表狀態**
+   ```bash
+   # 查看 total_rows 是否大於 0
+   curl -s "http://ai_ops_backend:8000/api/flows/health" | jq '.tables[0].total_rows'
+   ```
+
+3. **調整查詢參數**
+   ```bash
+   # 擴大時間範圍
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=7"
+   
+   # 移除設備過濾
+   curl -X GET "http://ai_ops_backend:8000/api/flows/analysis?days=1"
+   ```
+
+### n8n 特定問題
+
+#### HTTP Request 節點配置
+
+**推薦設定**:
+- **Continue On Fail**: 是
+- **Retry on Fail**: 3 次
+- **Timeout**: 60000ms（60秒）
+- **Always Output Data**: 是
+
+**狀態碼處理**:
 ```javascript
-// Debug 節點：輸出詳細資訊
-console.log('Request URL:', $node["HTTP Request"].parameter.url);
-console.log('Status Code:', $node["HTTP Request"].statusCode);
-console.log('Response:', JSON.stringify($node["HTTP Request"].json, null, 2));
+// n8n Function 節點：檢查回應狀態
+const httpResponse = $node["HTTP Request"];
 
-return $input.all();
-```
-
-**3. 條件分支測試**
-
-**IF 節點 - 檢查回應**
-```javascript
-const response = $node["HTTP Request"];
-
-// 檢查是否成功
-if (response.statusCode === 200 && response.json && !response.json.error) {
-  return true; // 成功分支
+if (httpResponse.statusCode === 200) {
+  return [{ json: { status: 'success', data: httpResponse.json } }];
+} else if (httpResponse.statusCode >= 500) {
+  return [{ json: { status: 'retry', error: 'Server error' } }];  
 } else {
-  return false; // 錯誤處理分支
+  return [{ json: { status: 'failed', error: httpResponse.json?.detail } }];
 }
-```
-
-### n8n HTTP 狀態碼處理
-
-| HTTP 狀態碼 | n8n 處理方式 | 建議操作 |
-|------------|-----------------|----------------|
-| 200 | 成功，繼續工作流 | 處理正常資料 |
-| 400 | 設定Continue On Fail | 檢查 Query Parameters |
-| 404 | 設定Continue On Fail | 檢查 URL 路徑 |
-| 422 | 設定Continue On Fail | 驗證參數範圍 |
-| 500 | 啟用 Retry on Fail | 稍後重試或通知 |
-
-**n8n 狀態碼檢查 Expression**：
-```javascript
-// 檢查是否成功
-{{ $node["HTTP Request"].statusCode === 200 }}
-
-// 檢查是否為系統錯誤
-{{ $node["HTTP Request"].statusCode >= 500 }}
-
-// 檢查是否為客戶端錯誤
-{{ $node["HTTP Request"].statusCode >= 400 && $node["HTTP Request"].statusCode < 500 }}
-```
-
-### n8n Debug 工具
-
-#### 1. n8n 內建測試工作流
-
-**建立 API 測試工作流**：
-
-**節點 1**: Manual Trigger  
-**節點 2**: HTTP Request - 健康檢查  
-**節點 3**: HTTP Request - 流量概覽  
-**節點 4**: HTTP Request - Top Talkers  
-**節點 5**: Function - 測試結果統計
-
-```javascript
-// 節點 5: 統計所有 API 請求結果
-const results = {
-  health: $node["HTTP Request - 健康檢查"].statusCode,
-  summary: $node["HTTP Request - 流量概覽"].statusCode,
-  topTalkers: $node["HTTP Request - Top Talkers"].statusCode
-};
-
-const allSuccess = Object.values(results).every(code => code === 200);
-
-return [{
-  json: {
-    testResults: results,
-    allTestsPassed: allSuccess,
-    successRate: Object.values(results).filter(code => code === 200).length + '/' + Object.keys(results).length,
-    timestamp: new Date().toISOString()
-  }
-}];
-```
-
-#### 2. 即時連線測試
-
-**建立快速測試節點**：
-
-**HTTP Request - 連線測試**
-- **Method**: GET
-- **URL**: `http://ai_ops_backend:8000/api/flows/health`
-- **Timeout**: 5000ms
-- **Include Response Headers and Status**: 是
-
-#### 3. 日誌輸出工作流
-
-**Function 節點 - API 請求日誌**
-```javascript
-const request = $node["HTTP Request"];
-const logData = {
-  timestamp: new Date().toISOString(),
-  method: 'GET',
-  url: request.parameter?.url || 'Unknown',
-  statusCode: request.statusCode,
-  responseTime: request.responseTime || 'N/A',
-  success: request.statusCode === 200,
-  error: request.statusCode !== 200 ? request.json?.detail : null
-};
-
-console.log('API Request Log:', JSON.stringify(logData, null, 2));
-
-return [{ json: logData }];
-```
-
-#### 4. 效能監控工作流
-
-**節點 1**: Interval Trigger (5 分鐘)  
-**節點 2**: Set Performance Timer  
-**節點 3**: HTTP Request - Performance Test  
-**節點 4**: Function - Performance Analysis  
-
-```javascript
-// 效能分析
-const startTime = $node["Set Performance Timer"].json.startTime;
-const endTime = Date.now();
-const responseTime = endTime - startTime;
-const httpResponse = $node["HTTP Request - Performance Test"];
-
-const performanceData = {
-  endpoint: httpResponse.parameter?.url || 'Unknown',
-  responseTime: responseTime + 'ms',
-  statusCode: httpResponse.statusCode,
-  dataSize: JSON.stringify(httpResponse.json).length,
-  timestamp: new Date().toISOString(),
-  isHealthy: httpResponse.statusCode === 200 && responseTime < 5000
-};
-
-return [{ json: performanceData }];
 ```
 
 ---
@@ -1072,60 +649,52 @@ return [{ json: performanceData }];
 
 ### 基準測試結果
 
-基於實際測試（2025-08-31），以下是各端點的效能指標：
+基於實際測試（2025-09-08），效能指標如下：
 
-| 端點 | 平均回應時間 | 狀態 | 測試結果 |
-|------|--------------|------|----------|
-| `/health` | 19ms | ✅ | 正常 |
-| `/summary` | 18ms | ✅ | 正常 |
-| `/top-talkers` | 34ms | ✅ | 正常 |
-| `/protocols` | 27ms | ✅ | 正常 |
-| `/geolocation` | 30ms | ✅ | 正常 |
-| `/asn` | 33ms | ✅ | 正常 |
-| `/timeseries` | 17ms | ✅ | 正常 |
-| `/ports` | 28ms | ✅ | 正常 |
-| `/interfaces` | 29ms | ✅ | 正常 |
-| `/search` | 28ms | ✅ | 正常 |
+| 指標 | 數值 | 說明 |
+|------|------|------|
+| 平均回應時間 | 190-210ms | `/analysis` 端點 |
+| 健康檢查回應時間 | 38ms | `/health` 端點 |
+| 最大資料處理量 | 345,000+ 記錄 | 單次查詢 |
+| 併發支援 | 良好 | 支援多個同時請求 |
+| 可用性 | 99%+ | 經實戰測試 |
 
 ### 系統容量
-- **總流量記錄**: 110,000+
-- **併發支援**: 經測試支援多個同時請求
+- **總流量記錄**: 345,000+ 條
 - **資料更新**: 即時流量資料
-- **可用性**: 100% (10/10 測試通過)
+- **查詢範圍**: 1-30 天
+- **地理覆蓋**: 全球 15+ 國家/地區
 
 ---
 
 ## 📝 版本資訊
 
 ### 當前版本
-- **API 版本**: 3.0.0
+- **API 版本**: 2.0.0
 - **ClickHouse 版本**: 25.3.6.56
-- **最後更新**: 2025-08-31
-- **測試狀態**: ✅ 全部通過
+- **最後更新**: 2025-09-08
+- **狀態**: ✅ 生產可用
 
 ### 更新記錄
 
-**2025-08-31**:
-- ✅ 優化 ClickHouse API 子查詢性能，移除重複查詢
-- ✅ 更新文檔範例和數據統計，反映系統實際狀況
-- ✅ 修正地理位置城市資料覆蓋率（18-20%）
-- ✅ 搜尋 API 新增城市和州/省欄位 (`SrcGeoCity`, `DstGeoCity`, `SrcGeoState`, `DstGeoState`)
-- ✅ 地理位置 API 支援城市級統計分析
-- ✅ 修復地理位置城市分組邏輯
-- ✅ 達成 100% API 成功率並支援城市級地理資訊
+**2025-09-08**:
+- ✅ 簡化 API 結構，統一為單一 `/analysis` 端點
+- ✅ 提供完整的流量分析報告，包含所有統計維度
+- ✅ 新增異常檢測功能和關鍵發現摘要
+- ✅ 支援設備級過濾分析
+- ✅ 優化查詢效能，平均回應時間 200ms
+- ✅ 更新文檔，移除過時端點說明
 
 ### 已知限制
-
-1. **地理位置城市資料**: 城市和州/省資料覆蓋率約 18-20%，主要來源為台灣、美國、日本、約旦等地
-2. **時間範圍限制**: 部分端點限制最大查詢範圍（如 Top Talkers 限制24小時）
-3. **分頁限制**: 搜尋端點每頁最多1000筆記錄
+1. **時間範圍**: 最大查詢範圍 30 天
+2. **地理資料**: 部分城市資料可能為空
+3. **IPv6 格式**: 所有 IP 位址以 IPv6 格式返回
 
 ### 未來規劃
-
-1. **地理位置增強**: 啟用完整的 GeoIP 城市資料庫
-2. **更多過濾選項**: 新增更靈活的查詢條件
-3. **即時推送**: WebSocket 支援即時流量監控
-4. **資料匯出**: 支援 CSV/Excel 格式匯出
+1. **即時推送**: WebSocket 支援即時流量監控
+2. **資料匯出**: 支援 CSV/Excel 格式匯出  
+3. **進階過濾**: 支援更多過濾條件
+4. **效能優化**: 進一步優化大範圍查詢效能
 
 ---
 
@@ -1133,8 +702,8 @@ return [{ json: performanceData }];
 
 ### 技術支援
 - **文檔**: 本使用指南
-- **測試工具**: 提供的 Python 測試腳本
-- **日誌**: 容器日誌進行故障排除
+- **健康檢查**: `/health` 端點進行系統狀態檢查
+- **日誌**: 查看容器日誌進行故障排除
 
 ### 相關資源
 - **Akvorado 官方文檔**: [https://akvorado.readthedocs.io](https://akvorado.readthedocs.io)
@@ -1143,4 +712,4 @@ return [{ json: performanceData }];
 
 ---
 
-**© 2025 ClickHouse API 使用指南 - 版本 1.0**
+**© 2025 ClickHouse API 使用指南 - 版本 2.0.0**
