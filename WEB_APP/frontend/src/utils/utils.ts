@@ -3,7 +3,6 @@
 
 /**
  * 設備查詢工具函數
- * 統一處理不同類型的查找邏輯，減少程式碼重複
  */
 
 // 設備查找工具函數
@@ -11,12 +10,12 @@ export const findDeviceByIp = <T extends { ip: string }>(devices: T[], ip: strin
   return devices.find(device => device.ip === ip);
 };
 
-// 群組查找工具函數  
+// 群組查找  
 export const findGroupByName = <T extends { name: string }>(groups: T[], name: string): T | undefined => {
   return groups.find(group => group.name === name);
 };
 
-// 通用查找工具函數
+// 通用查找
 export const findByProperty = <T, K extends keyof T>(
   items: T[], 
   property: K, 
@@ -26,11 +25,10 @@ export const findByProperty = <T, K extends keyof T>(
 };
 
 /**
- * 通用工具函數集合
- * 減少各組件中的重複邏輯
+ * 通用工具函數
  */
 
-// 深拷貝函數 - 強化類型安全
+// 深拷貝
 export const deepClone = <T>(obj: T): T => {
   if (obj === null || typeof obj !== 'object') return obj;
   if (obj instanceof Date) return new Date(obj.getTime()) as T;
@@ -47,7 +45,7 @@ export const deepClone = <T>(obj: T): T => {
   return obj;
 };
 
-// 淺層對象比較
+// 淺層比較
 export const shallowEqual = (obj1: Record<string, unknown>, obj2: Record<string, unknown>): boolean => {
   const keys1 = Object.keys(obj1);
   const keys2 = Object.keys(obj2);
@@ -60,7 +58,7 @@ export const shallowEqual = (obj1: Record<string, unknown>, obj2: Record<string,
   return true;
 };
 
-// 陣列去重（基於屬性）
+// 屬性去重
 export const uniqueByProperty = <T, K extends keyof T>(
   array: T[], 
   property: K
@@ -74,17 +72,17 @@ export const uniqueByProperty = <T, K extends keyof T>(
   });
 };
 
-// 陣列去重（基於值）
+// 值去重
 export const uniqueArray = <T>(array: T[]): T[] => {
   return Array.from(new Set(array));
 };
 
-// 延遲執行工具函數（Promise-based）
+// 延遲執行
 export const delay = (ms: number): Promise<void> => {
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-// 格式化檔案大小
+// 檔案大小格式化
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   
@@ -95,7 +93,7 @@ export const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
 
-// 格式化時間戳
+// 時間格式化
 export const formatTimestamp = (timestamp: number, format: 'time' | 'datetime' | 'date' = 'datetime'): string => {
   const date = new Date(timestamp);
   
@@ -110,7 +108,7 @@ export const formatTimestamp = (timestamp: number, format: 'time' | 'datetime' |
   }
 };
 
-// 類型守衛函數
+// 類型守衛
 export const isString = (value: unknown): value is string => {
   return typeof value === 'string';
 };
@@ -135,7 +133,7 @@ export const isEmpty = (value: unknown): value is null | undefined | '' | [] | R
   return false;
 };
 
-// 安全的 JSON 解析 - 強化類型約束
+// 安全 JSON 解析
 export const safeJSONParse = <T = unknown>(str: string, fallback: T): T => {
   if (typeof str !== 'string') return fallback;
   try {
@@ -146,13 +144,13 @@ export const safeJSONParse = <T = unknown>(str: string, fallback: T): T => {
   }
 };
 
-// 截斷文字
+// 文字截斷
 export const truncateText = (text: string, maxLength: number, suffix = '...'): string => {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - suffix.length) + suffix;
 };
 
-// 隨機字串生成器
+// 隨機 ID 生成
 export const generateRandomId = (length = 8): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';

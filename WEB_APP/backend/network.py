@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-網路連線和設備通信模組
+網路設備通信模組
 
-提供網路設備的 SSH 連線和指令執行功能：
-- 異步 SSH 連線池管理和連線復用
-- 批次設備指令執行和結果處理
-- 設備認證管理和安全驗證
-- 健康檢查和連線監控功能
+提供網路設備的 SSH 連線與指令執行：
+- 異步 SSH 連線池管理
+- 批次設備指令執行
+- 設備認證與安全驗證
+- 連線健康檢查
 
 Created: 2025-08-23
 Author: Claude Code Assistant
@@ -36,10 +36,7 @@ _local_data = threading.local()
 
 
 def set_device_scope_restriction(device_ips: Optional[List[str]]):
-    """限制 AI 工具可以存取的設備範圍
-
-    用於 AI 查詢時限制指令只能在指定的設備上執行。
-    """
+    """限制 AI 工具的設備存取範圍"""
     _local_data.device_scope_restriction = device_ips
     if device_ips:
         logger.debug(f"設置設備範圍限制: {device_ips}")
@@ -48,18 +45,12 @@ def set_device_scope_restriction(device_ips: Optional[List[str]]):
 
 
 def get_device_scope_restriction() -> Optional[List[str]]:
-    """獲取當前的設備存取範圍限制
-
-    返回當前線程被限制可以存取的設備 IP 清單。
-    """
+    """取得當前的設備存取範圍限制"""
     return getattr(_local_data, "device_scope_restriction", None)
 
 
 def get_device_credentials(device_config=None):
-    """獲取網路設備的認證資訊
-
-    優先使用設備個別配置，否則使用全域環境變數。
-    """
+    """取得設備認證資訊"""
     if device_config:
         if isinstance(device_config, dict):
             username = device_config.get("username")
@@ -137,10 +128,7 @@ def get_device_config_by_ip(device_ip: str) -> Optional[Dict[str, Any]]:
 
 
 def classify_network_error(error_message: str) -> Dict[str, Any]:
-    """分類網路連線和設備錯誤類型
-
-    根據錯誤訊息判斷錯誤類型、嚴重程度和建議解決方法。
-    """
+    """分類網路錯誤類型並提供解決建議"""
     error_lower = error_message.lower()
 
     if not error_message.startswith("錯誤："):
@@ -194,10 +182,7 @@ def classify_network_error(error_message: str) -> Dict[str, Any]:
 
 @dataclass
 class SingleResult:
-    """單一設備指令執行的結果資料
-
-    包含設備資訊、成功狀態、輸出內容和執行時間。
-    """
+    """單一設備指令執行結果"""
 
     device_ip: str
     device_name: str = ""
@@ -210,10 +195,7 @@ class SingleResult:
 
 @dataclass
 class BatchResult:
-    """多個設備批次執行的全局結果
-
-    匯總所有設備的執行結果和統計資訊。
-    """
+    """批次設備執行結果"""
 
     results: List[SingleResult] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)

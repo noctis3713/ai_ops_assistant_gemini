@@ -1,6 +1,7 @@
 /**
- * 優化的應用程式狀態 Hook
- * 示範如何使用細粒度選擇器減少重渲染
+ * 優化應用狀態 Hook
+ * 
+ * 提供細粒度狀態選擇器，減少重渲染
  */
 import { useAppMultiSelector, useComputedSelector } from './useAppSelector';
 import {
@@ -9,8 +10,9 @@ import {
 } from '@/store/selectors';
 
 /**
- * 設備選擇相關狀態 Hook
- * 只訂閱設備選擇相關的狀態
+ * 設備選擇狀態 Hook
+ * 
+ * 管理設備選擇與模式切換
  */
 export const useDeviceSelectionState = () => {
   return useAppMultiSelector({
@@ -20,8 +22,9 @@ export const useDeviceSelectionState = () => {
 };
 
 /**
- * 指令輸入相關狀態 Hook
- * 集中管理指令輸入組件需要的所有狀態
+ * 指令輸入狀態 Hook
+ * 
+ * 管理指令輸入與執行狀態
  */
 export const useCommandInputState = () => {
   const inputState = useAppMultiSelector({
@@ -43,8 +46,9 @@ export const useCommandInputState = () => {
 };
 
 /**
- * 批次輸出相關狀態 Hook  
- * 包含結果數據和統計信息
+ * 批次輸出狀態 Hook
+ * 
+ * 管理執行結果與統計資料
  */
 export const useBatchOutputState = () => {
   const outputState = useAppMultiSelector({
@@ -63,8 +67,9 @@ export const useBatchOutputState = () => {
 };
 
 /**
- * 執行控制相關狀態 Hook
- * 提供執行狀態和控制函數
+ * 執行控制狀態 Hook
+ * 
+ * 提供執行控制與狀態管理
  */
 export const useExecutionControl = () => {
   const executionState = useAppMultiSelector({
@@ -99,8 +104,9 @@ export const useExecutionControl = () => {
 };
 
 /**
- * 進度顯示相關狀態 Hook
- * 智能選擇當前活動的進度類型
+ * 進度顯示狀態 Hook
+ * 
+ * 管理進度顯示與狀態更新
  */
 export const useProgressState = () => {
   return useAppMultiSelector({
@@ -111,8 +117,9 @@ export const useProgressState = () => {
 };
 
 /**
- * 綜合狀態 Hook - 為主應用組件提供所有必要狀態
- * 使用選擇器優化，只在相關狀態改變時重渲染
+ * 主應用狀態 Hook
+ * 
+ * 整合所有應用狀態，提供統一管理介面
  */
 export const useAppMainState = () => {
   // 分別訂閱不同類型的狀態，減少重渲染

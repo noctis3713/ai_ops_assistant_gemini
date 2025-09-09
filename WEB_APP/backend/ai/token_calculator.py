@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Token 計算和成本估算模組
+Token 計算與成本估算
 
-專責處理 AI 服務的 Token 計算、成本估算和使用記錄：
-- 統一的 Token 使用量提取介面
-- 精確和估算兩種計算模式
-- 成本計算和日誌記錄
-- 支援 Claude 和 Gemini 雙引擎
+AI 服務的 Token 計算與成本統計：
+- Token 使用量提取
+- 成本計算
+- 使用記錄
 
 Created: 2025-09-03
 Author: Claude Code Assistant
@@ -21,10 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class TokenCalculator:
-    """Token 計算和成本估算核心類別
-
-    提供統一的 Token 計算介面，支援精確提取和文本估算兩種模式。
-    """
+    """Token 計算與成本估算核心類別"""
 
     # Claude 定價（每 1,000 tokens）
     CLAUDE_PRICING = {
@@ -45,17 +41,7 @@ class TokenCalculator:
     }
 
     def extract_token_usage(self, result: Any) -> Dict[str, Any]:
-        """統一的 Token 使用量提取介面
-
-        智能提取 AI 查詢結果中的 Token 使用量資訊，
-        支援多種資料來源和格式。
-
-        Args:
-            result: AI 查詢結果物件
-
-        Returns:
-            Dict: 包含 input_tokens, output_tokens, total_tokens 的字典
-        """
+        """提取 AI 查詢的 Token 使用量"""
         usage_data = {}
 
         # 方法1: 從 callback handler 取得（優先）

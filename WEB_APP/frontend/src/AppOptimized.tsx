@@ -1,11 +1,7 @@
 /**
- * 優化版 App 組件 - 使用巢狀 Suspense 和細粒度狀態訂閱
+ * 優化版主應用組件
  * 
- * @optimization 優化重點：
- * - 巢狀 Suspense 邊界實現漸進式載入
- * - 細粒度容器組件減少重渲染
- * - 懶載入大型組件降低初始包大小
- * - 智慧預載入提升使用者體驗
+ * 使用 Suspense 與細粒度狀態管理提升效能
  */
 
 import { Suspense, useEffect, useTransition, lazy } from 'react';
@@ -44,12 +40,10 @@ import { useKeyboardShortcuts, useAsyncTasks } from '@/hooks';
 import { useSmartPreload } from '@/hooks/useSmartPreload';
 
 function AppOptimized() {
-  // React 19: 使用 useTransition 管理非緊急更新
-  const [isPendingNavigation, startNavigationTransition] = useTransition();
+  // 導航狀態管理
+  useTransition();
 
-  // 使用自動生成的選擇器（更精確的訂閱）
-  const mode = useAppStore.use.mode();
-  const selectedDevices = useAppStore.use.selectedDevices();
+  // 全局狀態訂閱
   const showMultiDevice = useAppStore.use.showMultiDevice?.() ?? false;
   const showGroupSelector = useAppStore.use.showGroupSelector?.() ?? false;
   
@@ -62,10 +56,9 @@ function AppOptimized() {
     }))
   );
 
-  // 獲取設備資料
+  // 設備資料查詢
   const { 
     data: devices = [], 
-    isLoading: devicesLoading, 
     error: devicesError 
   } = useQuery({
     queryKey: ['devices'],
@@ -83,12 +76,8 @@ function AppOptimized() {
     }
   });
 
-  // 非同步任務管理
-  const { 
-    executeAsyncAndWait, 
-    isExecuting: isAsyncExecuting, 
-    isPolling 
-  } = useAsyncTasks();
+  // 非同步任務
+  useAsyncTasks();
 
   // 鍵盤快捷鍵
   useKeyboardShortcuts();

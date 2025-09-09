@@ -1,7 +1,7 @@
 /**
- * 統一設備選擇器
- * 支援單選、多選、群組快速選擇
- * 內含折疊顯示、模糊搜尋、群組選擇功能
+ * 多設備選擇器
+ * 
+ * 支援設備單選、多選與群組快速選擇
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -27,7 +27,7 @@ const MultiDeviceSelector = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   
-  // 直接使用 useQuery 獲取設備群組資料
+  // 獲取設備群組資料
   const { 
     data: deviceGroups = [], 
     isLoading: groupsLoading, 
@@ -35,22 +35,21 @@ const MultiDeviceSelector = ({
   } = useQuery<DeviceGroup[], Error>({
     queryKey: ['device-groups'],
     queryFn: getDeviceGroups,
-    staleTime: 5 * 60 * 1000, // 快取 5 分鐘，避免不必要的重複請求
-    // 新增 select 選項來轉換 API 回傳的資料
+    staleTime: 5 * 60 * 1000,
     select: (apiData) => {
       if (!Array.isArray(apiData)) return []; // 防呆，確保資料是陣列
-      // 將後端格式 (group_name, devices) 轉換為前端需要的格式 (name, device_count)
+      // 轉換 API 格式
       return apiData.map(group => ({
-        name: group.group_name,                    // group_name → name
+        name: group.group_name,
         description: group.description || '',
-        device_count: group.devices?.length || 0, // 計算設備數量
-        platform: group.platform || 'unknown'     // 提供預設平台
+        device_count: group.devices?.length || 0,
+        platform: group.platform || 'unknown'
       }));
     }
   });
   
 
-  // 檢查設備資料是否為空的原因
+  // 檢查設備資料載入狀態
   const getEmptyDevicesReason = () => {
     if (isLoading) return '正在載入設備資料...';
     if (devices.length === 0) {
@@ -59,7 +58,7 @@ const MultiDeviceSelector = ({
     return null;
   };
 
-  // 設備選擇切換處理函數 - 直接傳遞新陣列
+  // 設備選擇切換處理
   const handleDeviceToggle = useCallback((deviceIp: string) => {
     const newSelection = selectedDevices.includes(deviceIp)
       ? selectedDevices.filter(ip => ip !== deviceIp)
@@ -68,7 +67,7 @@ const MultiDeviceSelector = ({
     onDevicesChange(newSelection);
   }, [selectedDevices, onDevicesChange]);
 
-  // 使用 useMemo 快取批次處理器和相關邏輯
+  // 批次處理邏輯
   const deviceHandlers = useMemo(() => {
     const allDeviceIps = devices.map(device => device.ip);
     const batchHandler = createBatchHandler(
@@ -99,10 +98,10 @@ const MultiDeviceSelector = ({
   }, [devices, selectedDevices, onDevicesChange]);
 
 
-  // 使用自定義 Hook 進行設備篩選
+  // 設備篩選
   const { filteredDevices, filterStats } = useDeviceFilter(devices, debouncedSearchTerm);
 
-  // 合併搜尋相關的處理函數
+  // 搜尋處理函數
   const searchHandlers = useMemo(() => ({
     handleSearchChange: (value: string) => setSearchTerm(value),
     handleDebouncedSearchChange: (value: string) => setDebouncedSearchTerm(value),
@@ -131,12 +130,12 @@ const MultiDeviceSelector = ({
   }
 
 
-  // 設備資料為空的詳細處理
+  // 空資料處理
   const emptyReason = getEmptyDevicesReason();
   if (emptyReason) {
     return (
       <div className="space-y-4">
-        {/* 錯誤提示卡片 */}
+        {/* 錯誤提示 */}
         <div className={WARNING_STYLES.CONTAINER_ROUNDED_PADDED}>
           <div className="flex items-start space-x-3">
             <div className="text-amber-600 mt-1">
@@ -178,7 +177,7 @@ const MultiDeviceSelector = ({
 
   return (
     <div className="space-y-3">
-      {/* 標題行和摘要 */}
+      {/* 標題區域 */}
       <div className="flex items-center justify-between">
         <label className="label-primary">
           選擇設備
@@ -243,7 +242,7 @@ const MultiDeviceSelector = ({
   );
 };
 
-// 自定義比較函數 - 只在關鍵 props 改變時重新渲染
+// 自定義比較函數
 const areEqual = (
   prevProps: MultiDeviceSelectorProps, 
   nextProps: MultiDeviceSelectorProps

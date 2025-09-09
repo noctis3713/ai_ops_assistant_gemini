@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClickHouse API 路由端點
+ClickHouse API 路由
 
-網路流量分析 API：
-- 健康檢查端點
-- 流量分析端點
+網路流量分析 API 端點
 """
 
 import logging

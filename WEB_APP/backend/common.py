@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-通用資料模型和 API 回應格式定義模組
+通用資料模型與 API 回應格式
 
-提供統一的資料結構和回應格式：
+提供統一的資料結構與回應格式：
 - 標準化 API 回應格式
-- AI 分析結果結構化模型
-- 共用類型定義和泛型支援
-
-功能特點：
-- 型別安全支援和泛型設計
-- 自動時間戳記產生
-- 標準化錯誤代碼管理
-- IDE 智能提示支援
+- AI 分析結果模型
+- 共用類型定義
 
 Created: 2025-08-06
 Updated: 2025-08-23
@@ -29,19 +23,9 @@ T = TypeVar("T")
 
 
 class BaseResponse(BaseModel, Generic[T]):
-    """標準化 API 回應格式基礎類別
-
-    提供一致的 API 回應結構，包含：
-    - 成功/失敗狀態標識
-    - 泛型資料載荷 (Generic[T] 型別安全)
-    - 標準化錯誤訊息和錯誤代碼
-    - 自動時間戳記生成
-
-    功能特點:
-    - 型別安全的泛型設計
-    - 自動時間戳記管理
-    - 錯誤代碼標準化
-    - IDE 智能提示支援
+    """標準化 API 回應格式
+    
+    提供一致的 API 回應結構與型別安全支援
     """
 
     success: bool = True
@@ -77,31 +61,14 @@ class BaseResponse(BaseModel, Generic[T]):
     def success_response(
         cls, data: Optional[T] = None, message: str = "操作成功完成"
     ) -> "BaseResponse[T]":
-        """建立成功回應的工具方法
-
-        Args:
-            data: 回應資料
-            message: 成功訊息
-
-        Returns:
-            BaseResponse[T]: 成功格式的回應
-        """
+        """建立成功回應"""
         return cls(success=True, data=data, message=message)
 
     @classmethod
     def error_response(
         cls, message: str, error_code: Optional[str] = None, data: Optional[T] = None
     ) -> "BaseResponse[T]":
-        """建立錯誤回應的工具方法
-
-        Args:
-            message: 錯誤訊息
-            error_code: 標準化錯誤代碼
-            data: 可選的錯誤詳細資料
-
-        Returns:
-            BaseResponse[T]: 錯誤格式的回應
-        """
+        """建立錯誤回應"""
         return cls(success=False, data=data, message=message, error_code=error_code)
 
 

@@ -3,11 +3,10 @@
 """
 LLM 工廠模組
 
-使用工廠模式統一管理不同 AI 提供者的 LLM 初始化：
-- 支援 Claude 和 Gemini 雙引擎
-- 統一的初始化介面
-- 錯誤處理和診斷
-- 配置驗證和環境設定
+統一管理不同 AI 提供者的初始化：
+- Claude 與 Gemini 支援
+- 統一初始化介面
+- 配置驗證
 
 Created: 2025-09-03
 Author: Claude Code Assistant
@@ -44,9 +43,8 @@ except ImportError as e:
 
 class LLMFactory:
     """LLM 工廠類別
-
-    使用工廠模式提供統一的 LLM 初始化介面，
-    支援 Claude 和 Gemini 雙引擎自動切換。
+    
+    統一 AI 模型初始化與管理
     """
 
     @staticmethod

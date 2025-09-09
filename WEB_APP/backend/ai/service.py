@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 智能分析服務模組
+AI 智能分析服務
 
-提供網路設備的 AI 智能分析和查詢功能：
-- 使用 LLMFactory 管理 LLM 初始化
-- 使用 TokenCalculator 和 TokenLogger 處理 Token
-- 專注於核心 AI 查詢功能
-- 簡化的架構設計
+提供網路設備的 AI 智能分析：
+- 設備故障診斷與建議
+- 網路狀態分析
+- Token 使用量統計
+- 多 AI 模型支援
 
 Created: 2025-08-22
 Refactored: 2025-09-03
@@ -50,13 +50,9 @@ logger = logging.getLogger(__name__)
 
 
 class AIService:
-    """主要的 AI 智能分析服務管理器
-
-    專注於核心 AI 查詢處理，使用簡化的架構：
-    - 使用 LLMFactory 管理 LLM 初始化
-    - 使用 TokenCalculator 處理 Token 計算
-    - 使用 TokenLogger 記錄使用量
-    - 只保留核心查詢功能
+    """AI 智能分析服務管理器
+    
+    提供設備智能診斷與網路狀態分析服務
     """
 
     def __init__(self):

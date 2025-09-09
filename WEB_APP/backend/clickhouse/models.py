@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClickHouse 資料模型定義
+ClickHouse 資料模型
 
-定義 Akvorado 流量資料的 Pydantic 模型：
-- 統計彙總模型 (FlowSummary)
-- Top-N 分析模型 (TopTalker, TopProtocol 等)
-- 地理位置分析模型 (GeolocationStats)
-- ASN 分析模型 (ASNStats)
+定義網路流量分析的資料模型：
+- 流量統計模型
+- Top-N 分析模型
+- 地理位置與 ASN 模型
 
 Created: 2025-08-30
 Author: Claude Code Assistant
@@ -21,7 +20,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class FlowSummary(BaseModel):
-    """流量概覽統計模型"""
+    """流量概覽統計"""
 
     total_flows: int = Field(..., description="總流量數")
     total_bytes: int = Field(..., description="總位元組數")
@@ -42,7 +41,7 @@ class FlowSummary(BaseModel):
 
 
 class TopTalker(BaseModel):
-    """Top N 流量來源模型"""
+    """Top N 流量來源"""
 
     address: str = Field(..., description="IP 位址")
     bytes: int = Field(..., description="位元組數")

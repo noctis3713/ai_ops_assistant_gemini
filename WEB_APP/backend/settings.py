@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-系統配置管理模組
+系統配置管理
 
-提供集中化的應用程式配置和環境變數管理：
-- AI 服務配置（Gemini 和 Claude 金鑰）
-- 網路連線參數和設備認證
-- 日誌系統和除錯設定
-- 設備和群組配置載入
+集中管理應用程式配置與環境變數：
+- AI 服務金鑰設定
+- 網路設備連線參數
+- 設備與群組配置
+- 指令安全性驗證
 """
 
 import json
@@ -23,14 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    """
-    主要配置管理類別
-
-    使用 Pydantic BaseSettings 提供簡單且安全的配置管理：
-    - 自動環境變數載入和驗證
-    - 型別安全的配置屬性
-    - JSON 和 YAML 配置檔案支援
-    - 配置快取和依賴注入
+    """系統配置類別
+    
+    管理所有應用程式設定，支援環境變數自動載入
     """
 
     model_config = SettingsConfigDict(
@@ -100,10 +95,7 @@ class Settings(BaseSettings):
     # =========================================================================
 
     def is_ai_configured(self) -> bool:
-        """檢查 AI 服務是否已配置
-
-        返回 True 如果 Gemini 或 Claude 中至少一個已設定 API 金鑰。
-        """
+        """檢查是否已設定 AI 服務"""
         return bool(self.GEMINI_API_KEY or self.CLAUDE_API_KEY)
 
     def get_gemini_configured(self) -> bool:
@@ -115,10 +107,7 @@ class Settings(BaseSettings):
         return bool(self.CLAUDE_API_KEY)
 
     def get_active_ai_provider(self) -> Optional[str]:
-        """獲取當前有效的 AI 服務提供者
-
-        根據 AI_PROVIDER 設定和對應 API 金鑰的可用性回傳。
-        """
+        """取得目前啟用的 AI 服務提供者"""
         if self.AI_PROVIDER == "claude" and self.CLAUDE_API_KEY:
             return "claude"
         elif self.AI_PROVIDER == "gemini" and self.GEMINI_API_KEY:
@@ -138,10 +127,7 @@ class Settings(BaseSettings):
         return Path(__file__).parent / "config"
 
     def get_devices_config(self) -> List[Dict[str, Any]]:
-        """載入網路設備配置清單
-
-        從 devices.json 讀取設備資訊，包含 IP、名稱和認證資訊。
-        """
+        """載入設備配置清單"""
         if self._devices_config is not None:
             return self._devices_config
 
@@ -164,10 +150,7 @@ class Settings(BaseSettings):
             return self._devices_config
 
     def get_groups_config(self) -> Dict[str, Any]:
-        """載入設備群組配置資訊
-
-        從 groups.json 讀取設備群組設定，支援群組化管理。
-        """
+        """載入設備群組配置"""
         if self._groups_config is not None:
             return self._groups_config
 
@@ -199,10 +182,7 @@ class Settings(BaseSettings):
             return self._groups_config
 
     def get_device_by_ip(self, ip: str) -> Optional[Dict[str, Any]]:
-        """根據 IP 位址查找設備配置
-
-        返回符合 IP 的設備配置資訊，如果找不到則返回 None。
-        """
+        """根據 IP 查找設備配置"""
         devices = self.get_devices_config()
         for device in devices:
             if device.get("ip") == ip:

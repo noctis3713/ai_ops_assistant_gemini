@@ -1,14 +1,14 @@
 /**
- * 應用程式狀態選擇器 Hook
- * 提供類型安全的狀態選擇和優化的重渲染控制
+ * 應用狀態選擇器 Hook
+ * 
+ * 提供類型安全的狀態選擇與優化
  */
 import { useMemo } from 'react';
 import { useAppStore } from '@/store';
 import { type AppStore } from '@/types';
 
 /**
- * 通用狀態選擇器 Hook
- * 支持自定義選擇器函數
+ * 通用狀態選擇器
  */
 export function useAppSelector<T>(
   selector: (state: AppStore) => T
@@ -17,8 +17,7 @@ export function useAppSelector<T>(
 }
 
 /**
- * 多重選擇器 Hook
- * 允許同時選擇多個狀態片段，減少多次訂閱
+ * 多重狀態選擇器
  */
 export function useAppMultiSelector<T extends Record<string, unknown>>(
   selectors: {
@@ -35,8 +34,7 @@ export function useAppMultiSelector<T extends Record<string, unknown>>(
 }
 
 /**
- * 計算型選擇器 Hook
- * 結合 useMemo 進行計算結果快取
+ * 計算型選擇器
  */
 export function useComputedSelector<T, R>(
   selector: (state: AppStore) => T,
@@ -48,8 +46,7 @@ export function useComputedSelector<T, R>(
 }
 
 /**
- * 條件選擇器 Hook
- * 只有在滿足條件時才訂閱狀態
+ * 條件選擇器
  */
 export function useConditionalSelector<T>(
   condition: boolean,
@@ -64,8 +61,7 @@ export function useConditionalSelector<T>(
 }
 
 /**
- * 節流選擇器 Hook  
- * 限制狀態更新的頻率，適用於高頻更新的狀態
+ * 節流選擇器
  */
 export function useThrottledSelector<T>(
   selector: (state: AppStore) => T,
@@ -89,7 +85,7 @@ export function useThrottledSelector<T>(
   }, [value, delay]);
 }
 
-// 專用選擇器 Hooks - 為常見用例提供便利
+// 專用選擇器
 export const useSelectedDevices = () => useAppStore(state => state.selectedDevices);
 export const useInputValue = () => useAppStore(state => state.inputValue);
 export const useBatchResults = () => useAppStore(state => state.batchResults);

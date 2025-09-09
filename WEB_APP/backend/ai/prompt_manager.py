@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-提示詞模板管理模組
+提示詞模板管理
 
-提供 AI 系統的提示詞模板管理功能：
+AI 提示詞模板管理功能：
 - Jinja2 模板渲染
 - 動態提示詞生成
-- 快取機制和效能優化
+- 模板快取
 """
 
 import logging
@@ -28,11 +28,8 @@ logger = logging.getLogger(__name__)
 
 class PromptManager:
     """提示詞管理器
-
-    提供基本的模板管理功能：
-    - Jinja2 模板渲染
-    - YAML 配置載入
-    - 多語言支援
+    
+    模板管理與渲染功能
     """
 
     def __init__(self, base_dir: Optional[Path] = None, language: str = None):

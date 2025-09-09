@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClickHouse 業務邏輯服務層
+ClickHouse 網路流量分析服務
 
-網路流量分析服務：
-- 流量總覽統計
+提供網路流量統計與分析功能：
+- 流量總覽與統計
 - Top-N 分析
-- 地理位置分析 
-- ASN 分析
+- 地理位置與 ASN 分析
 - 時間序列分析
 """
 
@@ -47,19 +46,7 @@ class ClickHouseService:
     def get_flow_summary(
         self, hours: int = 24, include_details: bool = True
     ) -> Union[FlowSummary, Dict[str, Any]]:
-        """
-        獲取流量概覽統計
-
-        Args:
-            hours: 統計時間範圍（小時）
-            include_details: 是否包含詳細計算資訊
-
-        Returns:
-            FlowSummary: 流量概覽統計物件
-
-        Raises:
-            ClickHouseQueryError: 查詢失敗時拋出
-        """
+        """取得流量概覽統計"""
         start_time = time.time()
 
         try:

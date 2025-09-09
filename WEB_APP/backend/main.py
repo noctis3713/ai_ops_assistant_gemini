@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 網路維運助理主程式
+AI 網路維運助理 - 主應用程式
 
-提供網路設備指令執行和 AI 智能分析的 Web API 服務：
-- FastAPI 應用程式初始化和配置
-- CORS 和壓縮中間件管理
-- API 路由註冊和請求監控
-- 應用程式生命週期管理
+網路設備管理與 AI 分析的 Web API 服務
+- 提供設備指令執行接口
+- 支援 AI 智能故障診斷
+- 管理設備連線與監控
+- 處理網路流量分析
 
 Created: 2025-08-22
 Author: Claude Code Assistant
@@ -29,10 +29,9 @@ from dotenv import load_dotenv
 
 # 智能環境變數載入
 def _load_env():
-    """自動載入環境變數檔案
-
-    智能偵測執行環境並載入對應的 .env 檔案，
-    支援 Docker 容器和本地開發環境。
+    """載入環境變數設定
+    
+    自動偵測 Docker 或本地環境並載入相關配置
     """
     is_docker = os.path.exists("/.dockerenv") or os.getenv("PYTHONPATH") == "/app"
 
@@ -91,10 +90,9 @@ APP_VERSION = "3.0.0"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """管理 FastAPI 應用程式的啟動和關閉流程
-
-    啟動階段：初始化設定、任務管理器和 AI 服務
-    關閉階段：安全地釋放資源和連線
+    """應用程式生命週期管理
+    
+    啟動時初始化服務，關閉時清理資源
     """
     # 啟動階段
     try:
@@ -151,10 +149,9 @@ app = FastAPI(
 
 # CORS 配置
 def get_cors_origins():
-    """取得跨域請求允許的來源清單
-
-    支援本地開發、Docker 容器和外部 IP 存取，
-    可透過環境變數擴充允許的來源。
+    """設定 CORS 允許的來源
+    
+    支援本地開發和 Docker 環境的跨域存取
     """
     origins = [
         # 容器間通信
@@ -206,10 +203,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # 監控中間件
 @app.middleware("http")
 async def monitoring_middleware(request: Request, call_next):
-    """HTTP 請求監控和日誌記錄
-
-    為每個請求生成唯一 ID，記錄處理時間和狀態，
-    健康檢查請求使用較低的日誌等級避免噪音。
+    """請求監控中間件
+    
+    記錄請求處理時間與狀態
     """
     import time
     import uuid
@@ -270,10 +266,9 @@ logger.info("路由註冊完成")
 
 
 def print_routes():
-    """顯示應用程式的所有 API 路由
-
-    用於除錯和開發，列出所有已註冊的路由端點、
-    HTTP 方法和對應的處理函數。
+    """列印所有 API 路由
+    
+    開發模式下顯示可用的 API 端點
     """
     from fastapi.routing import APIRoute
 

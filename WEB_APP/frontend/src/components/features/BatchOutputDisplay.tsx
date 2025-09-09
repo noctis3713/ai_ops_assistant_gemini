@@ -1,7 +1,7 @@
 /**
- * 輸出顯示組件 (React 19 優化版)
- * 顯示多設備執行結果的詳細信息
- * 使用 useTransition 優化漸進式渲染
+ * 批次輸出顯示組件
+ * 
+ * 顯示多設備執行結果與統計資料
  */
 import React, { useState, useEffect, useCallback, useMemo, useTransition, useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -19,19 +19,19 @@ const BatchOutputDisplay = ({
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');
   
-  // React 19: 使用 useTransition 處理漸進式渲染
+  // 渲染狀態管理
   const [isPendingRender, startRenderTransition] = useTransition();
   
-  // React 19: 使用 useDeferredValue 延遲非緊急的篩選更新
+  // 延遲篩選更新
   const deferredFilterStatus = useDeferredValue(filterStatus);
   
 
-  // 獲取設備資料用於描述查詢
+  // 獲取設備資料
   const { data: devices } = useQuery({
     queryKey: ['devices'],
     queryFn: getDevices,
     staleTime: 5 * 60 * 1000,
-    // 新增 select 來處理後端 device_type, location 與前端 model, description 的不一致
+    // 資料格式轉換
     select: (apiData) => {
       if (!Array.isArray(apiData)) return [];
       return apiData.map(device => ({
